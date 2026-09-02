@@ -2,6 +2,8 @@
   "0.11.0": {
     "date": "2026-09-02",
     "highlights": [
+      "Browser-based secret generation",
+      "Quick generation from secret fields"
       "Custom auth-method action buttons",
       "Iconify technology and developer icon collections",
       "Persistent and faster action configuration"
@@ -9,6 +11,11 @@
     "sections": {
       "New": [
         {
+          "title": "Secret generation tools",
+          "description": "Generate passwords, passphrases, tokens, UUIDs, and encoded values in your browser, with the last selected options remembered for next time. Secret fields also include quick generation actions and a full options popup."
+        }
+      ],
+      "Improved": [],
           "title": "Auth method action buttons",
           "description": "Administrators can add icon buttons to auth-method screens for common links and form requests, with mount-specific settings, reusable context placeholders, and configurable tab or popup behavior."
         },
