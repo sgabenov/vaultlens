@@ -59,6 +59,10 @@
         {
           "title": "Header information links",
           "description": "The public landing page has been removed so the app opens directly at login or the dashboard, with optional information links available in the header."
+        },
+        {
+          "title": "Selectable scheduled backup types",
+          "description": "The backup schedule now lets you choose Vault backup, VaultLens settings backup, or both. The scheduler runs whichever types are selected on every due occurrence."
         }
       ],
       "Improved": [
