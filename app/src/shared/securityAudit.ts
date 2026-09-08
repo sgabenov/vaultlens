@@ -17,6 +17,7 @@ export interface AuditSnapshot {
   policiesComplete: boolean;
 }
 export interface AuditFinding {
+  relatedObjects?: { kind: string; path: string; name: string }[];
   policyPath?: string;
   line?: number;
   matchedBlock?: string;

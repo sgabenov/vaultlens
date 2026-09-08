@@ -164,7 +164,7 @@ test('custom rule runs with scoped object types and severity overrides; unported
     'critical',
   );
   assert.ok(
-    result.configuration.issues.some((i) => i.path === 'rules/POL-010'),
+    result.configuration.issues.some((i) => i.path === 'rules/POL-012'),
   );
   assert.equal(result.configuration.fingerprint.length, 64);
   s.resources[1].data.auth_type = 'approle';
@@ -371,4 +371,47 @@ test('disabled policy findings still supply privilege signals to role checks', (
       (i) => i.path === 'sys/policies/acl/danger',
     ),
   );
+});
+
+test('relationship chains combine assigned policies and honor implicit default', () => {
+  const s = snapshot();
+  s.resources = [
+    { kind: 'policy', path: 'sys/policies/acl/role-admin', data: { name: 'role-admin',
+      hcl: 'path "auth/approle/role/demo" { capabilities = ["update"] }' } },
+    { kind: 'policy', path: 'sys/policies/acl/default', data: { name: 'default',
+      hcl: 'path "sys/policies/acl/*" { capabilities = ["update"] }' } },
+    { kind: 'role', path: 'auth/approle/role/demo', data: {
+      auth_type: 'approle', token_policies: ['role-admin'] } },
+  ];
+  const settings = { ...DEFAULT_SETTINGS, configYaml: 'version: 1\nprofile: extended\n' };
+  const selected = () => execute(s, settings).findings.filter(f =>
+    ['POL-010', 'POL-011', 'POL-015'].includes(f.ruleId));
+  assert.deepEqual(selected().map(f => f.ruleId).sort(), ['POL-010', 'POL-011', 'POL-015']);
+  const chain = selected().find(f => f.ruleId === 'POL-015')!;
+  assert.deepEqual(chain.relatedObjects?.map(o => o.name), ['default', 'role-admin']);
+  assert.equal(JSON.parse(chain.evidence).role_administration_grants[0].policy, 'role-admin');
+  s.resources[2].data.token_no_default_policy = true;
+  assert.deepEqual(selected().map(f => f.ruleId), ['POL-010']);
+  s.resources[0].data.hcl = 'path "auth/approle/role/demo" { capabilities = ["deny", "update"] }';
+  assert.equal(selected().length, 0);
+  s.resources[0].data.hcl = 'path "auth/approle/role/other" { capabilities = ["update"] }';
+  assert.equal(selected().length, 0);
+});
+
+test('auth bootstrap requires both configuration and mount administration grants', () => {
+  const s = snapshot();
+  s.resources = [
+    { kind: 'policy', path: 'sys/policies/acl/bootstrap', data: { name: 'bootstrap',
+      hcl: 'path "sys/auth/*" { capabilities = ["update"] }\npath "auth/+/config" { capabilities = ["update"] }' } },
+    { kind: 'role', path: 'auth/kubernetes/role/demo', data: {
+      auth_type: 'kubernetes', token_policies: ['bootstrap'] } },
+  ];
+  const settings = { ...DEFAULT_SETTINGS, configYaml: 'version: 1\nprofile: extended\n' };
+  const findings = () => execute(s, settings).findings.filter(f => f.ruleId === 'POL-014');
+  assert.equal(findings().length, 1);
+  assert.equal(JSON.parse(findings()[0].evidence).confidence, 'proven_capabilities_inferred_configuration');
+  s.resources[0].data.hcl = 'path "sys/auth/*" { capabilities = ["update"] }';
+  assert.equal(findings().length, 0);
+  s.resources[0].data.hcl = 'path "sys/auth/*" { capabilities = ["read"] }\npath "auth/+/config" { capabilities = ["update"] }';
+  assert.equal(findings().length, 0);
 });

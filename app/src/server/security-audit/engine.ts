@@ -1,3 +1,5 @@
+import { RELATIONSHIP_DETECTORS, evaluateRelationship } from './relationshipDetectors.js';
+import type { PolicyBlock } from './policyParser.js';
 import { parsePolicy } from './policyParser.js';
 import {
   POLICY_DETECTORS,
@@ -19,7 +21,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '4';
+export const ENGINE_VERSION = '5';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -137,6 +139,7 @@ export function execute(
       reason:
         'Policy inventory is incomplete; privilege and reference analysis may be incomplete',
     });
+  const documents = new Map<string, PolicyBlock[]>();
   const privilegeReasons = new Map<string, string[]>();
   const policyResults = new Map<string, AuditFinding[]>();
   const mounts = snapshot.resources.filter((r) => r.kind === 'secret-mount');
@@ -148,6 +151,7 @@ export function execute(
       if (typeof resource.data.hcl !== 'string')
         throw new Error('Policy source is unavailable');
       const blocks = parsePolicy(resource.data.hcl);
+      documents.set(String(resource.data.name), blocks);
       for (const rule of definitions.filter(
         (r) =>
           POLICY_DETECTORS.includes(r.detector) &&
@@ -198,7 +202,9 @@ export function execute(
     let candidates: AuditFinding[] = [];
     if (POLICY_DETECTORS.includes(rule.detector))
       candidates = policyResults.get(rule.id) ?? [];
-    else if (AUTH_DETECTORS.includes(rule.detector)) {
+    else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {
+      candidates = snapshot.resources.flatMap(resource => evaluateRelationship(rule, resource, documents));
+    } else if (AUTH_DETECTORS.includes(rule.detector)) {
       for (const resource of snapshot.resources)
         candidates.push(
           ...evaluateAuth(rule, resource, {

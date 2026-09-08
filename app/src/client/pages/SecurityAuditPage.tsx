@@ -211,6 +211,18 @@ export default function SecurityAuditPage() {
                     {finding.path}
                   </p>
                   <p className="mt-3 text-sm">{finding.evidence}</p>
+                  {!!finding.relatedObjects?.length && (
+                    <details className="mt-3 rounded border p-3 text-sm">
+                      <summary>Related resources</summary>
+                      <ul className="mt-2 space-y-1">
+                        {finding.relatedObjects.map(object => (
+                          <li key={`${object.kind}:${object.path}`} className="break-all font-mono text-xs">
+                            {object.path}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                   {finding.matchedBlock && (
                     <details className="mt-3 rounded border p-3 text-sm">
                       <summary>

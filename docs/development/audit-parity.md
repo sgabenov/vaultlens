@@ -4,9 +4,9 @@ Reference: local vault-security-audit Python implementation, inspected 2026-09-0
 
 | Requirement | Evidence needed | State |
 | --- | --- | --- |
-| All 35 rules: POL-001..015, APPROLE-001..008, JWT-001/002/003/005/006, K8S-001..006, REF-001 | Equivalent findings on shared fixtures, negative cases and Vault-confirmed disputed semantics | Partial: 19 auth detectors compared against Python on 128 fixtures (284 findings); 9 policy detectors verified on 186 fixtures (102 findings) and HCL privilege signals connected; 6 relationship detectors pending |
+| All 35 rules: POL-001..015, APPROLE-001..008, JWT-001/002/003/005/006, K8S-001..006, REF-001 | Equivalent findings on shared fixtures, negative cases and Vault-confirmed disputed semantics | Partial: 19 auth detectors compared against Python on 128 fixtures (284 findings); 9 policy detectors verified on 186 fixtures (102 findings) and HCL privilege signals connected; 4 relationship detectors implemented with positive/negative native tests; Python differential corpus and remaining 2 detectors pending |
 | HCL parsing with source locations, attributes and parse diagnostics | Comment, wildcard, template and restriction fixtures | Literal ACL lexer/parser implemented with locations and explicit unsupported-expression errors; semantic literals normalized against Python fixtures |
-| Policy privilege signals and escalation relationships | Cross-policy, role, entity and group fixtures | HCL policy signals feed auth detectors even when policy findings are disabled; escalation graph pending |
+| Policy privilege signals and escalation relationships | Cross-policy, role, entity and group fixtures | HCL policy signals feed auth detectors even when policy findings are disabled; POL-010/011/014/015 now combine observed role assignments, including implicit default; token-role and cross-role/Identity chains pending |
 | Collection: policies, mounts, auth config/roles, identity and aliases | Supported-source coverage and redaction checks | Partial: initial selected sources |
 | Namespace recursion/filtering, policy/auth filters, limits, skip identity, source redaction | Collector integration fixtures | Pending |
 | Bounded workers, rate limit, timeout, retries, max duration, progress | Fault-injection tests | Partial: serial reads and request timeout |
@@ -22,3 +22,5 @@ Reference: local vault-security-audit Python implementation, inspected 2026-09-0
 | Production build, native-only runtime, documentation and commits | Clean build, runtime demo, parity evidence | Initial implementation |
 
 The Python implementation is a behavioral reference, not an infallible authorization oracle. Corrected semantics must be recorded and verified against Vault rather than preserving known false positives or false negatives. Existing request-audit logs and live management views remain separate.
+
+Relationship checks currently follow the Python declaration-based grant model. They do not establish effective Vault authorization across competing ACL patterns, parameter constraints, required sudo, or successful authentication. Cross-block precedence and constrained-operation validation remain required before treating a reported chain as an executable escalation.

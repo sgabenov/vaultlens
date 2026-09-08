@@ -1,3 +1,4 @@
+import { RELATIONSHIP_DETECTORS } from './relationshipDetectors.js';
 import { POLICY_DETECTORS } from './policyDetectors.js';
 import { AUTH_DETECTORS } from './authDetectors.js';
 import { COLLECTED_FIELDS } from './collector.js';
@@ -21,6 +22,7 @@ export const SUPPORTED_DETECTORS = [
   'missing_policy_reference',
   ...AUTH_DETECTORS,
   ...POLICY_DETECTORS,
+  ...RELATIONSHIP_DETECTORS,
   'native_root_assignment',
   'native_unbound_approle',
   'field_compare',
