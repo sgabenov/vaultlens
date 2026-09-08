@@ -1053,6 +1053,13 @@ test('recursive collection scopes headers and shares object limits across namesp
     assert.ok(checkpoints.length>3);
     assert.ok(checkpoints.every(value=>value.finishedAt==='' && value.analysisPerformed===false));
     assert.deepEqual(checkpoints.at(-1)?.checkpoint?.completedNamespaces,['','team','team/child']);
+    const policyCheckpoint=checkpoints.find(value=>!value.checkpoint?.completedNamespaces.length && value.checkpoint?.completedStages?.some(stage=>stage.namespace==='' && stage.stage==='Policies'))!;
+    seen.length=0;
+    const stageResumed=await collect(target,'fixture-token',false,options,undefined,undefined,{snapshot:policyCheckpoint,maxAgeMs:86400000});
+    assert.equal(stageResumed.resources.length,3);
+    assert.ok(!seen.includes(':/v1/sys/policies/acl'));
+    assert.ok(seen.includes(':/v1/identity/entity/id'));
+    assert.equal(stageResumed.namespacePolicyCompleteness?.[''],true);
     const checkpoint=checkpoints.find(value=>value.checkpoint?.completedNamespaces.length===1)!;
     seen.length=0;
     const resumed=await collect(target,'fixture-token',false,options,undefined,undefined,{snapshot:checkpoint,maxAgeMs:86400000});

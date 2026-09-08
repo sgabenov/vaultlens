@@ -1,4 +1,4 @@
-import { prepareResume } from './resume.js';
+import { prepareResume, RESOURCE_STAGE, stageKey } from './resume.js';
 import { normalizeNamespace } from './namespaces.js';
 import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
@@ -88,7 +88,8 @@ export async function collect(
     collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics,scope:{policyFilters:policyOptions.policyFilters,authMountFilters:policyOptions.authMountFilters,authTypeFilters:policyOptions.authTypeFilters,skipIdentity:policyOptions.skipIdentity}},
   };
   const completedNamespaces:string[]=[];
-  const checkpoint=()=>onCheckpoint?.({...snapshot,finishedAt:'',analysisPerformed:false,policiesComplete:false,checkpoint:{savedAt:new Date().toISOString(),completedNamespaces:[...completedNamespaces]}});
+  const completedStages:{namespace:string;stage:string}[]=[];
+  const checkpoint=()=>onCheckpoint?.({...snapshot,finishedAt:'',analysisPerformed:false,policiesComplete:false,checkpoint:{savedAt:new Date().toISOString(),completedNamespaces:[...completedNamespaces],completedStages:structuredClone(completedStages)}});
   let phase='Starting';
   const report=()=>onProgress?.({namespace,phase,resources:snapshot.resources.length,requests:policy.metrics.requests,updatedAt:new Date().toISOString()});
   const stage=(value:string)=>{phase=value;report();if(value!=='Namespace discovery' && value!=='Collection finished') checkpoint();};
@@ -152,10 +153,22 @@ export async function collect(
     Object.fromEntries(
       COLLECTED_FIELDS.filter((k) => k in data).map((k) => [k, data[k]]),
     );
+  async function runStage(name:string,operation:()=>Promise<void>) {
+    stage(name);
+    if(completedStages.some(value=>value.namespace===namespace && value.stage===name)) return;
+    const issueStart=snapshot.issues.length;
+    await operation();
+    for(const issue of snapshot.issues.slice(issueStart)) if(namespace) issue.namespace=namespace;
+    if(name==='Policies') snapshot.namespacePolicyCompleteness![namespace]=snapshot.policiesComplete && !signal.aborted;
+    if(name==='Identity aliases') snapshot.namespaceAliasCompleteness![namespace]=aliasesComplete && !signal.aborted;
+    if(!signal.aborted && snapshot.issues.length===issueStart) completedStages.push({namespace,stage:name});
+    checkpoint();
+  }
   async function collectNamespace() {
-    aliasesComplete=false;
+    snapshot.policiesComplete=snapshot.namespacePolicyCompleteness?.[namespace]??false;
+    aliasesComplete=snapshot.namespaceAliasCompleteness?.[namespace]??false;
   // Discovery stages are ordered; independent reads share one rate limiter.
-  stage('Policies');
+  await runStage('Policies',async()=>{
   const policyList = await read('sys/policies/acl', true);
   snapshot.policiesComplete = policyList !== null && !policyOptions.policyFilters.length;
   await forEachConcurrent(keys(policyList).filter(name=>name!=='root' && matches(name,policyOptions.policyFilters)),workers,async name=>{
@@ -172,9 +185,10 @@ export async function collect(
       });
     else snapshot.policiesComplete = false;
   });
+  });
   if(!policyOptions.skipIdentity) {
   for (const kind of ['entity', 'group']) {
-    stage(kind==='entity'?'Identity entities':'Identity groups');
+    await runStage(kind==='entity'?'Identity entities':'Identity groups',async()=>{
     const base = `identity/${kind}/id`;
     await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
       const path = `${base}/${encodeURIComponent(id)}`;
@@ -187,8 +201,9 @@ export async function collect(
         addResource({ kind, path, data: selected });
       }
     });
+    });
   }
-  stage('Identity aliases');
+  await runStage('Identity aliases',async()=>{
   const aliasBase = 'identity/entity-alias/id';
   const aliasList = await read(aliasBase,true);
   aliasesComplete = aliasList !== null;
@@ -198,8 +213,9 @@ export async function collect(
     if (data) addResource({ kind: 'alias', path, data: sanitizeAlias(data) });
     else aliasesComplete = false;
   });
+  });
   } else snapshot.issues.push({path:'identity',reason:'Identity collection was explicitly skipped'});
-  stage('Secret mounts');
+  await runStage('Secret mounts',async()=>{
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
     addResource({
@@ -210,7 +226,8 @@ export async function collect(
         type: (value as Record<string, unknown>).type,
       },
     });
-  stage('Auth mounts and roles');
+  });
+  await runStage('Auth mounts and roles',async()=>{
   const auth = await read('sys/auth');
   const supported: Record<string, string> = {
     approle: 'role',
@@ -259,6 +276,7 @@ export async function collect(
       }
     });
   }
+  });
   }
   function selectNamespace(value:string) {
     namespace=value;
@@ -293,11 +311,13 @@ export async function collect(
   snapshot.namespaceAliasCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
   if(resume && previous) {
     snapshot.startedAt=resume.snapshot.startedAt;
-    for(const current of selected.filter(namespace=>previous.reusable.has(namespace))) {
-      snapshot.resources.push(...structuredClone(resume.snapshot.resources.filter(resource=>(resource.namespace??'')===current)));
-      snapshot.namespacePolicyCompleteness[current]=resume.snapshot.namespacePolicyCompleteness?.[current]??false;
-      snapshot.namespaceAliasCompleteness[current]=resume.snapshot.namespaceAliasCompleteness?.[current]??false;
-      completedNamespaces.push(current);
+    for(const current of selected) {
+      const reusableKinds=Object.keys(RESOURCE_STAGE).filter(kind=>previous.reusableStages.has(stageKey(current,RESOURCE_STAGE[kind])));
+      snapshot.resources.push(...structuredClone(resume.snapshot.resources.filter(resource=>(resource.namespace??'')===current && reusableKinds.includes(resource.kind))));
+      snapshot.namespacePolicyCompleteness[current]=reusableKinds.includes('policy') && (resume.snapshot.namespacePolicyCompleteness?.[current]??false);
+      snapshot.namespaceAliasCompleteness[current]=reusableKinds.includes('alias') && (resume.snapshot.namespaceAliasCompleteness?.[current]??false);
+      for(const name of new Set(reusableKinds.map(kind=>RESOURCE_STAGE[kind]))) completedStages.push({namespace:current,stage:name});
+      if(previous.reusable.has(current)) completedNamespaces.push(current);
     }
     countedObjects=snapshot.resources.filter(resource=>!['auth-mount','secret-mount'].includes(resource.kind)).length;
     for(const metric of ['requests','retries','rateWaitMs','retryWaitMs'] as const)
