@@ -507,3 +507,32 @@ test('Identity inheritance matches Python for parent/child edges and diamond pro
     assert.equal(result.issues.length > 0, fixture.partial, fixture.name);
   }
 });
+
+import { compareRuns } from './diff.js';
+test('offline diff preserves duplicate finding identities, severity changes and coverage gaps', () => {
+  const s=snapshot(), result=execute(s,DEFAULT_SETTINGS);
+  const old: import('../../shared/securityAudit.js').AuditDetail={
+    run:{id:'old',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:s.resources.length,issueCount:0,findingCount:2},
+    snapshot:s,configuration:result.configuration,findings:[
+      {ruleId:'demo',path:'auth/demo',severity:'medium',title:'Demo',recommendation:'Review',evidence:'{"a":1,"b":2}'},
+      {ruleId:'demo',path:'auth/demo',severity:'high',title:'Demo',recommendation:'Review',evidence:'{"a":2}'},
+    ],
+  };
+  const next=structuredClone(old);next.run.id='new';
+  next.findings[0].evidence='{"b":2,"a":1}';
+  next.findings[1].severity='critical';
+  next.snapshot!.resources[1].data.token_ttl=3600;
+  let diff=compareRuns(old,next);
+  assert.equal(diff.statistics.findings.unchanged,1);
+  assert.equal(diff.statistics.findings.changed,1);
+  assert.equal(diff.statistics.resources.changed,1);
+  assert.deepEqual(diff.warnings,[]);
+  next.findings=[];next.snapshot!.issues.push({path:'auth/demo',reason:'Vault HTTP 403'});
+  diff=compareRuns(old,next);
+  assert.equal(diff.statistics.findings.removed,2);
+  assert.equal(diff.warnings.length,1);
+  next.configuration!.engineVersion='different';
+  assert.throws(()=>compareRuns(old,next),/incomparable/);
+  next.configuration=old.configuration;next.snapshot!.target='http://other.invalid';
+  assert.throws(()=>compareRuns(old,next),/incomparable/);
+});

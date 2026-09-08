@@ -1,3 +1,4 @@
+import { compareRuns } from './diff.js';
 import { readFileSync } from 'node:fs';
 import { catalog } from './catalog.js';
 import { AuditStore } from './store.js';
@@ -30,6 +31,14 @@ try {
       store.fail(id);
       throw new Error('Collection failed');
     }
+  } else if (command === 'diff' && argument && process.argv[4]) {
+    const old = store.get(argument, target), next = store.get(process.argv[4], target);
+    if (!old || !next) throw new Error('Both runs must exist for VAULT_ADDR');
+    const result = compareRuns(old, next);
+    console.log(JSON.stringify(result, null, 2));
+    process.exitCode = result.warnings.length ? 2 : result.changes.findings.some(change =>
+      ['added', 'changed'].includes(change.change) && change.new &&
+      ['high', 'critical'].includes(change.new.severity)) ? 1 : 0;
   } else if (command === 'analyze' && argument) {
     const detail = store.get(argument, target);
     if (!detail?.snapshot) throw new Error('Snapshot not found for VAULT_ADDR');
@@ -72,7 +81,7 @@ try {
     console.log(JSON.stringify(store.list(target), null, 2));
   else
     throw new Error(
-      'Usage: audit scan | list | analyze RUN_ID | rules | configure CONFIG_YAML [CUSTOM_RULES_YAML]',
+      'Usage: audit scan | list | analyze RUN_ID | diff OLD_RUN_ID NEW_RUN_ID | rules | configure CONFIG_YAML [CUSTOM_RULES_YAML]',
     );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Audit failed');
