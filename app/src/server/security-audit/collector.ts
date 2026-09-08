@@ -49,11 +49,12 @@ export async function collect(
   target: string,
   token: string,
   skipTlsVerify = false,
-  requestOptions: Partial<RequestPolicyOptions> & {workers?:number;timeoutMs?:number;maxDurationMs?:number} = {},
+  requestOptions: Partial<RequestPolicyOptions> & {workers?:number;timeoutMs?:number;maxDurationMs?:number;maxObjects?:number} = {},
 ): Promise<AuditSnapshot> {
   const policyOptions=parseCollectionOptions(requestOptions);
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
-  const signal=AbortSignal.timeout(maxDurationMs);
+  const limitAbort=new AbortController();
+  const signal=AbortSignal.any([AbortSignal.timeout(maxDurationMs),limitAbort.signal]);
   const policy=createRequestPolicy(policyOptions,undefined,signal);
   const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal});
   const snapshot: AuditSnapshot = {
@@ -67,6 +68,18 @@ export async function collect(
     policiesComplete: false,
     collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics},
   };
+  let countedObjects=0;
+  function addResource(resource: import('../../shared/securityAudit.js').AuditResource) {
+    if(signal.aborted) return;
+    const counted=!['auth-mount','secret-mount'].includes(resource.kind);
+    if(counted && policyOptions.maxObjects && countedObjects>=policyOptions.maxObjects) {
+      snapshot.policiesComplete=false;
+      snapshot.issues.push({path:'collection/object-limit',reason:'Object limit reached; snapshot is incomplete'});
+      limitAbort.abort();return;
+    }
+    if(counted) countedObjects++;
+    snapshot.resources.push(resource);
+  }
   async function read(
     path: string,
     list = false,
@@ -78,7 +91,7 @@ export async function collect(
       return response.data ?? {};
     } catch (error) {
       if(signal.aborted) {
-        if(!snapshot.issues.some(issue=>issue.path==='collection/deadline'))
+        if(!limitAbort.signal.aborted && !snapshot.issues.some(issue=>issue.path==='collection/deadline'))
           snapshot.issues.push({path:'collection/deadline',reason:'Collection duration limit reached; snapshot is incomplete'});
         snapshot.policiesComplete=false;
         return null;
@@ -111,7 +124,7 @@ export async function collect(
     const path = `sys/policies/acl/${encodeURIComponent(name)}`;
     const data = await read(path);
     if (data)
-      snapshot.resources.push({
+      addResource({
         kind: 'policy',
         path,
         data: { name, hcl: data.policy ?? data.rules ?? '' },
@@ -123,14 +136,14 @@ export async function collect(
     await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
       const path = `${base}/${encodeURIComponent(id)}`;
       const data = await read(path);
-      if (data) snapshot.resources.push({ kind, path, data: select(data) });
+      if (data) addResource({ kind, path, data: select(data) });
     });
   }
   const aliasBase = 'identity/entity-alias/id';
   await forEachConcurrent(keys(await read(aliasBase,true)),workers,async id=>{
     const path = `${aliasBase}/${encodeURIComponent(id)}`;
     const data = await read(path);
-    if (data) snapshot.resources.push({ kind: 'alias', path, data: {
+    if (data) addResource({ kind: 'alias', path, data: {
       canonical_id: data.canonical_id, mount_accessor: data.mount_accessor,
       name_sha256: typeof data.name === 'string'
         ? createHash('sha256').update(data.name).digest('hex') : undefined,
@@ -138,7 +151,7 @@ export async function collect(
   });
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
-    snapshot.resources.push({
+    addResource({
       kind: 'secret-mount',
       path: `sys/mounts/${mount}`,
       data: {
@@ -156,7 +169,7 @@ export async function collect(
   };
   for (const [mount, value] of Object.entries(auth ?? {})) {
     const type = String((value as Record<string, unknown>)?.type ?? '');
-    snapshot.resources.push({
+    addResource({
       kind: 'auth-mount',
       path: `auth/${mount}`,
       data: { type, accessor: (value as Record<string, unknown>).accessor },
@@ -180,7 +193,7 @@ export async function collect(
             selected.role_id_sha256 = createHash('sha256').update(roleId.role_id).digest('hex');
           else if (roleId) snapshot.issues.push({ path: `${path}/role-id`, reason: 'RoleID response is missing role_id' });
         }
-        snapshot.resources.push({
+        addResource({
           kind: 'role',
           path,
           data: { ...selected, auth_type: type },

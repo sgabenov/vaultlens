@@ -10,7 +10,7 @@ export function parseAuditArguments(args:string[]) {
     const token=args[i];
     if(!token.startsWith('--')) {positionals.push(token);continue;}
     if(Object.hasOwn(options,token)) throw new Error(`Duplicate option ${token}`);
-    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && ['scan','collect'].includes(command)) {
+    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--max-objects','--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && ['scan','collect'].includes(command)) {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
     } else if(['--save','--current-rules'].includes(token) && command==='analyze') options[token]=true;
@@ -30,7 +30,7 @@ export function parseAuditArguments(args:string[]) {
   validateRequestPolicy(requestPolicy);
   const workers=Number(options['--workers']??10);
   if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  return {command,positionals,save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000)}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  return {command,positionals,save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0)}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }

@@ -19,7 +19,7 @@ export interface AuditSnapshot {
   sourceRunId?: string;
   collection?: {
     workers?: number;
-    requestPolicy: {retries:number;requestsPerSecond:number;retryBackoffMs:number};
+    requestPolicy: {maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
     metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
   };
   identity?: IdentityAnalysis;

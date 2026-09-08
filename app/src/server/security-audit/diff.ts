@@ -40,6 +40,8 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
     throw new Error('Diff requires two finished snapshots');
   if(old.snapshot.target!==next.snapshot.target || old.snapshot.version!==next.snapshot.version)
     throw new Error('Snapshot targets or schemas are incomparable');
+  if((old.snapshot.collection?.requestPolicy.maxObjects??0)!==(next.snapshot.collection?.requestPolicy.maxObjects??0))
+    throw new Error('Snapshot object limits are incomparable');
   if(!old.configuration || !next.configuration ||
     old.configuration.fingerprint!==next.configuration.fingerprint ||
     old.configuration.engineVersion!==next.configuration.engineVersion)

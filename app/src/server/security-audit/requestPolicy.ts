@@ -43,16 +43,17 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock: {now:()=
   return {request,metrics};
 }
 
-export function parseCollectionOptions(raw:unknown):RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number} {
-  if(raw===undefined) return {...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000};
+export function parseCollectionOptions(raw:unknown):RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number;maxObjects:number} {
+  if(raw===undefined) return {...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0};
   if(!raw || typeof raw!=='object'||Array.isArray(raw)) throw new Error('Collection options must be an object');
   const value=raw as Record<string,unknown>;
-  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs'].includes(key))) throw new Error('Unknown collection option');
-  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,...value} as RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number};
+  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects'].includes(key))) throw new Error('Unknown collection option');
+  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,...value} as RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number;maxObjects:number};
   for(const value of Object.values(options)) if(typeof value!=='number') throw new Error('Collection options must be numeric');
   validateRequestPolicy(options);
   if(!Number.isInteger(options.workers)||options.workers<1||options.workers>32) throw new Error('workers must be an integer from 1 to 32');
   for(const key of ['timeoutMs','maxDurationMs'] as const)
     if(!Number.isInteger(options[key])||options[key]<1||options[key]>86400000) throw new Error(`${key} must be from 1 to 86400000`);
+  if(!Number.isInteger(options.maxObjects)||options.maxObjects<0||options.maxObjects>10000000) throw new Error('maxObjects must be an integer from 0 to 10000000');
   return options;
 }

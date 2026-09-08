@@ -12,7 +12,7 @@ import {
 } from '../lib/api';
 export default function SecurityAuditPage() {
   const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
-  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000});
+  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
   const [selected, setSelected] = useState('');
   const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
@@ -90,6 +90,7 @@ export default function SecurityAuditPage() {
         <summary>Collection settings</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {([
+            ['maxObjects','Maximum objects (0 = unlimited)',0,10000000,1],
             ['timeoutMs','Request timeout (ms)',1,86400000,1000],
             ['maxDurationMs','Collection duration limit (ms)',1,86400000,1000],
             ['workers','Concurrent workers',1,32,1],
