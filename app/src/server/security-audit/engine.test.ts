@@ -199,3 +199,65 @@ test('settings revisions reject lost updates and historical runs retain their ow
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+import authFixtures from './fixtures/auth-parity.json' with { type: 'json' };
+import { AUTH_DETECTORS, evaluateAuth } from './authDetectors.js';
+test('auth detectors match Python evidence and severity across synthetic controls and thresholds', () => {
+  const definitions = catalog({
+    ...DEFAULT_SETTINGS,
+    configYaml: 'version: 1\nprofile: extended\n',
+  }).filter((r) => AUTH_DETECTORS.includes(r.detector));
+  const mismatches: unknown[] = [];
+  for (const fixture of authFixtures) {
+    const actual = definitions
+      .flatMap((rule) =>
+        evaluateAuth(rule, fixture.resource, { config: fixture.config }),
+      )
+      .map((f) => ({
+        ruleId: f.ruleId,
+        severity: f.severity,
+        evidence: JSON.parse(f.evidence),
+      }))
+      .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
+    try {
+      assert.deepEqual(actual, fixture.expected);
+    } catch {
+      mismatches.push({
+        name: fixture.name,
+        actual,
+        expected: fixture.expected,
+      });
+    }
+  }
+  assert.deepEqual(mismatches, []);
+});
+test('runtime severity is preserved unless an explicit configuration override changes it', () => {
+  const s = snapshot();
+  s.resources = [
+    {
+      kind: 'role',
+      path: 'auth/approle/role/test',
+      data: {
+        auth_type: 'approle',
+        bind_secret_id: false,
+        secret_id_bound_cidrs: ['127.0.0.1/32'],
+      },
+    },
+  ];
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    configYaml: 'version: 1\nrules:\n  APPROLE-004: {enabled: true}\n',
+  };
+  assert.equal(
+    execute(s, settings).findings.find((f) => f.ruleId === 'APPROLE-004')
+      ?.severity,
+    'info',
+  );
+  settings.configYaml =
+    'version: 1\nrules:\n  APPROLE-004: {enabled: true, severity: high}\n';
+  assert.equal(
+    execute(s, settings).findings.find((f) => f.ruleId === 'APPROLE-004')
+      ?.severity,
+    'high',
+  );
+});

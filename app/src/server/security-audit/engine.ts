@@ -1,5 +1,7 @@
+import { AUTH_DETECTORS, evaluateAuth } from './authDetectors.js';
 import {
   catalog,
+  parseConfig,
   settingsFingerprint,
   SUPPORTED_DETECTORS,
 } from './catalog.js';
@@ -11,7 +13,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '2';
+export const ENGINE_VERSION = '3';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -116,6 +118,10 @@ export function execute(
     ...rule,
     supported: SUPPORTED_DETECTORS.includes(rule.detector),
   }));
+  const config = parseConfig(
+    settings.configYaml,
+    new Set(definitions.map((r) => r.id)),
+  );
   const legacy = analyze(snapshot);
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
   const bindings: Record<string, string> = {
@@ -135,7 +141,12 @@ export function execute(
       continue;
     }
     let candidates: AuditFinding[] = [];
-    if (rule.detector === 'field_compare') {
+    if (AUTH_DETECTORS.includes(rule.detector)) {
+      for (const resource of snapshot.resources)
+        candidates.push(
+          ...evaluateAuth(rule, resource, { config: config.raw }),
+        );
+    } else if (rule.detector === 'field_compare') {
       const { field, operator, value } = rule.parameters;
       for (const resource of snapshot.resources) {
         const type =
@@ -214,17 +225,23 @@ export function execute(
           ruleId: rule.id,
           title: rule.title,
           recommendation: rule.remediation,
-          severity: rule.effectiveSeverity,
+          severity: config.overrides[rule.id]?.severity ?? f.severity,
         })),
     );
   }
+  if (definitions.some((r) => r.active && AUTH_DETECTORS.includes(r.detector)))
+    issues.push({
+      path: 'analysis/policy-privilege',
+      reason:
+        'Auth detectors currently resolve configured privileged policies; HCL-derived privilege signals are not implemented yet',
+    });
   return {
     findings,
     configuration: {
       ...settings,
       engineVersion: ENGINE_VERSION,
       catalog: definitions,
-      fingerprint: settingsFingerprint(settings),
+      fingerprint: settingsFingerprint(settings, definitions),
       issues,
     },
   };

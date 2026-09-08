@@ -112,3 +112,20 @@ node dist/server/security-audit/cli.js configure audit-config.yml custom-rules.y
 The custom file is optional; omitting it preserves the saved custom rules. `analyze` uses the run's saved configuration where available, with saved rule definitions when present and the currently installed engine. Use separate databases for concurrent CLI/server deployments.
 
 Seven focused tests now include catalog parsing, profile/severity overrides, executable-expression rejection, duplicate IDs, custom detector execution, explicit unported coverage, conflicting updates and historical configuration retention. Browser verification covered appending a YAML rule, saving revision 1, and launching a scan with that rule against the synthetic Kubernetes role.
+
+
+## Authentication detector port
+
+All 19 AppRole, JWT/OIDC and Kubernetes detector implementations are registered natively. Configuration now drives TTL and SecretID thresholds, configured privileged-policy names/patterns, required JWT claims, broad-claim exceptions and approved wildcard namespaces. Kubernetes namespace selectors suppress an otherwise unbounded namespace classification, as in the Python reference. Dynamic detector severity is preserved; an explicit environment severity override takes precedence.
+
+This does not complete privilege analysis: configured privileged policies work, but HCL-derived privilege signals remain pending. Runs with auth detectors explicitly record that dependency as an analysis coverage gap, even when policy findings are disabled. The initial temporary native checks remain separate from the Python rules.
+
+The checked-in synthetic corpus `app/src/server/security-audit/fixtures/auth-parity.json` was generated from Python reference commit `2692356e6d793fe40ed00639ee4551758dc797f9`. It contains 128 cases and 284 expected findings, covering all 19 auth rule IDs. Tests compare rule IDs, severity and structured evidence, including negative boundaries, selectors, glob exceptions, custom thresholds and normalized mount configuration. They do not claim coverage of HCL-derived privilege or end-to-end identity relationships.
+
+Regenerate with a Python 3.11+ environment containing the reference dependencies:
+
+```sh
+PYTHONPATH=/path/to/vault-security-audit/src python scripts/generate-auth-parity.py app/src/server/security-audit/fixtures/auth-parity.json
+```
+
+The generator is a development-only oracle; the shipped application and CLI remain TypeScript/Node-only. Nine native tests and the production build pass after this increment.

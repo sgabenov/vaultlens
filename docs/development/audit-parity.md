@@ -4,7 +4,7 @@ Reference: local vault-security-audit Python implementation, inspected 2026-09-0
 
 | Requirement | Evidence needed | State |
 | --- | --- | --- |
-| All 35 rules: POL-001..015, APPROLE-001..008, JWT-001/002/003/005/006, K8S-001..006, REF-001 | Equivalent findings on shared fixtures, negative cases and Vault-confirmed disputed semantics | Pending |
+| All 35 rules: POL-001..015, APPROLE-001..008, JWT-001/002/003/005/006, K8S-001..006, REF-001 | Equivalent findings on shared fixtures, negative cases and Vault-confirmed disputed semantics | Partial: 19 auth detectors compared against Python on 128 fixtures (284 findings); policy-derived privilege context and policy/relationship rules pending |
 | HCL parsing with source locations, attributes and parse diagnostics | Comment, wildcard, template and restriction fixtures | Pending |
 | Policy privilege signals and escalation relationships | Cross-policy, role, entity and group fixtures | Pending |
 | Collection: policies, mounts, auth config/roles, identity and aliases | Supported-source coverage and redaction checks | Partial: initial selected sources |

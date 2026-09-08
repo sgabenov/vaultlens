@@ -1,3 +1,4 @@
+import { AUTH_DETECTORS } from './authDetectors.js';
 import { COLLECTED_FIELDS } from './collector.js';
 import { parseDocument, parseAllDocuments } from 'yaml';
 import { createHash } from 'node:crypto';
@@ -17,7 +18,7 @@ export const DEFAULT_SETTINGS: RuleSettings = {
 };
 export const SUPPORTED_DETECTORS = [
   'missing_policy_reference',
-  'kubernetes_double_wildcard',
+  ...AUTH_DETECTORS,
   'native_root_assignment',
   'native_unbound_approle',
   'field_compare',
@@ -335,9 +336,9 @@ export function catalog(settings: RuleSettings): RuleView[] {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
 }
-export function settingsFingerprint(settings: RuleSettings): string {
+export function settingsFingerprint(settings: RuleSettings, definitions?: RuleView[]): string {
   return createHash('sha256')
-    .update(JSON.stringify(builtins))
+    .update(JSON.stringify(definitions ?? builtins))
     .update(settings.configYaml)
     .update('\0')
     .update(settings.customRulesYaml)
