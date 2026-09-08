@@ -25,7 +25,7 @@ try {
   if (command === 'export' && argument && second) {
     const detail=store.get(argument,target);
     if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
-    writeFileSync(second,exportAudit(detail,options.format),{mode:0o600,flag:'wx'});
+    writeFileSync(second,exportAudit(detail,options.format,options.redactPolicySource),{mode:0o600,flag:'wx'});
     console.log(JSON.stringify({export:second,format:options.format,runId:argument}));
   } else if (command === 'baseline-create' && argument && second) {
     const detail=store.get(argument,target);

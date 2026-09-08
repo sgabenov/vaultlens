@@ -885,3 +885,22 @@ test('policy usage separates namespace, inheritance and token issuance permissio
   assert.ok(!result.some(row => row.name === 'team-*'));
   assert.deepEqual(s,before);
 });
+
+test('report source redaction preserves evidence and leaves the saved snapshot unchanged', () => {
+  const s = snapshot();
+  const detail: import('../../shared/securityAudit.js').AuditDetail = {
+    run:{id:'redact',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:1},
+    snapshot:s,findings:[{ruleId:'DEMO',severity:'high',path:'policy/demo',title:'Example',evidence:'evidence',matchedBlock:'path "*" { capabilities = ["sudo"] }',recommendation:'Review'}],
+  };
+  const before = structuredClone(detail);
+  const exported = JSON.parse(exportAudit(detail,'json',true));
+  assert.equal(exported.snapshot.resources[0].data.hcl,undefined);
+  assert.equal(exported.snapshot.resources[0].data.source_redacted,true);
+  assert.match(exported.snapshot.resources[0].data.source_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(exported.findings[0].matchedBlock,detail.findings[0].matchedBlock);
+  assert.ok(!exportAudit(detail,'yaml',true).includes('# not evaluated'));
+  assert.ok(!exportAudit(detail,'jsonl',true).includes('# not evaluated'));
+  assert.deepEqual(detail,before);
+  assert.equal(parseAuditArguments(['export','run','file','--redact-policy-source']).redactPolicySource,true);
+  assert.throws(()=>parseAuditArguments(['analyze','run','--redact-policy-source']),/Unsupported/);
+});

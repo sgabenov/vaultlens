@@ -97,10 +97,14 @@ router.get('/runs/:id/export', (req, res) => {
   if(typeof format!=='string' || !EXPORT_FORMATS.includes(format as ExportFormat)) {
     res.status(400).json({error:'Unsupported export format'});return;
   }
+  const redact = req.query['redactPolicySource'] ?? 'false';
+  if (redact !== 'true' && redact !== 'false') {
+    res.status(400).json({error:'redactPolicySource must be true or false'});return;
+  }
   const detail=storage().get(String(req.params['id']),config.vaultAddr);
   if(!detail) {res.status(404).json({error:'Audit run not found'});return;}
   try {
-    const body=exportAudit(detail,format as ExportFormat);
+    const body=exportAudit(detail,format as ExportFormat,redact === 'true');
     const contentTypes={json:'application/json',jsonl:'application/x-ndjson',yaml:'application/yaml',csv:'text/csv'};
     res.type(contentTypes[format as ExportFormat]);
     res.setHeader('Content-Disposition', `attachment; filename="audit-report.${format}"`);

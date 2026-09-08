@@ -1,8 +1,18 @@
+import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import type { AuditDetail } from '../../shared/securityAudit.js';
 export const EXPORT_FORMATS=['json','jsonl','yaml','csv'] as const;
 export type ExportFormat=typeof EXPORT_FORMATS[number];
-export function exportAudit(detail:AuditDetail,format:ExportFormat):string {
+export function exportAudit(input:AuditDetail,format:ExportFormat,redactPolicySource=false):string {
+  const detail = redactPolicySource ? structuredClone(input) : input;
+  if (redactPolicySource && detail.snapshot) {
+    for (const resource of detail.snapshot.resources.filter(resource => resource.kind === 'policy')) {
+      if (typeof resource.data.hcl === 'string')
+        resource.data.source_sha256 = createHash('sha256').update(resource.data.hcl).digest('hex');
+      delete resource.data.hcl;
+      resource.data.source_redacted = true;
+    }
+  }
   if(!detail.snapshot || !['collected','completed','partial'].includes(detail.run.status)) throw new Error('Export requires a finished snapshot');
   if(format==='json') return JSON.stringify(detail,null,2)+'\n';
   if(format==='yaml') return stringify(detail,{lineWidth:0});

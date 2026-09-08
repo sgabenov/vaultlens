@@ -1193,8 +1193,8 @@ export async function getSecurityAuditDiff(oldId: string, newId: string) {
   return data;
 }
 
-export async function downloadSecurityAudit(id: string, format: string): Promise<Blob> {
-  const response=await api.get<Blob>(`/security-audit/runs/${encodeURIComponent(id)}/export`,{params:{format},responseType:'blob'});
+export async function downloadSecurityAudit(id: string, format: string, redactPolicySource = false): Promise<Blob> {
+  const response=await api.get<Blob>(`/security-audit/runs/${encodeURIComponent(id)}/export`,{params:{format,redactPolicySource},responseType:'blob'});
   return response.data;
 }
 
