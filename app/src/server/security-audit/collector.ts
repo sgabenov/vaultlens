@@ -101,6 +101,16 @@ export async function collect(
       if (data) snapshot.resources.push({ kind, path, data: select(data) });
     }
   }
+  const secretMounts = await read('sys/mounts');
+  for (const [mount, value] of Object.entries(secretMounts ?? {}))
+    snapshot.resources.push({
+      kind: 'secret-mount',
+      path: `sys/mounts/${mount}`,
+      data: {
+        mount_path: mount,
+        type: (value as Record<string, unknown>).type,
+      },
+    });
   const auth = await read('sys/auth');
   const supported: Record<string, string> = {
     approle: 'role',

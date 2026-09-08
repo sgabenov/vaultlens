@@ -1,3 +1,9 @@
+import { parsePolicy } from './policyParser.js';
+import {
+  POLICY_DETECTORS,
+  PRIVILEGE_SIGNALS,
+  evaluatePolicy,
+} from './policyDetectors.js';
 import { AUTH_DETECTORS, evaluateAuth } from './authDetectors.js';
 import {
   catalog,
@@ -13,7 +19,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '3';
+export const ENGINE_VERSION = '4';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -123,6 +129,55 @@ export function execute(
     new Set(definitions.map((r) => r.id)),
   );
   const legacy = analyze(snapshot);
+  const issues: { path: string; reason: string }[] = [];
+
+  if (!snapshot.policiesComplete)
+    issues.push({
+      path: 'sys/policies/acl',
+      reason:
+        'Policy inventory is incomplete; privilege and reference analysis may be incomplete',
+    });
+  const privilegeReasons = new Map<string, string[]>();
+  const policyResults = new Map<string, AuditFinding[]>();
+  const mounts = snapshot.resources.filter((r) => r.kind === 'secret-mount');
+  // Privilege signals must be evaluated even when their findings are disabled.
+  for (const resource of snapshot.resources.filter(
+    (r) => r.kind === 'policy',
+  )) {
+    try {
+      if (typeof resource.data.hcl !== 'string')
+        throw new Error('Policy source is unavailable');
+      const blocks = parsePolicy(resource.data.hcl);
+      for (const rule of definitions.filter(
+        (r) =>
+          POLICY_DETECTORS.includes(r.detector) &&
+          (r.active || PRIVILEGE_SIGNALS.has(r.id)),
+      )) {
+        const findings = evaluatePolicy(rule, resource, blocks, mounts);
+        policyResults.set(rule.id, [
+          ...(policyResults.get(rule.id) ?? []),
+          ...findings,
+        ]);
+        if (
+          PRIVILEGE_SIGNALS.has(rule.id) &&
+          findings.some((f) => ['critical', 'high'].includes(f.severity))
+        ) {
+          const name = String(resource.data.name);
+          privilegeReasons.set(name, [
+            ...(privilegeReasons.get(name) ?? []),
+            rule.id,
+          ]);
+        }
+      }
+    } catch (error) {
+      issues.push({
+        path: resource.path,
+        reason:
+          error instanceof Error ? error.message : 'Policy parsing failed',
+      });
+    }
+  }
+
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
   const bindings: Record<string, string> = {
     native_root_assignment: 'assignment.root',
@@ -131,7 +186,7 @@ export function execute(
     kubernetes_double_wildcard: 'kubernetes.unbounded-subject',
   };
   const findings: AuditFinding[] = [];
-  const issues: { path: string; reason: string }[] = [];
+
   for (const rule of definitions.filter((r) => r.active)) {
     if (!rule.supported) {
       issues.push({
@@ -141,10 +196,15 @@ export function execute(
       continue;
     }
     let candidates: AuditFinding[] = [];
-    if (AUTH_DETECTORS.includes(rule.detector)) {
+    if (POLICY_DETECTORS.includes(rule.detector))
+      candidates = policyResults.get(rule.id) ?? [];
+    else if (AUTH_DETECTORS.includes(rule.detector)) {
       for (const resource of snapshot.resources)
         candidates.push(
-          ...evaluateAuth(rule, resource, { config: config.raw }),
+          ...evaluateAuth(rule, resource, {
+            config: config.raw,
+            privilegeReasons,
+          }),
         );
     } else if (rule.detector === 'field_compare') {
       const { field, operator, value } = rule.parameters;
@@ -229,12 +289,6 @@ export function execute(
         })),
     );
   }
-  if (definitions.some((r) => r.active && AUTH_DETECTORS.includes(r.detector)))
-    issues.push({
-      path: 'analysis/policy-privilege',
-      reason:
-        'Auth detectors currently resolve configured privileged policies; HCL-derived privilege signals are not implemented yet',
-    });
   return {
     findings,
     configuration: {

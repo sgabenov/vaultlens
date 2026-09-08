@@ -155,7 +155,8 @@ test('custom rule runs with scoped object types and severity overrides; unported
   const settings = {
     ...DEFAULT_SETTINGS,
     customRulesYaml: customRule,
-    configYaml: 'version: 1\nrules:\n  CUSTOM-TTL: {severity: critical}\n',
+    configYaml:
+      'version: 1\nprofile: extended\nrules:\n  CUSTOM-TTL: {severity: critical}\n',
   };
   const result = execute(s, settings);
   assert.equal(
@@ -163,7 +164,7 @@ test('custom rule runs with scoped object types and severity overrides; unported
     'critical',
   );
   assert.ok(
-    result.configuration.issues.some((i) => i.path === 'rules/POL-001'),
+    result.configuration.issues.some((i) => i.path === 'rules/POL-010'),
   );
   assert.equal(result.configuration.fingerprint.length, 64);
   s.resources[1].data.auth_type = 'approle';
@@ -193,7 +194,7 @@ test('settings revisions reject lost updates and historical runs retain their ow
       store.get(id, s.target)?.configuration?.customRulesYaml,
       customRule,
     );
-    assert.equal(store.get(id, s.target)?.run.status, 'partial');
+    assert.equal(store.get(id, s.target)?.run.status, 'completed');
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });
@@ -259,5 +260,115 @@ test('runtime severity is preserved unless an explicit configuration override ch
     execute(s, settings).findings.find((f) => f.ruleId === 'APPROLE-004')
       ?.severity,
     'high',
+  );
+});
+
+import policyFixtures from './fixtures/policy-parity.json' with { type: 'json' };
+import { parsePolicy, PolicyParseError } from './policyParser.js';
+import {
+  POLICY_DETECTORS,
+  evaluatePolicy,
+  vaultPatternMatches,
+} from './policyDetectors.js';
+test('policy detectors and lexical source information match the Python corpus', () => {
+  const definitions = catalog({
+    ...DEFAULT_SETTINGS,
+    configYaml: 'version: 1\nprofile: extended\n',
+  }).filter((r) => POLICY_DETECTORS.includes(r.detector));
+  const mounts = [
+    ['secret/', 'kv'],
+    ['secret/nested/', 'kv'],
+    ['cubbyhole/', 'cubbyhole'],
+  ].map(([mount, type]) => ({
+    kind: 'secret-mount',
+    path: `sys/mounts/${mount}`,
+    data: { mount_path: mount, type },
+  }));
+  const mismatches: unknown[] = [];
+  for (const fixture of policyFixtures) {
+    try {
+      const blocks = parsePolicy(fixture.source);
+      assert.deepEqual(
+        JSON.parse(JSON.stringify(blocks.map(({ column, ...b }) => b))),
+        fixture.blocks,
+      );
+      const resource = {
+        kind: 'policy',
+        path: 'sys/policies/acl/demo',
+        data: { name: 'demo', hcl: fixture.source },
+      };
+      const actual = definitions
+        .flatMap((rule) => evaluatePolicy(rule, resource, blocks, mounts))
+        .map((f) => ({
+          ruleId: f.ruleId,
+          severity: f.severity,
+          evidence: JSON.parse(f.evidence),
+          line: f.line,
+          matchedBlock: f.matchedBlock,
+        }))
+        .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
+      assert.deepEqual(actual, fixture.expected);
+    } catch (error) {
+      mismatches.push({ name: fixture.name, error: String(error) });
+    }
+  }
+  assert.deepEqual(mismatches, []);
+});
+test('malformed or unsupported policy syntax produces diagnostics instead of invented grants', () => {
+  for (const source of [
+    'path "*" {capabilities=["read"]',
+    '/* never closed',
+    'path "*" { capabilities=var.caps }',
+    'path "*" { capabilities=["read"] capabilities=["sudo"] }',
+    'path "*" {capabilities=["read",42]}',
+  ])
+    assert.throws(() => parsePolicy(source), PolicyParseError);
+  assert.equal(parsePolicy('# path "*" {capabilities=["sudo"]}').length, 0);
+  assert.equal(
+    vaultPatternMatches('secret/+/data/*', 'secret/team/data/item'),
+    true,
+  );
+  assert.equal(
+    vaultPatternMatches('secret/+/data/*', 'secret/team/extra/data/item'),
+    false,
+  );
+});
+test('disabled policy findings still supply privilege signals to role checks', () => {
+  const s = snapshot();
+  s.resources = [
+    {
+      kind: 'policy',
+      path: 'sys/policies/acl/danger',
+      data: { name: 'danger', hcl: 'path "*" {capabilities=["update"]}' },
+    },
+    {
+      kind: 'role',
+      path: 'auth/approle/role/demo',
+      data: {
+        auth_type: 'approle',
+        token_policies: ['danger'],
+        bind_secret_id: false,
+      },
+    },
+  ];
+  const result = execute(s, {
+    ...DEFAULT_SETTINGS,
+    configYaml: 'version: 1\nrules:\n  POL-001: {enabled: false}\n',
+  });
+  assert.equal(
+    result.findings.some((f) => f.ruleId === 'POL-001'),
+    false,
+  );
+  const role = result.findings.find((f) => f.ruleId === 'APPROLE-008');
+  assert.equal(role?.severity, 'critical');
+  assert.deepEqual(JSON.parse(role!.evidence).privileged_policies, {
+    danger: ['POL-001'],
+  });
+  assert.equal(result.configuration.issues.length, 0);
+  s.resources[0].data.hcl = 'path "*" {capabilities = var.caps}';
+  assert.ok(
+    execute(s, DEFAULT_SETTINGS).configuration.issues.some(
+      (i) => i.path === 'sys/policies/acl/danger',
+    ),
   );
 });

@@ -211,6 +211,16 @@ export default function SecurityAuditPage() {
                     {finding.path}
                   </p>
                   <p className="mt-3 text-sm">{finding.evidence}</p>
+                  {finding.matchedBlock && (
+                    <details className="mt-3 rounded border p-3 text-sm">
+                      <summary>
+                        Matched policy block · line {finding.line}
+                      </summary>
+                      <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">
+                        {finding.matchedBlock}
+                      </pre>
+                    </details>
+                  )}
                   <p className="mt-2 text-sm text-gray-600">
                     {finding.recommendation}
                   </p>

@@ -17,6 +17,10 @@ export interface AuditSnapshot {
   policiesComplete: boolean;
 }
 export interface AuditFinding {
+  policyPath?: string;
+  line?: number;
+  matchedBlock?: string;
+  attributes?: Record<string, unknown>;
   ruleId: string;
   severity: import('./auditRules.js').Severity;
   path: string;

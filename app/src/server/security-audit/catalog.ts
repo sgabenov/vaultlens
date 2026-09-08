@@ -1,3 +1,4 @@
+import { POLICY_DETECTORS } from './policyDetectors.js';
 import { AUTH_DETECTORS } from './authDetectors.js';
 import { COLLECTED_FIELDS } from './collector.js';
 import { parseDocument, parseAllDocuments } from 'yaml';
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: RuleSettings = {
 export const SUPPORTED_DETECTORS = [
   'missing_policy_reference',
   ...AUTH_DETECTORS,
+  ...POLICY_DETECTORS,
   'native_root_assignment',
   'native_unbound_approle',
   'field_compare',
@@ -336,7 +338,10 @@ export function catalog(settings: RuleSettings): RuleView[] {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
 }
-export function settingsFingerprint(settings: RuleSettings, definitions?: RuleView[]): string {
+export function settingsFingerprint(
+  settings: RuleSettings,
+  definitions?: RuleView[],
+): string {
   return createHash('sha256')
     .update(JSON.stringify(definitions ?? builtins))
     .update(settings.configYaml)

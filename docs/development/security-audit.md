@@ -129,3 +129,16 @@ PYTHONPATH=/path/to/vault-security-audit/src python scripts/generate-auth-parity
 ```
 
 The generator is a development-only oracle; the shipped application and CLI remain TypeScript/Node-only. Nine native tests and the production build pass after this increment.
+
+
+## Policy parser and policy detectors
+
+Nine policy detectors (`POL-001` through `POL-009`) are now native. They preserve the matched policy path, source block, line and attributes. Secret-engine mounts are collected from `sys/mounts` for mount-aware broad-path checks. The UI exposes matched source blocks in findings.
+
+The lexical parser handles quoted strings, literal lists/maps, comments, heredocs and multiple path blocks without interpreting commented-out grants. It retains wrapping/parameter restrictions as structured attributes. Bare expressions outside quoted strings are explicitly unsupported and produce an analysis gap; this is a literal Vault ACL parser, not a general Terraform expression evaluator. Parsing restrictions does not yet implement full request-authorization evaluation.
+
+The policy corpus contains 186 Python-derived cases and 102 expected findings. Source locations, comments and matched blocks are compared alongside rule IDs, severity and evidence. Python-hcl2 8.x keeps quoted attribute lexemes; the generator explicitly decodes these literals for semantic comparison and preserves raw Python attributes separately. A disposable Vault confirmed that decoded allowed/required parameter names accept the allowed value and deny invalid/missing values.
+
+High/critical policy signals now feed auth checks independently of the profile and disabled policy findings. A dedicated integration test confirms a disabled `POL-001` finding still identifies a privileged AppRole through its assigned policy. Parse errors and incomplete policy inventories remain explicit gaps. The previous blanket HCL-privilege implementation gap is removed; six relationship detectors remain pending.
+
+Twelve native tests pass, including the 128 auth cases and 186 policy cases. The default profile can now finish without implementation gaps; that does not imply the extended profile or the overall Python parity checklist is complete.
