@@ -576,3 +576,20 @@ test('expiring exceptions preserve findings, scope policy paths and report unuse
   assert.throws(()=>load([{...entry,owner:''}]),/requires owner/);
   assert.throws(()=>load([{...entry,rule_id:'unknown'}]),/Unknown/);
 });
+
+import { parseAuditArguments, auditExitCode } from './cliOptions.js';
+test('CI arguments reject ignored flags and gate severity independently of completeness', () => {
+  assert.throws(()=>parseAuditArguments(['scan','--fial-on','none']),/Unsupported/);
+  assert.throws(()=>parseAuditArguments(['diff','old','new','--baseline','file']),/Unsupported/);
+  assert.throws(()=>parseAuditArguments(['scan','--fail-on']),/requires/);
+  assert.throws(()=>parseAuditArguments(['scan','--fail-on','high','--fail-on','none']),/Duplicate/);
+  assert.throws(()=>parseAuditArguments(['scan','--require-complete','--allow-incomplete']),/Conflicting/);
+  assert.throws(()=>parseAuditArguments(['analyze']),/positional/);
+  const options=parseAuditArguments(['analyze','--fail-on','medium','run-id','--exceptions','team.yml']);
+  assert.equal(options.positionals[0],'run-id');assert.equal(options.exceptions,'team.yml');
+  assert.equal(auditExitCode(['medium'],false,options),1);
+  assert.equal(auditExitCode(['low'],false,options),0);
+  assert.equal(auditExitCode([],true,options),2);
+  assert.equal(auditExitCode(['critical'],false,{...options,failOn:'none'}),0);
+  assert.equal(auditExitCode([],true,parseAuditArguments(['scan','--allow-incomplete'])),0);
+});
