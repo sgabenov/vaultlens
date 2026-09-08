@@ -1,3 +1,4 @@
+import AuditExportButton from '../components/AuditExportButton';
 import AuditDiffPanel from '../components/AuditDiffPanel';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
@@ -182,6 +183,7 @@ export default function SecurityAuditPage() {
                   <option value="info">Info</option>
                 </select>
               </div>
+              <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot?.identity && (
                 <details className="rounded border p-3 text-sm">

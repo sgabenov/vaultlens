@@ -1192,3 +1192,8 @@ export async function getSecurityAuditDiff(oldId: string, newId: string) {
   const {data}=await api.get<import('../../shared/securityAudit').AuditDiff>('/security-audit/diff', {params:{old:oldId,new:newId}});
   return data;
 }
+
+export async function downloadSecurityAudit(id: string, format: string): Promise<Blob> {
+  const response=await api.get<Blob>(`/security-audit/runs/${encodeURIComponent(id)}/export`,{params:{format},responseType:'blob'});
+  return response.data;
+}

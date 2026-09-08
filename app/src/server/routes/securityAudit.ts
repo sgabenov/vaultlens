@@ -1,3 +1,4 @@
+import { exportAudit, EXPORT_FORMATS, type ExportFormat } from '../security-audit/exporter.js';
 import { compareRuns } from '../security-audit/diff.js';
 import { Router } from 'express';
 import { Worker } from 'node:worker_threads';
@@ -78,6 +79,21 @@ router.get('/diff', (req, res) => {
   if (!old || !next) { res.status(404).json({error:'Audit run not found'}); return; }
   try { res.json(compareRuns(old, next)); }
   catch(error) { res.status(400).json({error:error instanceof Error ? error.message : 'Snapshots cannot be compared'}); }
+});
+router.get('/runs/:id/export', (req, res) => {
+  const format=req.query['format'] ?? 'json';
+  if(typeof format!=='string' || !EXPORT_FORMATS.includes(format as ExportFormat)) {
+    res.status(400).json({error:'Unsupported export format'});return;
+  }
+  const detail=storage().get(String(req.params['id']),config.vaultAddr);
+  if(!detail) {res.status(404).json({error:'Audit run not found'});return;}
+  try {
+    const body=exportAudit(detail,format as ExportFormat);
+    const contentTypes={json:'application/json',jsonl:'application/x-ndjson',yaml:'application/yaml',csv:'text/csv'};
+    res.type(contentTypes[format as ExportFormat]);
+    res.setHeader('Content-Disposition', `attachment; filename="audit-report.${format}"`);
+    res.send(body);
+  } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Export failed'});}
 });
 router.get('/runs/:id', (req, res) => {
   const detail = storage().get(String(req.params['id']), config.vaultAddr);
