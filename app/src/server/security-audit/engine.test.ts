@@ -927,3 +927,25 @@ test('source-free SQLite retains initial analysis but replay reports unavailable
     assert.throws(()=>parseCollectionOptions({redactPolicySource:'true'}),/boolean/);
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('diff compares policy content across source retention modes and isolates namespace gaps', () => {
+  const s = snapshot();
+  const result = execute(s,DEFAULT_SETTINGS);
+  const old: import('../../shared/securityAudit.js').AuditDetail = {
+    run:{id:'old',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:s.resources.length,issueCount:0,findingCount:0},
+    snapshot:s,configuration:result.configuration,findings:[],
+  };
+  const next = JSON.parse(exportAudit(old,'json',true)) as typeof old;
+  next.run.id = 'next';
+  assert.equal(compareRuns(old,next).statistics.resources.changed,0);
+  next.snapshot!.resources[0].data.source_sha256 = '0'.repeat(64);
+  assert.equal(compareRuns(old,next).statistics.resources.changed,1);
+  delete next.snapshot!.resources[0].data.source_sha256;
+  assert.equal(compareRuns(old,next).statistics.resources.changed,1);
+  old.snapshot!.issues = [{namespace:'a',path:'identity',reason:'Unavailable'}];
+  next.snapshot!.issues = [{namespace:'b',path:'identity',reason:'Unavailable'}];
+  const diff = compareRuns(old,next);
+  assert.equal(diff.statistics.coverage.added,1);
+  assert.equal(diff.statistics.coverage.removed,1);
+  assert.equal(diff.statistics.coverage.changed,0);
+});

@@ -44,5 +44,5 @@ export interface RunConfiguration extends RuleSettings {
   catalog?: RuleView[];
   fingerprint: string;
   engineVersion: string;
-  issues: { path: string; reason: string }[];
+  issues: { namespace?: string; path: string; reason: string }[];
 }

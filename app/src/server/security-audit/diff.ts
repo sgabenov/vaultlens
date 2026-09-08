@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { snapshotNamespaces } from './namespaces.js';
 import type { AuditDetail, AuditFinding, AuditResource } from '../../shared/securityAudit.js';
 
@@ -9,7 +10,7 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 type Change<T> = { change:'added'|'removed'|'changed'|'unchanged'; old?:T; new?:T };
-function compare<T>(oldItems:T[], newItems:T[], key:(item:T)=>string): Change<T>[] {
+function compare<T>(oldItems:T[], newItems:T[], key:(item:T)=>string, record:(item:T)=>unknown = item=>item): Change<T>[] {
   const old = new Map<string,T[]>(), next = new Map<string,T[]>();
   for (const [items,map] of [[oldItems,old],[newItems,next]] as const)
     for (const item of items) { const k=key(item); map.set(k,[...(map.get(k)??[]),item]); }
@@ -18,7 +19,7 @@ function compare<T>(oldItems:T[], newItems:T[], key:(item:T)=>string): Change<T>
     const before=[...(old.get(k)??[])].sort((a,b)=>canonical(a).localeCompare(canonical(b)));
     const after=[...(next.get(k)??[])].sort((a,b)=>canonical(a).localeCompare(canonical(b)));
     for(let i=before.length-1;i>=0;i--) {
-      const index=after.findIndex(item=>canonical(item)===canonical(before[i]));
+      const index=after.findIndex(item=>canonical(record(item))===canonical(record(before[i])));
       if(index>=0) {output.push({change:'unchanged',new:after.splice(index,1)[0]});before.splice(i,1);}
     }
     while(before.length && after.length) output.push({change:'changed',old:before.shift()!,new:after.shift()!});
@@ -35,6 +36,19 @@ const findingRecord = (finding:AuditFinding) => {
   return {namespace:finding.namespace??'',ruleId:finding.ruleId,path:finding.path,policyPath:finding.policyPath??'',
     severity:finding.severity,evidence,title:finding.title,recommendation:finding.recommendation};
 };
+function resourceRecord(resource:AuditResource):unknown {
+  if (resource.kind !== 'policy') return resource;
+  const data = {...resource.data};
+  const digest = typeof data.hcl === 'string'
+    ? createHash('sha256').update(data.hcl).digest('hex') : data.source_sha256;
+  if (typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest)) {
+    delete data.hcl;
+    delete data.source_redacted;
+    data.source_sha256 = digest;
+  }
+  return {...resource,data};
+}
+
 export function compareRuns(old:AuditDetail, next:AuditDetail) {
   if(!old.snapshot || !next.snapshot || !old.snapshot.finishedAt || !next.snapshot.finishedAt ||
     ['collected','running','failed','interrupted'].includes(old.run.status) || ['collected','running','failed','interrupted'].includes(next.run.status))
@@ -51,12 +65,12 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
     old.configuration.fingerprint!==next.configuration.fingerprint ||
     old.configuration.engineVersion!==next.configuration.engineVersion)
     throw new Error('Snapshot audit configurations or engine versions are incomparable');
-  const resources=compare<AuditResource>(old.snapshot.resources,next.snapshot.resources,r=>canonical([r.namespace??'',r.kind,r.path]));
+  const resources=compare<AuditResource>(old.snapshot.resources,next.snapshot.resources,r=>canonical([r.namespace??'',r.kind,r.path]),resourceRecord);
   const findings=compare(old.findings.map(findingRecord),next.findings.map(findingRecord),f=>canonical([f.namespace,f.ruleId,f.path,f.policyPath]));
   const assignments=compare(old.snapshot.identity?.assignments??[],next.snapshot.identity?.assignments??[],
     a=>canonical([a.namespace??'',a.subjectKind,a.subjectPath,a.policy,a.relationship,a.sourcePath]));
   const coverage=compare([...old.snapshot.issues,...old.configuration.issues],
-    [...next.snapshot.issues,...next.configuration.issues],i=>i.path);
+    [...next.snapshot.issues,...next.configuration.issues],i=>canonical([i.namespace??'',i.path]));
   const partial=old.run.status==='partial' || next.run.status==='partial' ||
     !old.snapshot.policiesComplete || !next.snapshot.policiesComplete || coverage.some(c=>c.old || c.new);
   return {oldRunId:old.run.id,newRunId:next.run.id,target:next.snapshot.target,
