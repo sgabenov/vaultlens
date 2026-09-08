@@ -1,3 +1,4 @@
+import AuditImportUpload from '../components/AuditImportUpload';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditControlsEditor from '../components/AuditControlsEditor';
@@ -92,6 +93,7 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
+      <AuditImportUpload disabled={!!running||start.isPending||reanalyze.isPending} onImported={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />
       <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
       <details className="rounded border p-3 text-sm">
         <summary>Collection settings</summary>

@@ -1206,3 +1206,8 @@ export async function getSecurityAuditBaseline(id:string):Promise<string> {
   const {data}=await api.get(`/security-audit/runs/${encodeURIComponent(id)}/baseline`);
   return JSON.stringify(data,null,2);
 }
+
+export async function importPythonAudit(file:File):Promise<{id:string}> {
+  const {data}=await api.post<{id:string}>('/security-audit/imports/python',file,{headers:{'Content-Type':'application/octet-stream'}});
+  return data;
+}

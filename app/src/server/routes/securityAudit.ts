@@ -6,7 +6,9 @@ import { ENGINE_VERSION } from '../security-audit/engine.js';
 import { parseCollectionOptions } from '../security-audit/requestPolicy.js';
 import { exportAudit, EXPORT_FORMATS, type ExportFormat } from '../security-audit/exporter.js';
 import { compareRuns } from '../security-audit/diff.js';
-import { Router } from 'express';
+import { Router, raw } from 'express';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import { config } from '../config/index.js';
@@ -21,6 +23,16 @@ const dbPath = path.resolve(
 );
 let store: AuditStore | undefined;
 let active: Worker | undefined;
+function workerEntry() {
+  return import.meta.url.endsWith('.ts')
+      ? new URL(
+          'data:text/javascript,' +
+            encodeURIComponent(
+              `import {tsImport} from ${JSON.stringify(import.meta.resolve('tsx/esm/api'))}; await tsImport(${JSON.stringify(new URL('../security-audit/worker.ts', import.meta.url).href)}, ${JSON.stringify(import.meta.url)});`,
+            ),
+        )
+      : new URL('../security-audit/worker.js', import.meta.url);
+}
 function storage() {
   if (!store) {
     store = new AuditStore(dbPath);
@@ -32,6 +44,29 @@ router.use(authMiddleware, requireAdmin);
 router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
+});
+router.post('/imports/python', raw({type:'application/octet-stream',limit:'32mb'}), (req,res,next) => {
+  if (!Buffer.isBuffer(req.body) || req.body.length<16 || req.body.subarray(0,16).toString('binary')!=='SQLite format 3\0') {
+    res.status(400).json({error:'Expected a Python SQLite snapshot as application/octet-stream'});return;
+  }
+  const db=storage();
+  let directory:string|undefined,id:string|undefined;
+  try {
+    id=db.create(config.vaultAddr);
+    directory=mkdtempSync(path.join(tmpdir(),'vaultlens-python-import-'));
+    const importPath=path.join(directory,'snapshot.sqlite');
+    writeFileSync(importPath,req.body,{mode:0o600,flag:'wx'});
+    const worker=new Worker(workerEntry(),{workerData:{dbPath,id,target:config.vaultAddr,importPath}});
+    active=worker;
+    const runId=id,uploadDirectory=directory;
+    worker.once('error',()=>db.fail(runId));
+    worker.once('exit',()=>{db.fail(runId);rmSync(uploadDirectory,{recursive:true,force:true});if(active===worker) active=undefined;});
+    res.status(202).json({id});
+  } catch(error) {
+    if(directory) rmSync(directory,{recursive:true,force:true});
+    if(id) {db.fail(id);next(error);}
+    else res.status(409).json({error:'An audit is already running'});
+  }
 });
 router.get('/rules', (_req, res) => {
   const settings = storage().settings();
@@ -154,15 +189,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
     return;
   }
   try {
-    const entry = import.meta.url.endsWith('.ts')
-      ? new URL(
-          'data:text/javascript,' +
-            encodeURIComponent(
-              `import {tsImport} from ${JSON.stringify(import.meta.resolve('tsx/esm/api'))}; await tsImport(${JSON.stringify(new URL('../security-audit/worker.ts', import.meta.url).href)}, ${JSON.stringify(import.meta.url)});`,
-            ),
-        )
-      : new URL('../security-audit/worker.js', import.meta.url);
-    active = new Worker(entry, {
+    active = new Worker(workerEntry(), {
       workerData: {
         dbPath,
         id,
