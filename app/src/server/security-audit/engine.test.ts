@@ -536,3 +536,22 @@ test('offline diff preserves duplicate finding identities, severity changes and 
   next.configuration=old.configuration;next.snapshot!.target='http://other.invalid';
   assert.throws(()=>compareRuns(old,next),/incomparable/);
 });
+
+import { createBaseline, parseBaseline, applyBaseline, findingFingerprint } from './baseline.js';
+test('baseline preserves findings and gates only new identities under the same configuration', () => {
+  const s=snapshot(),result=execute(s,DEFAULT_SETTINGS);
+  const detail: import('../../shared/securityAudit.js').AuditDetail={snapshot:s,configuration:result.configuration,findings:result.findings,
+    run:{id:'base',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:result.findings.length}};
+  const baseline=parseBaseline(JSON.stringify(createBaseline(detail)));
+  const original=structuredClone(result.findings);
+  const controls=applyBaseline(result.findings,result.configuration,s.target,baseline);
+  assert.ok(controls.states.every(state=>!state.gate));
+  assert.deepEqual(result.findings,original);
+  const changed=structuredClone(result.findings);changed[0].evidence='new evidence';
+  assert.ok(applyBaseline(changed,result.configuration,s.target,baseline).states[0].gate);
+  assert.throws(()=>applyBaseline(changed,result.configuration,'http://other',baseline),/incompatible/);
+  assert.throws(()=>applyBaseline(changed,{...result.configuration,engineVersion:'other'},s.target,baseline),/incompatible/);
+  assert.throws(()=>parseBaseline('version: 1\ntool: vaultlens\nfingerprints: [nope]'),/requires|Invalid/);
+  const a={...original[0],evidence:'{"a":1,"b":2}'};
+  assert.equal(findingFingerprint(a),findingFingerprint({...a,evidence:'{"b":2,"a":1}'}));
+});
