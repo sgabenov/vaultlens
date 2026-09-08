@@ -975,7 +975,7 @@ test('Python schema-3 import preserves assignments, aliases, namespace and sourc
     db.exec("UPDATE policies SET rules=NULL");
     assert.ok(execute(importPythonSnapshot(path,'http://example.invalid'),DEFAULT_SETTINGS).configuration.issues.some(issue=>issue.reason==='Policy source is unavailable'));
     db.exec("UPDATE metadata SET value='99' WHERE key='schema_version'");
-    assert.throws(()=>importPythonSnapshot(path,'http://example.invalid'),/schema 3/);
+    assert.throws(()=>importPythonSnapshot(path,'http://example.invalid'),/schemas 2 and 3/);
     assert.equal(parseAuditArguments(['import-python',path]).command,'import-python');
   } finally {db.close();rmSync(directory,{recursive:true,force:true});}
 });
@@ -1212,4 +1212,31 @@ test('ZIP report contains linked indexes and respects source omission', () => {
   const overview=parseYamlReport(strFromU8(files['overview.yml']));
   assert.ok(overview.objects.every((entry:{file:string})=>files[entry.file]));
   assert.equal(parseAuditArguments(['export-archive','run','report.zip','--redact-policy-source']).redactPolicySource,true);
+});
+
+
+test('legacy Python schema 2 imports without lifecycle metadata and preserves reanalysis', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-python-v2-'));
+  const path=join(directory,'legacy.sqlite');
+  const db=new DatabaseSync(path);
+  try {
+    db.exec(pythonImportFixture.sql);
+    const current=importPythonSnapshot(path,'http://example.invalid');
+    db.exec("UPDATE metadata SET value='2' WHERE key='schema_version'");
+    const remove=db.prepare('DELETE FROM metadata WHERE key=?');
+    for(const key of ['analysis_config_hash','collection_stages','collection_config','collection_metrics','finding_states','control_info']) remove.run(key);
+    const before=readFileSync(path);
+    const legacy=importPythonSnapshot(path,'http://example.invalid');
+    assert.deepEqual(readFileSync(path),before);
+    assert.equal(legacy.importedFrom?.schemaVersion,2);
+    assert.equal(legacy.importedFrom?.collection,undefined);
+    assert.deepEqual(legacy.resources,current.resources);
+    assert.deepEqual(legacy.importedCoverage,current.importedCoverage);
+    assert.deepEqual(execute(legacy,DEFAULT_SETTINGS).findings,execute(current,DEFAULT_SETTINGS).findings);
+    const analysis=execute(legacy,DEFAULT_SETTINGS);
+    const detail:import('../../shared/securityAudit.js').AuditDetail={run:{id:'legacy',target:legacy.target,startedAt:legacy.startedAt,finishedAt:legacy.finishedAt,status:'completed',resourceCount:legacy.resources.length,issueCount:0,findingCount:analysis.findings.length},snapshot:legacy,configuration:analysis.configuration,findings:analysis.findings};
+    assert.throws(()=>compareRuns(detail,detail),/collection scope is unknown/);
+    db.exec("DELETE FROM metadata WHERE key='namespaces'");
+    assert.deepEqual(importPythonSnapshot(path,'http://example.invalid').namespaces,['team']);
+  } finally {db.close();rmSync(directory,{recursive:true,force:true});}
 });

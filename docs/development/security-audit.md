@@ -163,3 +163,9 @@ file. ZIP exports allow up to 5,000 resources and 64 MiB of entry content; use
 ZIP entries are stored without compression to limit server CPU work. The bundled
 JavaScript dependency `fflate` provides ZIP support; no system archive command or
 additional service is required. Report schemas are native VaultLens schemas.
+
+Python SQLite import accepts schemas 2 and 3. Legacy schema-2 snapshots may omit
+collection and lifecycle metadata; imported configuration can still be analyzed,
+but snapshot comparison requires known collection scope. The source schema is
+retained in import provenance. Historical Python findings and baseline controls
+are not imported; analysis creates native findings from the observed resources.

@@ -20,7 +20,7 @@ export interface IdentityAnalysis {
 export interface AuditSnapshot {
   refresh?:{sources:string[];retainedResources:number;retainedFrom:string};
   checkpoint?:{savedAt:string;completedNamespaces:string[];completedStages?:{namespace:string;stage:string}[]};
-  importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string;collection?:{
+  importedFrom?: {tool:'vault-security-audit';schemaVersion:2|3;scanId:string;collection?:{
     scope:{policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
     maxObjects:number;sources:string[];recursiveNamespaces:boolean;namespaceFilters:string[];
   }};

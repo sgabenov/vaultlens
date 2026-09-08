@@ -31,14 +31,14 @@ export function importPythonSnapshot(path:string, target:string):AuditSnapshot {
       return value;
     };
     const meta = Object.fromEntries(rows('metadata').map(row => [text(row.key),text(row.value)]));
-    if (meta.schema_version !== '3') throw new Error('Only Python snapshot schema 3 is supported');
+    if (meta.schema_version !== '2' && meta.schema_version !== '3') throw new Error('Only Python snapshot schemas 2 and 3 are supported');
     if (meta.vault_address !== target) throw new Error('Python snapshot target must match VAULT_ADDR');
     if (!meta.finished_at || !Number.isFinite(Date.parse(meta.finished_at)) || !Number.isFinite(Date.parse(meta.started_at)))
       throw new Error('Import requires a finished Python snapshot with valid timestamps');
-    const namespaces:unknown = JSON.parse(meta.namespaces);
+    const namespaces:unknown = JSON.parse(meta.namespaces ?? '[]');
     if (!Array.isArray(namespaces) || namespaces.some(value => typeof value !== 'string')) throw new Error('Invalid Python namespaces');
     const snapshot:AuditSnapshot = {
-      importedFrom:{tool:'vault-security-audit',schemaVersion:3,scanId:meta.scan_id},
+      importedFrom:{tool:'vault-security-audit',schemaVersion:meta.schema_version === '2' ? 2 : 3,scanId:meta.scan_id},
       version:1,target,startedAt:meta.started_at,finishedAt:meta.finished_at,analysisPerformed:false,
       namespaces:namespaces.map(normalizeNamespace),resources:[],issues:[],policiesComplete:false,
       namespacePolicyCompleteness:{},namespaceAliasCompleteness:{},
