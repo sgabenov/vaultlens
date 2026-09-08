@@ -1,3 +1,4 @@
+import { createRequestPolicy, DEFAULT_REQUEST_POLICY, type RequestPolicyOptions } from './requestPolicy.js';
 import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
@@ -47,7 +48,10 @@ export async function collect(
   target: string,
   token: string,
   skipTlsVerify = false,
+  requestOptions: Partial<RequestPolicyOptions> = {},
 ): Promise<AuditSnapshot> {
+  const policyOptions={...DEFAULT_REQUEST_POLICY,...requestOptions};
+  const policy=createRequestPolicy(policyOptions);
   const client = new VaultClient(target, skipTlsVerify);
   const snapshot: AuditSnapshot = {
     version: 1,
@@ -57,15 +61,16 @@ export async function collect(
     resources: [],
     issues: [],
     policiesComplete: false,
+    collection: {requestPolicy:policyOptions,metrics:policy.metrics},
   };
   async function read(
     path: string,
     list = false,
   ): Promise<Record<string, unknown> | null> {
     try {
-      const response = list
-        ? await client.list<{ data: Record<string, unknown> }>(path, token)
-        : await client.get<{ data: Record<string, unknown> }>(path, token);
+      const response = await policy.request(() => list
+        ? client.list<{ data: Record<string, unknown> }>(path, token)
+        : client.get<{ data: Record<string, unknown> }>(path, token));
       return response.data ?? {};
     } catch (error) {
       // Vault LIST returns 404 for empty collections. Other failures remain explicit.

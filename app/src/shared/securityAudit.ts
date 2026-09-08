@@ -14,6 +14,10 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  collection?: {
+    requestPolicy: {retries:number;requestsPerSecond:number;retryBackoffMs:number};
+    metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
+  };
   identity?: IdentityAnalysis;
   version: 1;
   target: string;

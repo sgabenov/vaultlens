@@ -33,7 +33,7 @@ try {
     if (!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
     const id = store.create(target);
     try {
-      const snapshot = await collect(target, process.env['VAULT_TOKEN']);
+      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy);
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
       snapshot.identity = identity;

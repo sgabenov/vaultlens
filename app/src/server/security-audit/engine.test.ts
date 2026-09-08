@@ -611,3 +611,22 @@ test('offline exports preserve evidence and protect CSV cells from formula execu
   assert.equal(parseAuditArguments(['export','run','file','--format','jsonl']).format,'jsonl');
   assert.throws(()=>parseAuditArguments(['export','run','file','--format','unknown']),/format/);
 });
+
+import { createRequestPolicy } from './requestPolicy.js';
+import { VaultError } from '../lib/vaultClient.js';
+test('collector request policy retries transient failures, spaces requests and rejects access failures', async () => {
+  let time=0;
+  const policy=createRequestPolicy({retries:2,requestsPerSecond:2,retryBackoffMs:100},{now:()=>time,sleep:async ms=>{time+=ms;}});
+  let calls=0;
+  assert.equal(await policy.request(async()=>{if(++calls<3) throw new VaultError('unavailable',503);return 'ok';}),'ok');
+  assert.equal(calls,3);assert.equal(time,1000);assert.equal(policy.metrics.retries,2);
+  let denied=0;
+  await assert.rejects(()=>policy.request(async()=>{denied++;throw new VaultError('denied',403);}),/denied/);
+  assert.equal(denied,1);
+  const limited=createRequestPolicy({retries:1,requestsPerSecond:100,retryBackoffMs:0},{now:()=>time,sleep:async ms=>{time+=ms;}});
+  let attempts=0;
+  await assert.rejects(()=>limited.request(async()=>{attempts++;throw new VaultError('limited',429);}),/limited/);
+  assert.equal(attempts,2);
+  assert.throws(()=>parseAuditArguments(['scan','--retries','NaN']),/retries/);
+  assert.equal(parseAuditArguments(['scan','--retries','0']).requestPolicy.retries,0);
+});
