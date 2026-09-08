@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { VaultError } from '../lib/vaultClient.js';
 export interface RequestPolicyOptions { retries:number; requestsPerSecond:number; retryBackoffMs:number; }
 export const DEFAULT_REQUEST_POLICY:RequestPolicyOptions={retries:3,requestsPerSecond:10,retryBackoffMs:500};
@@ -6,16 +7,18 @@ export function validateRequestPolicy(options:RequestPolicyOptions):void {
   if(!Number.isFinite(options.requestsPerSecond)||options.requestsPerSecond<=0||options.requestsPerSecond>1000) throw new Error('requestsPerSecond must be greater than 0 and at most 1000');
   if(!Number.isInteger(options.retryBackoffMs)||options.retryBackoffMs<0||options.retryBackoffMs>10000) throw new Error('retryBackoffMs must be an integer from 0 to 10000');
 }
-export function createRequestPolicy(options:RequestPolicyOptions,clock={now:()=>performance.now(),sleep:(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))}) {
+export function createRequestPolicy(options:RequestPolicyOptions,clock: {now:()=>number;sleep:(ms:number)=>Promise<void>}|undefined=undefined,signal?:AbortSignal) {
+  const timing=clock??{now:()=>performance.now(),sleep:(ms:number)=>delay(ms,undefined,{signal})};
   validateRequestPolicy(options);
   let next=0;
   const metrics={requests:0,retries:0,rateWaitMs:0,retryWaitMs:0};
   let admission=Promise.resolve();
   function acquire():Promise<void> {
     const turn=admission.then(async()=>{
-      const wait=Math.max(0,next-clock.now());
-      if(wait) {metrics.rateWaitMs+=wait;await clock.sleep(wait);}
-      next=clock.now()+1000/options.requestsPerSecond;
+      signal?.throwIfAborted();
+      const wait=Math.max(0,next-timing.now());
+      if(wait) {metrics.rateWaitMs+=wait;await timing.sleep(wait);}
+      next=timing.now()+1000/options.requestsPerSecond;
     });
     admission=turn.catch(()=>{});
     return turn;
@@ -23,29 +26,33 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock={now:()=>
   async function request<T>(operation:()=>Promise<T>):Promise<T> {
     for(let attempt=0;;attempt++) {
       await acquire();
+      signal?.throwIfAborted();
       metrics.requests++;
       try{return await operation();}
       catch(error) {
+        signal?.throwIfAborted();
         const retryable=error instanceof VaultError && [408,429,500,502,503,504].includes(error.statusCode);
         if(!retryable||attempt>=options.retries) throw error;
         metrics.retries++;
         const backoff=Math.min(10000,options.retryBackoffMs*2**attempt);
         metrics.retryWaitMs+=backoff;
-        if(backoff) await clock.sleep(backoff);
+        if(backoff) await timing.sleep(backoff);
       }
     }
   }
   return {request,metrics};
 }
 
-export function parseCollectionOptions(raw:unknown):RequestPolicyOptions & {workers:number} {
-  if(raw===undefined) return {...DEFAULT_REQUEST_POLICY,workers:10};
+export function parseCollectionOptions(raw:unknown):RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number} {
+  if(raw===undefined) return {...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000};
   if(!raw || typeof raw!=='object'||Array.isArray(raw)) throw new Error('Collection options must be an object');
   const value=raw as Record<string,unknown>;
-  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs'].includes(key))) throw new Error('Unknown collection option');
-  const options={...DEFAULT_REQUEST_POLICY,workers:10,...value} as RequestPolicyOptions & {workers:number};
+  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs'].includes(key))) throw new Error('Unknown collection option');
+  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,...value} as RequestPolicyOptions & {workers:number;timeoutMs:number;maxDurationMs:number};
   for(const value of Object.values(options)) if(typeof value!=='number') throw new Error('Collection options must be numeric');
   validateRequestPolicy(options);
   if(!Number.isInteger(options.workers)||options.workers<1||options.workers>32) throw new Error('workers must be an integer from 1 to 32');
+  for(const key of ['timeoutMs','maxDurationMs'] as const)
+    if(!Number.isInteger(options[key])||options[key]<1||options[key]>86400000) throw new Error(`${key} must be from 1 to 86400000`);
   return options;
 }

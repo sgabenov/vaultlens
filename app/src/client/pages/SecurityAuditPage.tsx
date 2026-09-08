@@ -9,7 +9,7 @@ import {
   startSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
-  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500});
+  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000});
   const [selected, setSelected] = useState('');
   const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
@@ -83,6 +83,8 @@ export default function SecurityAuditPage() {
         <summary>Collection settings</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {([
+            ['timeoutMs','Request timeout (ms)',1,86400000,1000],
+            ['maxDurationMs','Collection duration limit (ms)',1,86400000,1000],
             ['workers','Concurrent workers',1,32,1],
             ['requestsPerSecond','Requests per second',0.1,1000,0.1],
             ['retries','Retries per request',0,10,1],

@@ -1,5 +1,5 @@
 import { forEachConcurrent } from './concurrency.js';
-import { createRequestPolicy, DEFAULT_REQUEST_POLICY, type RequestPolicyOptions } from './requestPolicy.js';
+import { createRequestPolicy, parseCollectionOptions, type RequestPolicyOptions } from './requestPolicy.js';
 import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
@@ -49,13 +49,13 @@ export async function collect(
   target: string,
   token: string,
   skipTlsVerify = false,
-  requestOptions: Partial<RequestPolicyOptions> & {workers?:number} = {},
+  requestOptions: Partial<RequestPolicyOptions> & {workers?:number;timeoutMs?:number;maxDurationMs?:number} = {},
 ): Promise<AuditSnapshot> {
-  const workers=requestOptions.workers ?? 10;
-  if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  const policyOptions={...DEFAULT_REQUEST_POLICY,...requestOptions};
-  const policy=createRequestPolicy(policyOptions);
-  const client = new VaultClient(target, skipTlsVerify);
+  const policyOptions=parseCollectionOptions(requestOptions);
+  const {workers,timeoutMs,maxDurationMs}=policyOptions;
+  const signal=AbortSignal.timeout(maxDurationMs);
+  const policy=createRequestPolicy(policyOptions,undefined,signal);
+  const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal});
   const snapshot: AuditSnapshot = {
     version: 1,
     target,
@@ -76,6 +76,12 @@ export async function collect(
         : client.get<{ data: Record<string, unknown> }>(path, token));
       return response.data ?? {};
     } catch (error) {
+      if(signal.aborted) {
+        if(!snapshot.issues.some(issue=>issue.path==='collection/deadline'))
+          snapshot.issues.push({path:'collection/deadline',reason:'Collection duration limit reached; snapshot is incomplete'});
+        snapshot.policiesComplete=false;
+        return null;
+      }
       // Vault LIST returns 404 for empty collections. Other failures remain explicit.
       if (list && error instanceof VaultError && error.statusCode === 404)
         return { keys: [] };

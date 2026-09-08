@@ -17,10 +17,11 @@ export class VaultError extends Error {
 export class VaultClient {
   private client: AxiosInstance;
 
-  constructor(vaultAddr: string, skipTlsVerify = false) {
+  constructor(vaultAddr: string, skipTlsVerify = false, transport: {timeoutMs?:number;signal?:AbortSignal} = {}) {
     this.client = axios.create({
       baseURL: `${vaultAddr}/v1`,
-      timeout: 30000,
+      timeout: transport.timeoutMs ?? 30000,
+      ...(transport.signal ? {signal:transport.signal} : {}),
       headers: {
         'Content-Type': 'application/json',
       },

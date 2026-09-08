@@ -1,4 +1,4 @@
-import { DEFAULT_REQUEST_POLICY, validateRequestPolicy } from './requestPolicy.js';
+import { DEFAULT_REQUEST_POLICY, validateRequestPolicy, parseCollectionOptions } from './requestPolicy.js';
 import { EXPORT_FORMATS, type ExportFormat } from './exporter.js';
 import { SEVERITIES, type Severity } from '../../shared/auditRules.js';
 export function parseAuditArguments(args:string[]) {
@@ -10,7 +10,7 @@ export function parseAuditArguments(args:string[]) {
     const token=args[i];
     if(!token.startsWith('--')) {positionals.push(token);continue;}
     if(Object.hasOwn(options,token)) throw new Error(`Duplicate option ${token}`);
-    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && command==='scan') {
+    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && command==='scan') {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
     } else if(['--require-complete','--allow-incomplete'].includes(token) && gating) options[token]=true;
@@ -29,7 +29,7 @@ export function parseAuditArguments(args:string[]) {
   validateRequestPolicy(requestPolicy);
   const workers=Number(options['--workers']??10);
   if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  return {command,positionals,requestPolicy:{...requestPolicy,workers},format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  return {command,positionals,requestPolicy:parseCollectionOptions({...requestPolicy,workers,timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000)}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }
