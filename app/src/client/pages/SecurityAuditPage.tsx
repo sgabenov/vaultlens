@@ -251,7 +251,7 @@ export default function SecurityAuditPage() {
                       <thead><tr><th>Subject</th><th>Policy</th><th>Assignment</th><th>Source</th></tr></thead>
                       <tbody>{identityAssignments.slice(0, identityLimit).map((assignment, index) => (
                         <tr key={index} className="border-t">
-                          <td className="p-2">{assignment.subjectPath}</td><td>{assignment.policy}</td>
+                          <td className="p-2">{assignment.namespace ? `${assignment.namespace}: ` : ''}{assignment.subjectPath}</td><td>{assignment.policy}</td>
                           <td>{assignment.relationship}</td><td>{assignment.sourcePath}</td>
                         </tr>
                       ))}</tbody>
@@ -296,7 +296,7 @@ export default function SecurityAuditPage() {
                     <h3 className="font-medium">{finding.title}</h3>
                   </div>
                   <p className="mt-2 break-all font-mono text-xs text-gray-600">
-                    {finding.path}
+                    {finding.namespace ? `${finding.namespace}: ` : ''}{finding.path}
                   </p>
                   <p className="mt-3 text-sm">{finding.evidence}</p>
                   {!!finding.relatedObjects?.length && (

@@ -1,3 +1,4 @@
+import { snapshotNamespaces } from './namespaces.js';
 import { applyBaseline } from './baseline.js';
 import { workerData } from 'node:worker_threads';
 import { collect } from './collector.js';
@@ -10,7 +11,7 @@ try {
   if(!snapshot) throw new Error('Source snapshot not found');
   if(sourceRunId) snapshot.sourceRunId=sourceRunId;
   const result = execute(snapshot, settings ?? store.settings());
-  snapshot.controls = applyBaseline(result.findings,result.configuration,target,baseline,exceptions);
+  snapshot.controls = applyBaseline(result.findings,result.configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));
   snapshot.analysisPerformed = true;
   snapshot.identity = result.identity;
   store.finish(id, snapshot, result.findings, result.configuration);

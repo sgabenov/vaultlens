@@ -20,10 +20,10 @@ export function exportAudit(detail:AuditDetail,format:ExportFormat):string {
     if(/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text="'"+text;
     return '"'+text.replaceAll('"','""')+'"';
   };
-  const rows:unknown[][]=[['run_id','rule_id','severity','object_path','policy_path','title','evidence','recommendation','baseline_status','suppressed','gate','exception_id']];
+  const rows:unknown[][]=[['run_id','namespace','rule_id','severity','object_path','policy_path','title','evidence','recommendation','baseline_status','suppressed','gate','exception_id']];
   detail.findings.forEach((f,index)=>{
     const state=detail.snapshot?.controls?.states[index];
-    rows.push([detail.run.id,f.ruleId,f.severity,f.path,f.policyPath,f.title,f.evidence,f.recommendation,state?.baselineStatus,state?.suppressed,state?.gate,state?.exception?.id]);
+    rows.push([detail.run.id,f.namespace||'root',f.ruleId,f.severity,f.path,f.policyPath,f.title,f.evidence,f.recommendation,state?.baselineStatus,state?.suppressed,state?.gate,state?.exception?.id]);
   });
   return rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
 }

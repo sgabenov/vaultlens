@@ -700,3 +700,20 @@ test('multiple CLI scope patterns are retained and normalized without allowing d
   assert.throws(()=>parseAuditArguments(['scan','--workers','1','--workers','2']),/Duplicate/);
   assert.throws(()=>parseAuditArguments(['collect','--policy-filter']),/requires/);
 });
+
+test('namespace partitions isolate policy references, privilege signals and exceptions', () => {
+  const s=snapshot();s.namespaces=['team-a','team-b'];s.resources=[
+    {namespace:'team-a',kind:'policy',path:'sys/policies/acl/admin',data:{name:'admin',hcl:'path "*" {capabilities=["update"]}'}},
+    ...['team-a','team-b'].map(namespace=>({namespace,kind:'role',path:'auth/approle/role/demo',data:{auth_type:'approle',token_policies:['admin'],token_no_default_policy:true}})),
+  ];
+  const result=execute(s,DEFAULT_SETTINGS);
+  assert.ok(result.findings.some(f=>f.namespace==='team-a'&&f.ruleId==='APPROLE-001'));
+  assert.ok(!result.findings.some(f=>f.namespace==='team-b'&&f.ruleId==='APPROLE-001'));
+  assert.ok(result.findings.some(f=>f.namespace==='team-b'&&f.ruleId==='REF-001'));
+  assert.ok(!result.findings.some(f=>f.namespace==='team-a'&&f.ruleId==='REF-001'));
+  const finding=result.findings.find(f=>f.ruleId==='REF-001')!;
+  const exception={id:'scope',rule_id:'REF-001',namespace:'team-a',object_path:'*',owner:'security',reason:'Review',expires:'2099-01-01'};
+  assert.equal(applyBaseline([finding],result.configuration,s.target,undefined,[exception]).states[0].gate,true);
+  assert.equal(applyBaseline([finding],result.configuration,s.target,undefined,[{...exception,namespace:'team-b'}]).states[0].gate,false);
+  assert.notEqual(findingFingerprint({...finding,namespace:'team-a'}),findingFingerprint(finding));
+});

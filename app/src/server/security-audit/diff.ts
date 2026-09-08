@@ -1,3 +1,4 @@
+import { snapshotNamespaces } from './namespaces.js';
 import type { AuditDetail, AuditFinding, AuditResource } from '../../shared/securityAudit.js';
 
 export function canonical(value: unknown): string {
@@ -31,7 +32,7 @@ const findingRecord = (finding:AuditFinding) => {
   let evidence:unknown=finding.evidence;
   try {evidence=JSON.parse(finding.evidence);} catch { /* Legacy plain-text evidence. */ }
   // Source line movement and formatting are covered by resource changes.
-  return {ruleId:finding.ruleId,path:finding.path,policyPath:finding.policyPath??'',
+  return {namespace:finding.namespace??'',ruleId:finding.ruleId,path:finding.path,policyPath:finding.policyPath??'',
     severity:finding.severity,evidence,title:finding.title,recommendation:finding.recommendation};
 };
 export function compareRuns(old:AuditDetail, next:AuditDetail) {
@@ -45,14 +46,15 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
   const defaultScope={policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false};
   if(canonical(old.snapshot.collection?.scope??defaultScope)!==canonical(next.snapshot.collection?.scope??defaultScope))
     throw new Error('Snapshot collection scopes are incomparable');
+  if(canonical(snapshotNamespaces(old.snapshot))!==canonical(snapshotNamespaces(next.snapshot))) throw new Error('Snapshot namespaces are incomparable');
   if(!old.configuration || !next.configuration ||
     old.configuration.fingerprint!==next.configuration.fingerprint ||
     old.configuration.engineVersion!==next.configuration.engineVersion)
     throw new Error('Snapshot audit configurations or engine versions are incomparable');
-  const resources=compare<AuditResource>(old.snapshot.resources,next.snapshot.resources,r=>canonical([r.kind,r.path]));
-  const findings=compare(old.findings.map(findingRecord),next.findings.map(findingRecord),f=>canonical([f.ruleId,f.path,f.policyPath]));
+  const resources=compare<AuditResource>(old.snapshot.resources,next.snapshot.resources,r=>canonical([r.namespace??'',r.kind,r.path]));
+  const findings=compare(old.findings.map(findingRecord),next.findings.map(findingRecord),f=>canonical([f.namespace,f.ruleId,f.path,f.policyPath]));
   const assignments=compare(old.snapshot.identity?.assignments??[],next.snapshot.identity?.assignments??[],
-    a=>canonical([a.subjectKind,a.subjectPath,a.policy,a.relationship,a.sourcePath]));
+    a=>canonical([a.namespace??'',a.subjectKind,a.subjectPath,a.policy,a.relationship,a.sourcePath]));
   const coverage=compare([...old.snapshot.issues,...old.configuration.issues],
     [...next.snapshot.issues,...next.configuration.issues],i=>i.path);
   const partial=old.run.status==='partial' || next.run.status==='partial' ||

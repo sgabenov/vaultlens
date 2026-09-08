@@ -1,19 +1,23 @@
 export interface AuditResource {
+  namespace?:string;
   kind: string;
   path: string;
   data: Record<string, unknown>;
 }
 export interface AuditIssue {
+  namespace?:string;
   path: string;
   reason: string;
 }
 export interface IdentityAnalysis {
-  assignments: {subjectPath:string; subjectKind:string; policy:string; relationship:'assigned'|'inherited'; sourcePath:string}[];
+  assignments: {namespace?:string;subjectPath:string; subjectKind:string; policy:string; relationship:'assigned'|'inherited'; sourcePath:string}[];
   issues: AuditIssue[];
   groupCount: number;
   entityCount: number;
 }
 export interface AuditSnapshot {
+  namespaces?:string[];
+  namespacePolicyCompleteness?:Record<string,boolean>;
   controls?: AuditControls;
   analysisPerformed?: boolean;
   sourceRunId?: string;
@@ -33,6 +37,7 @@ export interface AuditSnapshot {
   policiesComplete: boolean;
 }
 export interface AuditFinding {
+  namespace?:string;
   relatedObjects?: { kind: string; path: string; name: string }[];
   policyPath?: string;
   line?: number;

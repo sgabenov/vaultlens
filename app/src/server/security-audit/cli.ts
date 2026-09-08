@@ -1,3 +1,4 @@
+import { snapshotNamespaces } from './namespaces.js';
 import { exportAudit } from './exporter.js';
 import { parseAuditArguments, auditExitCode } from './cliOptions.js';
 import { parseExceptions } from './exceptions.js';
@@ -44,7 +45,7 @@ try {
     try {
       const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy);
       const { findings, configuration, identity } = execute(snapshot, store.settings());
-      const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
+      const controls=applyBaseline(findings,configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));
       snapshot.controls = controls;
       snapshot.analysisPerformed = true;
       snapshot.identity = identity;
@@ -72,7 +73,7 @@ try {
       detail.snapshot,
       options.currentRules ? store.settings() : detail.configuration ?? store.settings(),
     );
-    const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
+    const controls=applyBaseline(findings,configuration,target,baseline,exceptions,undefined,snapshotNamespaces(detail.snapshot));
     let resultId=argument;
     if(options.save) {
       const snapshot={...detail.snapshot,identity,controls,analysisPerformed:true,sourceRunId:argument};

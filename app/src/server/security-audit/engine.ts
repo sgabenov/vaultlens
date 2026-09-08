@@ -1,3 +1,4 @@
+import { snapshotNamespaces } from './namespaces.js';
 import { evaluateReference } from './referenceDetector.js';
 import { analyzeIdentity, roleEntityIds } from './identity.js';
 import { RELATIONSHIP_DETECTORS, evaluateRelationship } from './relationshipDetectors.js';
@@ -23,7 +24,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '9';
+export const ENGINE_VERSION = '10';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -119,7 +120,7 @@ export function analyze(snapshot: AuditSnapshot): AuditFinding[] {
 }
 
 // Run through a versioned catalog; unknown implementation coverage is explicit.
-export function execute(
+function executeScoped(
   snapshot: AuditSnapshot,
   settings: RuleSettings,
 ): { findings: AuditFinding[]; configuration: RunConfiguration; identity: import('../../shared/securityAudit.js').IdentityAnalysis } {
@@ -313,4 +314,24 @@ export function execute(
       issues,
     },
   };
+}
+
+export function execute(snapshot:AuditSnapshot,settings:RuleSettings):ReturnType<typeof executeScoped> {
+  const namespaces=snapshotNamespaces(snapshot);
+  if(namespaces.length===1 && namespaces[0]==='') return executeScoped(snapshot,settings);
+  const results=namespaces.map(namespace=>{
+    const result=executeScoped({...snapshot,
+      resources:snapshot.resources.filter(resource=>(resource.namespace??'')===namespace),
+      policiesComplete:snapshot.namespacePolicyCompleteness?.[namespace]??snapshot.policiesComplete,
+    },settings);
+    const qualify=(issue:{path:string;reason:string})=>({...issue,namespace,path:namespace?`${namespace}:${issue.path}`:issue.path});
+    return {...result,findings:result.findings.map(finding=>({...finding,namespace})),
+      configuration:{...result.configuration,issues:result.configuration.issues.map(qualify)},
+      identity:{...result.identity,assignments:result.identity.assignments.map(assignment=>({...assignment,namespace})),issues:result.identity.issues.map(qualify)}};
+  });
+  const first=results[0];
+  return {findings:results.flatMap(result=>result.findings),
+    configuration:{...first.configuration,issues:results.flatMap(result=>result.configuration.issues)},
+    identity:{assignments:results.flatMap(result=>result.identity.assignments),issues:results.flatMap(result=>result.identity.issues),
+      groupCount:results.reduce((n,result)=>n+result.identity.groupCount,0),entityCount:results.reduce((n,result)=>n+result.identity.entityCount,0)}};
 }

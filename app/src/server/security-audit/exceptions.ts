@@ -37,7 +37,7 @@ export function parseExceptions(source:string, ruleIds:Set<string>): FindingExce
   });
 }
 export function exceptionMatches(entry:FindingException,finding:AuditFinding):boolean {
-  return entry.rule_id===finding.ruleId && globMatch(entry.namespace,'root') &&
+  return entry.rule_id===finding.ruleId && globMatch(entry.namespace,finding.namespace||'root') &&
     globMatch(entry.object_path,finding.path) && (entry.policy_path===undefined ||
       (finding.policyPath!==undefined && globMatch(entry.policy_path,finding.policyPath)));
 }
