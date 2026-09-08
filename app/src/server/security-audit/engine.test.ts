@@ -649,3 +649,13 @@ test('collector pool bounds concurrency and drains active work after an error', 
   assert.equal(parseAuditArguments(['scan','--workers','4']).requestPolicy.workers,4);
   assert.throws(()=>parseAuditArguments(['scan','--workers','0']),/workers/);
 });
+
+import { parseCollectionOptions } from './requestPolicy.js';
+test('web collection options validate types and reject unsupported settings before starting', () => {
+  assert.equal(parseCollectionOptions(undefined).workers,10);
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500});
+  assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
+  assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
+  assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
+  assert.throws(()=>parseCollectionOptions({unexpected:1}),/Unknown/);
+});

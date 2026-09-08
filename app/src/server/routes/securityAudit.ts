@@ -1,3 +1,4 @@
+import { parseCollectionOptions } from '../security-audit/requestPolicy.js';
 import { exportAudit, EXPORT_FORMATS, type ExportFormat } from '../security-audit/exporter.js';
 import { compareRuns } from '../security-audit/diff.js';
 import { Router } from 'express';
@@ -108,6 +109,9 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
     res.status(409).json({ error: 'An audit is already running' });
     return;
   }
+  let collectionOptions;
+  try {collectionOptions=parseCollectionOptions(req.body?.collectionOptions);}
+  catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid collection options'});return;}
   const db = storage();
   let id: string;
   try {
@@ -133,6 +137,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         token: req.vaultToken,
         skipTlsVerify: config.vaultSkipTlsVerify,
         settings: db.settings(),
+        collectionOptions,
       },
     });
     active.once('error', () => db.fail(id));

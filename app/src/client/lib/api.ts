@@ -1177,8 +1177,8 @@ export async function getSecurityAuditRuns() {
 export async function getSecurityAuditRun(id: string) {
   const {data} = await api.get<import('../../shared/securityAudit').AuditDetail>(`/security-audit/runs/${encodeURIComponent(id)}`); return data;
 }
-export async function startSecurityAudit() {
-  const {data} = await api.post<{id: string}>('/security-audit/runs'); return data;
+export async function startSecurityAudit(collectionOptions?: {workers:number;retries:number;requestsPerSecond:number;retryBackoffMs:number}) {
+  const {data} = await api.post<{id: string}>('/security-audit/runs', {collectionOptions}); return data;
 }
 
 export async function getAuditRules() {

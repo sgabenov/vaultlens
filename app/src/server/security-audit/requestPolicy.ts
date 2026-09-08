@@ -37,3 +37,15 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock={now:()=>
   }
   return {request,metrics};
 }
+
+export function parseCollectionOptions(raw:unknown):RequestPolicyOptions & {workers:number} {
+  if(raw===undefined) return {...DEFAULT_REQUEST_POLICY,workers:10};
+  if(!raw || typeof raw!=='object'||Array.isArray(raw)) throw new Error('Collection options must be an object');
+  const value=raw as Record<string,unknown>;
+  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs'].includes(key))) throw new Error('Unknown collection option');
+  const options={...DEFAULT_REQUEST_POLICY,workers:10,...value} as RequestPolicyOptions & {workers:number};
+  for(const value of Object.values(options)) if(typeof value!=='number') throw new Error('Collection options must be numeric');
+  validateRequestPolicy(options);
+  if(!Number.isInteger(options.workers)||options.workers<1||options.workers>32) throw new Error('workers must be an integer from 1 to 32');
+  return options;
+}

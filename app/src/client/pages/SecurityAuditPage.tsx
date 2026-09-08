@@ -9,6 +9,7 @@ import {
   startSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
+  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500});
   const [selected, setSelected] = useState('');
   const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
@@ -28,7 +29,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: startSecurityAudit,
+    mutationFn: () => startSecurityAudit(collectionOptions),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -78,6 +79,21 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
+      <details className="rounded border p-3 text-sm">
+        <summary>Collection settings</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {([
+            ['workers','Concurrent workers',1,32,1],
+            ['requestsPerSecond','Requests per second',0.1,1000,0.1],
+            ['retries','Retries per request',0,10,1],
+            ['retryBackoffMs','Initial retry delay (ms)',0,10000,100],
+          ] as const).map(([key,label,min,max,step])=><label key={key}>{label}
+            <input type="number" aria-label={label} min={min} max={max} step={step}
+              className="ml-2 rounded border p-2" disabled={!!running||start.isPending}
+              value={collectionOptions[key]} onChange={event=>setCollectionOptions(current=>({...current,[key]:Number(event.target.value)}))} />
+          </label>)}
+        </div>
+      </details>
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
         Read-only collection using your current Vault session. No secret values
         are collected. Rules use a saved configuration revision. Pending
@@ -183,6 +199,10 @@ export default function SecurityAuditPage() {
                   <option value="info">Info</option>
                 </select>
               </div>
+              {detail.data.snapshot?.collection && <details className="rounded border p-3 text-sm">
+                <summary>Collection parameters and metrics</summary>
+                <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
+              </details>}
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot?.identity && (
