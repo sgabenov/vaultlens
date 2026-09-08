@@ -15,6 +15,7 @@ export interface IdentityAnalysis {
 }
 export interface AuditSnapshot {
   collection?: {
+    workers?: number;
     requestPolicy: {retries:number;requestsPerSecond:number;retryBackoffMs:number};
     metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
   };

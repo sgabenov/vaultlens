@@ -1,3 +1,4 @@
+import { forEachConcurrent } from './concurrency.js';
 import { createRequestPolicy, DEFAULT_REQUEST_POLICY, type RequestPolicyOptions } from './requestPolicy.js';
 import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
@@ -48,8 +49,10 @@ export async function collect(
   target: string,
   token: string,
   skipTlsVerify = false,
-  requestOptions: Partial<RequestPolicyOptions> = {},
+  requestOptions: Partial<RequestPolicyOptions> & {workers?:number} = {},
 ): Promise<AuditSnapshot> {
+  const workers=requestOptions.workers ?? 10;
+  if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
   const policyOptions={...DEFAULT_REQUEST_POLICY,...requestOptions};
   const policy=createRequestPolicy(policyOptions);
   const client = new VaultClient(target, skipTlsVerify);
@@ -61,7 +64,7 @@ export async function collect(
     resources: [],
     issues: [],
     policiesComplete: false,
-    collection: {requestPolicy:policyOptions,metrics:policy.metrics},
+    collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics},
   };
   async function read(
     path: string,
@@ -94,11 +97,10 @@ export async function collect(
     Object.fromEntries(
       COLLECTED_FIELDS.filter((k) => k in data).map((k) => [k, data[k]]),
     );
-  // Deliberately serial in v1: bounded Vault load and deterministic evidence.
+  // Discovery stages are ordered; independent reads share one rate limiter.
   const policyList = await read('sys/policies/acl', true);
   snapshot.policiesComplete = policyList !== null;
-  for (const name of keys(policyList)) {
-    if (name === 'root') continue;
+  await forEachConcurrent(keys(policyList).filter(name=>name!=='root'),workers,async name=>{
     const path = `sys/policies/acl/${encodeURIComponent(name)}`;
     const data = await read(path);
     if (data)
@@ -108,17 +110,17 @@ export async function collect(
         data: { name, hcl: data.policy ?? data.rules ?? '' },
       });
     else snapshot.policiesComplete = false;
-  }
+  });
   for (const kind of ['entity', 'group']) {
     const base = `identity/${kind}/id`;
-    for (const id of keys(await read(base, true))) {
+    await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
       const path = `${base}/${encodeURIComponent(id)}`;
       const data = await read(path);
       if (data) snapshot.resources.push({ kind, path, data: select(data) });
-    }
+    });
   }
   const aliasBase = 'identity/entity-alias/id';
-  for (const id of keys(await read(aliasBase, true))) {
+  await forEachConcurrent(keys(await read(aliasBase,true)),workers,async id=>{
     const path = `${aliasBase}/${encodeURIComponent(id)}`;
     const data = await read(path);
     if (data) snapshot.resources.push({ kind: 'alias', path, data: {
@@ -126,7 +128,7 @@ export async function collect(
       name_sha256: typeof data.name === 'string'
         ? createHash('sha256').update(data.name).digest('hex') : undefined,
     } });
-  }
+  });
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
     snapshot.resources.push({
@@ -160,7 +162,7 @@ export async function collect(
       continue;
     }
     const base = `auth/${mount}${supported[type]}`;
-    for (const name of keys(await read(base, true))) {
+    await forEachConcurrent(keys(await read(base,true)),workers,async name=>{
       const path = `${base}/${encodeURIComponent(name)}`;
       const data = await read(path);
       if (data) {
@@ -177,8 +179,10 @@ export async function collect(
           data: { ...selected, auth_type: type },
         });
       }
-    }
+    });
   }
+  snapshot.resources.sort((a,b)=>a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
+  snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
   snapshot.finishedAt = new Date().toISOString();
   return snapshot;
 }

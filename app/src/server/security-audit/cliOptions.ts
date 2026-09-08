@@ -10,7 +10,7 @@ export function parseAuditArguments(args:string[]) {
     const token=args[i];
     if(!token.startsWith('--')) {positionals.push(token);continue;}
     if(Object.hasOwn(options,token)) throw new Error(`Duplicate option ${token}`);
-    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && command==='scan') {
+    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && command==='scan') {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
     } else if(['--require-complete','--allow-incomplete'].includes(token) && gating) options[token]=true;
@@ -27,7 +27,9 @@ export function parseAuditArguments(args:string[]) {
   for(const [flag,key] of [['--retries','retries'],['--requests-per-second','requestsPerSecond'],['--retry-backoff-ms','retryBackoffMs']] as const)
     if(options[flag]!==undefined) requestPolicy[key]=Number(options[flag]);
   validateRequestPolicy(requestPolicy);
-  return {command,positionals,requestPolicy,format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  const workers=Number(options['--workers']??10);
+  if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
+  return {command,positionals,requestPolicy:{...requestPolicy,workers},format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }

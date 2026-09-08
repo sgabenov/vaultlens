@@ -630,3 +630,22 @@ test('collector request policy retries transient failures, spaces requests and r
   assert.throws(()=>parseAuditArguments(['scan','--retries','NaN']),/retries/);
   assert.equal(parseAuditArguments(['scan','--retries','0']).requestPolicy.retries,0);
 });
+
+import { forEachConcurrent } from './concurrency.js';
+test('collector pool bounds concurrency and drains active work after an error', async () => {
+  let active=0,peak=0,finished=0;
+  await forEachConcurrent(Array.from({length:12},(_,i)=>i),3,async()=>{
+    active++;peak=Math.max(peak,active);
+    await new Promise(resolve=>setTimeout(resolve,1));
+    active--;finished++;
+  });
+  assert.equal(peak,3);assert.equal(finished,12);
+  active=0;
+  await assert.rejects(()=>forEachConcurrent([0,1,2,3],2,async i=>{
+    active++;await new Promise(resolve=>setTimeout(resolve,1));active--;
+    if(i===0) throw new Error('stop');
+  }),/stop/);
+  assert.equal(active,0);
+  assert.equal(parseAuditArguments(['scan','--workers','4']).requestPolicy.workers,4);
+  assert.throws(()=>parseAuditArguments(['scan','--workers','0']),/workers/);
+});

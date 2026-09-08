@@ -10,12 +10,19 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock={now:()=>
   validateRequestPolicy(options);
   let next=0;
   const metrics={requests:0,retries:0,rateWaitMs:0,retryWaitMs:0};
-  // Collector calls this serially. Concurrent scheduling requires a shared queue.
-  async function request<T>(operation:()=>Promise<T>):Promise<T> {
-    for(let attempt=0;;attempt++) {
+  let admission=Promise.resolve();
+  function acquire():Promise<void> {
+    const turn=admission.then(async()=>{
       const wait=Math.max(0,next-clock.now());
       if(wait) {metrics.rateWaitMs+=wait;await clock.sleep(wait);}
       next=clock.now()+1000/options.requestsPerSecond;
+    });
+    admission=turn.catch(()=>{});
+    return turn;
+  }
+  async function request<T>(operation:()=>Promise<T>):Promise<T> {
+    for(let attempt=0;;attempt++) {
+      await acquire();
       metrics.requests++;
       try{return await operation();}
       catch(error) {
