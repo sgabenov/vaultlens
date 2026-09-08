@@ -106,7 +106,7 @@ export async function collect(
       limitAbort.abort();return;
     }
     if(counted) countedObjects++;
-    snapshot.resources.push(namespace ? {...resource,namespace} : resource);
+    snapshot.resources.push({...resource,observedAt:new Date().toISOString(),...(namespace?{namespace}:{})});
     report();
   }
   async function read(

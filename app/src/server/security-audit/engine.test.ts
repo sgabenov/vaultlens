@@ -1161,3 +1161,18 @@ test('selective refresh preserves old objects on failed stages and removes them 
   assert.equal(success.refresh?.retainedResources,1);assert.equal(base.resources.length,2);
   assert.deepEqual(parseAuditArguments(['refresh','run','--source','policies','--source','identity']).requestPolicy.sources,['identity','policies']);
 });
+
+test('refresh preserves original resource age across repeated updates without creating configuration changes', () => {
+  const base=snapshot();base.finishedAt='2026-09-01T00:00:00Z';
+  base.resources[1].observedAt='2026-09-01T00:00:00Z';
+  const fresh=structuredClone(base);fresh.finishedAt='2026-09-02T00:00:00Z';fresh.resources=[];
+  const first=mergeRefresh(base,fresh,['policies']);
+  const nextFresh={...fresh,finishedAt:'2026-09-03T00:00:00Z'};
+  const second=mergeRefresh(first,nextFresh,['policies']);
+  assert.equal(second.resources[1].observedAt,'2026-09-01T00:00:00Z');
+  assert.equal(second.resources[0].retainedFromSnapshotAt,'2026-09-01T00:00:00Z');
+  const configuration=execute(base,DEFAULT_SETTINGS).configuration;
+  const old:import('../../shared/securityAudit.js').AuditDetail={run:{id:'old',target:base.target,startedAt:base.startedAt,finishedAt:base.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:0},snapshot:base,findings:[],configuration};
+  const next=structuredClone(old);next.snapshot=second;
+  assert.equal(compareRuns(old,next).statistics.resources.changed,0);
+});

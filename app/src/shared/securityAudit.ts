@@ -1,4 +1,6 @@
 export interface AuditResource {
+  observedAt?:string;
+  retainedFromSnapshotAt?:string;
   namespace?:string;
   kind: string;
   path: string;

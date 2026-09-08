@@ -1,3 +1,4 @@
+import AuditRefreshDetails from '../components/AuditRefreshDetails';
 import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportUpload from '../components/AuditImportUpload';
@@ -256,7 +257,7 @@ export default function SecurityAuditPage() {
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
               {detail.data.snapshot?.collection && ['collected','completed','partial'].includes(detail.data.run.status) && <AuditRefreshPanel key={`refresh:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onRefreshed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
-              {detail.data.snapshot?.refresh && <p className="text-sm">Refreshed: {detail.data.snapshot.refresh.sources.join(', ')}. Retained {detail.data.snapshot.refresh.retainedResources} resources from {detail.data.snapshot.refresh.retainedFrom}.</p>}
+              {detail.data.snapshot?.refresh && <AuditRefreshDetails key={`freshness:${id}`} snapshot={detail.data.snapshot} />}
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot && <AuditPolicyUsage key={`usage:${id}`} snapshot={detail.data.snapshot} />}

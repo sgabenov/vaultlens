@@ -36,7 +36,8 @@ const findingRecord = (finding:AuditFinding) => {
   return {namespace:finding.namespace??'',ruleId:finding.ruleId,path:finding.path,policyPath:finding.policyPath??'',
     severity:finding.severity,evidence,title:finding.title,recommendation:finding.recommendation};
 };
-function resourceRecord(resource:AuditResource):unknown {
+function resourceRecord(input:AuditResource):unknown {
+  const {observedAt: _observedAt, retainedFromSnapshotAt: _retainedFrom, ...resource}=input;
   if (resource.kind !== 'policy') return resource;
   const data = {...resource.data};
   const digest = typeof data.hcl === 'string'

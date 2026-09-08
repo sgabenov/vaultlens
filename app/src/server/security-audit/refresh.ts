@@ -6,7 +6,7 @@ export function mergeRefresh(base:AuditSnapshot,fresh:AuditSnapshot,sources:stri
   if(base.target!==fresh.target || !base.finishedAt || !fresh.finishedAt) throw new Error('Refresh requires matching finished snapshots');
   const complete=new Set(fresh.collection?.stageResults?.filter(stage=>stage.complete).map(stage=>stageKey(stage.namespace,stage.stage))??[]);
   const key=(resource:AuditSnapshot['resources'][number])=>JSON.stringify([resource.namespace??'',resource.kind,resource.path]);
-  const resources=new Map(base.resources.filter(resource=>!complete.has(stageKey(resource.namespace??'',RESOURCE_STAGE[resource.kind]))).map(resource=>[key(resource),structuredClone(resource)]));
+  const resources=new Map<string,AuditSnapshot['resources'][number]>(base.resources.filter(resource=>!complete.has(stageKey(resource.namespace??'',RESOURCE_STAGE[resource.kind]))).map(resource=>[key(resource),{...structuredClone(resource),retainedFromSnapshotAt:resource.retainedFromSnapshotAt??base.finishedAt}]));
   let retained=resources.size;
   for(const resource of fresh.resources) {if(resources.has(key(resource))) retained--;resources.set(key(resource),structuredClone(resource));}
   const namespaces=[...new Set([...(base.namespaces??['']),...(fresh.namespaces??[''])])].sort();
@@ -20,6 +20,6 @@ export function mergeRefresh(base:AuditSnapshot,fresh:AuditSnapshot,sources:stri
     policiesComplete:namespaces.every(namespace=>policyCoverage[namespace]),
     issues:[...base.issues,...fresh.issues.filter(issue=>issue.path!=='collection/source-scope')],
     collection:fresh.collection?{...fresh.collection,requestPolicy:{...fresh.collection.requestPolicy,sources:base.collection?.requestPolicy.sources},scope:base.collection?.scope}:undefined,
-    refresh:{sources,retainedResources:retained,retainedFrom:base.finishedAt},
+    refresh:{sources,retainedResources:retained,retainedFrom:base.refresh?.retainedFrom??base.finishedAt},
   };
 }
