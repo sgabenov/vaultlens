@@ -31,6 +31,8 @@ export class AuditStore {
     const columns = this.db.prepare('PRAGMA table_info(audit_runs)').all();
     if (!columns.some((c) => c.name === 'configuration'))
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN configuration TEXT');
+    if (!columns.some(c => c.name === 'failureReason'))
+      this.db.exec('ALTER TABLE audit_runs ADD COLUMN failureReason TEXT');
   }
   settings(): RuleSettings {
     const row = this.db
@@ -62,7 +64,7 @@ export class AuditStore {
   list(target: string): AuditRun[] {
     return this.db
       .prepare(
-        'SELECT id,target,startedAt,finishedAt,status,resourceCount,issueCount,findingCount FROM audit_runs WHERE target=? ORDER BY startedAt DESC LIMIT 100',
+        'SELECT id,target,startedAt,finishedAt,status,resourceCount,issueCount,findingCount,failureReason FROM audit_runs WHERE target=? ORDER BY startedAt DESC LIMIT 100',
       )
       .all(target) as unknown as AuditRun[];
   }
@@ -118,12 +120,12 @@ export class AuditStore {
         id,
       );
   }
-  fail(id: string) {
+  fail(id: string, reason='The background audit stopped before completion.') {
     this.db
       .prepare(
-        "UPDATE audit_runs SET status='failed',finishedAt=? WHERE id=? AND status='running'",
+        "UPDATE audit_runs SET status='failed',finishedAt=?,failureReason=? WHERE id=? AND status='running'",
       )
-      .run(new Date().toISOString(), id);
+      .run(new Date().toISOString(), reason, id);
   }
   recover() {
     this.db

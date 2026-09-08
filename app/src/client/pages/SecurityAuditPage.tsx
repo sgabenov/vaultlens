@@ -188,8 +188,7 @@ export default function SecurityAuditPage() {
               </div>
               {['failed', 'interrupted'].includes(detail.data.run.status) && (
                 <p role="alert" className="text-red-700">
-                  This run did not finish. Start a new audit; it has no valid
-                  completed snapshot.
+                  {detail.data.run.failureReason || 'This run did not finish and has no valid completed snapshot.'}
                 </p>
               )}
               {detail.data.run.status === 'running' && (

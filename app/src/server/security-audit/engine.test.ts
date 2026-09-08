@@ -1005,3 +1005,20 @@ test('imported collection scope and source coverage survive replay and protect d
     assert.throws(()=>importPythonSnapshot(path,'http://example.invalid'),/object limit/);
   } finally {db.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+import { importFailureReason } from './failureReason.js';
+test('worker failures retain safe reasons without leaking raw exception values or overwriting results', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-failure-reason-'));
+  const store=new AuditStore(join(directory,'audit.sqlite'));
+  try {
+    const id=store.create('http://example.invalid');
+    const reason=importFailureReason(new Error('Python snapshot target must match VAULT_ADDR'));
+    store.fail(id,reason);store.fail(id);
+    assert.equal(store.get(id,'http://example.invalid')!.run.failureReason,reason);
+    assert.equal(store.list('http://example.invalid')[0].failureReason,reason);
+    assert.ok(!importFailureReason(new Error('secret-token /private/path')).includes('secret-token'));
+    const success=store.create('http://example.invalid');store.finish(success,snapshot(),[]);store.fail(success,reason);
+    assert.equal(store.get(success,'http://example.invalid')!.run.failureReason,null);
+    assert.equal(store.get(success,'http://example.invalid')!.run.status,'completed');
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});

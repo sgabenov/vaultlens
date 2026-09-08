@@ -1,3 +1,4 @@
+import { importFailureReason } from './failureReason.js';
 import { importPythonSnapshot } from './pythonImport.js';
 import { snapshotNamespaces } from './namespaces.js';
 import { applyBaseline } from './baseline.js';
@@ -20,8 +21,8 @@ try {
   snapshot.identity = result.identity;
   store.finish(id, snapshot, result.findings, result.configuration);
   }
-} catch {
-  store.fail(id);
+} catch(error) {
+  store.fail(id,importPath?importFailureReason(error):'Audit analysis failed. Check the selected rules and snapshot compatibility.');
 } finally {
   store.close();
 }

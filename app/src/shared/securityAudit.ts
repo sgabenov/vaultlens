@@ -57,6 +57,7 @@ export interface AuditFinding {
   recommendation: string;
 }
 export interface AuditRun {
+  failureReason?:string|null;
   id: string;
   target: string;
   startedAt: string;
