@@ -1,3 +1,4 @@
+import { evaluateReference } from './referenceDetector.js';
 import { roleEntityIds } from './identity.js';
 import { RELATIONSHIP_DETECTORS, evaluateRelationship } from './relationshipDetectors.js';
 import type { PolicyBlock } from './policyParser.js';
@@ -22,7 +23,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '7';
+export const ENGINE_VERSION = '8';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -183,12 +184,12 @@ export function execute(
     }
   }
 
+  const knownPolicies = new Set(['root', ...snapshot.resources.filter(r => r.kind === 'policy').map(r => String(r.data.name))]);
   const entityIds = roleEntityIds(snapshot.resources);
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
   const bindings: Record<string, string> = {
     native_root_assignment: 'assignment.root',
     native_unbound_approle: 'approle.unbound-login',
-    missing_policy_reference: 'assignment.missing-policy',
     kubernetes_double_wildcard: 'kubernetes.unbounded-subject',
   };
   const findings: AuditFinding[] = [];
@@ -204,7 +205,9 @@ export function execute(
     let candidates: AuditFinding[] = [];
     if (POLICY_DETECTORS.includes(rule.detector))
       candidates = policyResults.get(rule.id) ?? [];
-    else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {
+    else if (rule.detector === 'missing_policy_reference') {
+      candidates = snapshot.resources.flatMap(resource => evaluateReference(rule, resource, knownPolicies, snapshot.policiesComplete, {config: config.raw}));
+    } else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {
       candidates = snapshot.resources.flatMap(resource => evaluateRelationship(rule, resource, documents, snapshot.resources, { config: config.raw, privilegeReasons }, entityIds));
     } else if (AUTH_DETECTORS.includes(rule.detector)) {
       for (const resource of snapshot.resources)

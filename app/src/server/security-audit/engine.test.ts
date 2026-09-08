@@ -441,3 +441,33 @@ test('identity correlation requires the same AppRole accessor and RoleID hash', 
   alias.data = {...alias.data, mount_accessor:'test-accessor', name_sha256:'different-role'};
   assert.equal(roleEntityIds(resources).has('auth/approle/role/source'), false);
 });
+
+import referenceFixtures from './fixtures/reference-parity.json' with {type:'json'};
+import { evaluateReference } from './referenceDetector.js';
+test('missing policy references match Python, with explicit incomplete-inventory suppression', () => {
+  const rule = catalog(DEFAULT_SETTINGS).find(r => r.id === 'REF-001')!;
+  for (const fixture of referenceFixtures) {
+    const result = evaluateReference(rule, fixture.resource, new Set(fixture.known), true, {config:{}});
+    assert.deepEqual(result.map(f => ({severity:f.severity,evidence:JSON.parse(f.evidence)})), fixture.expected, fixture.name);
+    assert.equal(evaluateReference(rule, fixture.resource, new Set(), false, {config:{}}).length, 0);
+  }
+  const s = snapshot();
+  s.resources[1].data.token_policies = ['team-admin'];
+  s.resources[1].data.token_no_default_policy = true;
+  const result = execute(s, {...DEFAULT_SETTINGS, configYaml:
+    'version: 1\nprivileged_policies:\n  exact: []\n  patterns: ["team-*"]\n'});
+  const missing = result.findings.find(f => f.ruleId === 'REF-001')!;
+  assert.equal(missing.severity, 'high');
+  assert.deepEqual(JSON.parse(missing.evidence).configured_privileged_names, ['team-admin']);
+});
+
+test('implicit default policy participates in auth privilege checks', () => {
+  const s = snapshot();
+  s.resources = [
+    {kind:'policy',path:'sys/policies/acl/default',data:{name:'default',hcl:'path "*" { capabilities = ["update"] }'}},
+    {kind:'role',path:'auth/approle/role/demo',data:{auth_type:'approle',token_policies:[]}},
+  ];
+  assert.ok(execute(s, DEFAULT_SETTINGS).findings.some(f => f.ruleId === 'APPROLE-001'));
+  s.resources[1].data.token_no_default_policy = true;
+  assert.ok(!execute(s, DEFAULT_SETTINGS).findings.some(f => f.ruleId === 'APPROLE-001'));
+});

@@ -124,7 +124,8 @@ export function evaluateAuth(
     jwt = record(c.jwt),
     kube = record(c.kubernetes),
     threshold = record(c.thresholds);
-  const assigned = values([...values(m.token_policies), ...values(m.policies)]);
+  const assigned = values([...values(m.token_policies), ...values(m.policies),
+    ...(m.token_no_default_policy ? [] : ['default'])]);
   const privileged = policyPrivilegeReasons(assigned, context);
   const hasPrivilege = Object.keys(privileged).length > 0;
   const output: AuditFinding[] = [];

@@ -1,3 +1,4 @@
+import { assignedPolicies } from './assignments.js';
 import { policyPrivilegeReasons, type AuthContext } from './authDetectors.js';
 import type { AuditFinding, AuditResource } from '../../shared/securityAudit.js';
 import type { RuleView } from '../../shared/auditRules.js';
@@ -23,10 +24,7 @@ export function evaluateRelationship(
   entityIds: Map<string, Set<string>>,
 ): AuditFinding[] {
   if (resource.kind !== 'role') return [];
-  const names = [...new Set([
-    ...strings(resource.data.token_policies), ...strings(resource.data.policies),
-    ...(resource.data.token_no_default_policy ? [] : ['default']),
-  ])].sort();
+  const names = assignedPolicies(resource);
   const grants: Grant[] = names.flatMap(policy => (documents.get(policy) ?? [])
     .filter(block => !block.capabilities.includes('deny') &&
       block.capabilities.some(c => ['create', 'update', 'delete', 'patch'].includes(c)))
@@ -45,10 +43,7 @@ export function evaluateRelationship(
   switch (rule.detector) {
     case 'privileged_role_mutation':
       for (const target of resources.filter(r => r.kind === 'role' && r.data.auth_type !== 'token' && r.path !== resource.path)) {
-        const privileged = policyPrivilegeReasons([
-          ...strings(target.data.token_policies), ...strings(target.data.policies),
-          ...(target.data.token_no_default_policy ? [] : ['default']),
-        ], context);
+        const privileged = policyPrivilegeReasons(assignedPolicies(target), context);
         const mutation = matches(target.path);
         if (!Object.keys(privileged).length || !mutation.length) continue;
         const shared = [...(entityIds.get(resource.path) ?? [])]
