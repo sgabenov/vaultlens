@@ -16,7 +16,11 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
-  importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string};
+  importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string;collection?:{
+    scope:{policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
+    maxObjects:number;sources:string[];recursiveNamespaces:boolean;namespaceFilters:string[];
+  }};
+  importedCoverage?: {namespace:string;source:string;status:string;discovered:number;scanned:number;details:string|null}[];
   namespaces?:string[];
   namespaceAliasCompleteness?:Record<string,boolean>;
   namespacePolicyCompleteness?:Record<string,boolean>;

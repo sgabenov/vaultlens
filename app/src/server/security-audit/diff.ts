@@ -55,11 +55,16 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
     throw new Error('Diff requires two finished snapshots');
   if(old.snapshot.target!==next.snapshot.target || old.snapshot.version!==next.snapshot.version)
     throw new Error('Snapshot targets or schemas are incomparable');
-  if((old.snapshot.collection?.requestPolicy.maxObjects??0)!==(next.snapshot.collection?.requestPolicy.maxObjects??0))
-    throw new Error('Snapshot object limits are incomparable');
+  for (const detail of [old,next]) if (detail.snapshot!.importedFrom && !detail.snapshot!.importedFrom.collection)
+    throw new Error('Imported snapshot collection scope is unknown');
   const defaultScope={policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false};
-  if(canonical(old.snapshot.collection?.scope??defaultScope)!==canonical(next.snapshot.collection?.scope??defaultScope))
-    throw new Error('Snapshot collection scopes are incomparable');
+  const scope=(snapshot:NonNullable<AuditDetail['snapshot']>)=>({
+    scope:snapshot.importedFrom?.collection?.scope??snapshot.collection?.scope??defaultScope,
+    maxObjects:snapshot.importedFrom?.collection?.maxObjects??snapshot.collection?.requestPolicy.maxObjects??0,
+    sources:snapshot.importedFrom?.collection?.sources??['auth_roles','identity','identity_aliases','mounts','policies'],
+  });
+  if(scope(old.snapshot).maxObjects!==scope(next.snapshot).maxObjects) throw new Error('Snapshot object limits are incomparable');
+  if(canonical(scope(old.snapshot))!==canonical(scope(next.snapshot))) throw new Error('Snapshot collection scopes are incomparable');
   if(canonical(snapshotNamespaces(old.snapshot))!==canonical(snapshotNamespaces(next.snapshot))) throw new Error('Snapshot namespaces are incomparable');
   if(!old.configuration || !next.configuration ||
     old.configuration.fingerprint!==next.configuration.fingerprint ||

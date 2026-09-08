@@ -43,6 +43,25 @@ export function importPythonSnapshot(path:string, target:string):AuditSnapshot {
       namespaces:namespaces.map(normalizeNamespace),resources:[],issues:[],policiesComplete:false,
       namespacePolicyCompleteness:{},namespaceAliasCompleteness:{},
     };
+    const collection:unknown = JSON.parse(meta.collection_config ?? '{}');
+    if (!collection || typeof collection !== 'object' || Array.isArray(collection)) throw new Error('Invalid Python collection config');
+    const config=collection as Record<string,unknown>;
+    if (Object.keys(config).length) {
+      const patterns=(key:string):string[] => {
+        const value=config[key];
+        if (!Array.isArray(value) || value.some(item=>typeof item!=='string')) throw new Error(`Invalid Python ${key}`);
+        return [...new Set(value as string[])].sort();
+      };
+      if (typeof config.include_identity !== 'boolean' || typeof config.recursive_namespaces !== 'boolean') throw new Error('Invalid Python collection booleans');
+      const maxObjects=config.max_objects??0;
+      if (typeof maxObjects!=='number' || !Number.isSafeInteger(maxObjects) || maxObjects<0) throw new Error('Invalid Python object limit');
+      const sources=config.sources===undefined?['mounts','policies','auth_roles','identity','identity_aliases']:patterns('sources');
+      snapshot.importedFrom!.collection={
+        scope:{policyFilters:patterns('policy_filters'),authMountFilters:patterns('auth_mount_filters').map(value=>value.replace(/^auth\//,'').replace(/^\/+|\/+$/g,'')),authTypeFilters:patterns('auth_type_filters'),skipIdentity:!config.include_identity},
+        maxObjects,sources:sources.sort(),recursiveNamespaces:config.recursive_namespaces,namespaceFilters:patterns('namespace_filters'),
+      };
+    }
+    snapshot.importedCoverage=[];
     const ns = (row:Record<string,unknown>) => {
       const namespace=normalizeNamespace(row.namespace);
       if (!snapshot.namespaces!.includes(namespace)) snapshot.namespaces!.push(namespace);
@@ -102,6 +121,9 @@ export function importPythonSnapshot(path:string, target:string):AuditSnapshot {
     }
     for (const coverage of rows('coverage')) {
       const namespace=ns(coverage),source=text(coverage.source),status=text(coverage.status);
+      if (!Number.isSafeInteger(coverage.discovered) || !Number.isSafeInteger(coverage.scanned) || Number(coverage.discovered)<0 || Number(coverage.scanned)<0)
+        throw new Error('Invalid Python coverage counts');
+      snapshot.importedCoverage!.push({namespace,source,status,discovered:Number(coverage.discovered),scanned:Number(coverage.scanned),details:coverage.details===null?null:text(coverage.details)});
       if (source==='policies') snapshot.namespacePolicyCompleteness![namespace]=status==='complete';
       if (source==='identity_alias') snapshot.namespaceAliasCompleteness![namespace]=status==='complete';
       if (status!=='complete') snapshot.issues.push({namespace,path:`import/coverage/${source}`,reason:`Python coverage ${status}: ${coverage.details??''}`});

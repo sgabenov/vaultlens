@@ -979,3 +979,29 @@ test('Python schema-3 import preserves assignments, aliases, namespace and sourc
     assert.equal(parseAuditArguments(['import-python',path]).command,'import-python');
   } finally {db.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('imported collection scope and source coverage survive replay and protect diff compatibility', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-python-scope-'));
+  const path=join(directory,'python.sqlite');
+  const db=new DatabaseSync(path);
+  try {
+    db.exec(pythonImportFixture.sql);
+    const config={include_identity:false,recursive_namespaces:true,max_objects:10,policy_filters:['admin'],auth_mount_filters:['auth/approle/'],auth_type_filters:['approle'],namespace_filters:['team*'],sources:['policies','auth_roles']};
+    db.prepare("UPDATE metadata SET value=? WHERE key='collection_config'").run(JSON.stringify(config));
+    const s=importPythonSnapshot(path,'http://example.invalid');
+    assert.deepEqual(s.importedFrom!.collection!.scope.authMountFilters,['approle']);
+    assert.equal(s.importedFrom!.collection!.maxObjects,10);
+    assert.equal(s.importedCoverage![0].discovered,1);
+    assert.equal(s.importedFrom!.collection!.recursiveNamespaces,true);
+    const result=execute(s,DEFAULT_SETTINGS);
+    const old: import('../../shared/securityAudit.js').AuditDetail={run:{id:'old',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:6,issueCount:0,findingCount:0},snapshot:s,configuration:result.configuration,findings:[]};
+    const next=structuredClone(old);
+    assert.equal(compareRuns(old,next).statistics.resources.changed,0);
+    next.snapshot!.importedFrom!.collection!.sources.push('identity');
+    assert.throws(()=>compareRuns(old,next),/scopes/);
+    delete next.snapshot!.importedFrom!.collection;
+    assert.throws(()=>compareRuns(old,next),/unknown/);
+    db.prepare("UPDATE metadata SET value=? WHERE key='collection_config'").run(JSON.stringify({...config,max_objects:-1}));
+    assert.throws(()=>importPythonSnapshot(path,'http://example.invalid'),/object limit/);
+  } finally {db.close();rmSync(directory,{recursive:true,force:true});}
+});
