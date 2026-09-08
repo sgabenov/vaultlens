@@ -164,7 +164,7 @@ test('custom rule runs with scoped object types and severity overrides; unported
     'critical',
   );
   assert.ok(
-    result.configuration.issues.some((i) => i.path === 'rules/POL-012'),
+    result.configuration.issues.some((i) => i.path === 'rules/POL-013'),
   );
   assert.equal(result.configuration.fingerprint.length, 64);
   s.resources[1].data.auth_type = 'approle';
@@ -414,4 +414,18 @@ test('auth bootstrap requires both configuration and mount administration grants
   assert.equal(findings().length, 0);
   s.resources[0].data.hcl = 'path "sys/auth/*" { capabilities = ["read"] }\npath "auth/+/config" { capabilities = ["update"] }';
   assert.equal(findings().length, 0);
+});
+
+import relationshipFixtures from './fixtures/relationship-parity.json' with { type: 'json' };
+test('five relationship detectors match Python evidence and severity', () => {
+  const settings = { ...DEFAULT_SETTINGS, configYaml: 'version: 1\nprofile: extended\n' };
+  for (const fixture of relationshipFixtures) {
+    const s = snapshot();
+    s.resources = fixture.resources;
+    const actual = execute(s, settings).findings.filter(f => f.path === fixture.path &&
+      ['POL-010', 'POL-011', 'POL-012', 'POL-014', 'POL-015'].includes(f.ruleId))
+      .map(f => ({ruleId:f.ruleId, severity:f.severity, evidence:JSON.parse(f.evidence)}))
+      .sort((a,b) => a.ruleId.localeCompare(b.ruleId));
+    assert.deepEqual(actual, fixture.expected, fixture.name);
+  }
 });

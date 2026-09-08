@@ -1,10 +1,11 @@
+import { policyPrivilegeReasons, type AuthContext } from './authDetectors.js';
 import type { AuditFinding, AuditResource } from '../../shared/securityAudit.js';
 import type { RuleView } from '../../shared/auditRules.js';
 import type { PolicyBlock } from './policyParser.js';
 import { vaultPatternMatches } from './policyDetectors.js';
 
 export const RELATIONSHIP_DETECTORS = [
-  'escalation_graph', 'self_policy_escalation',
+  'token_role_escalation', 'escalation_graph', 'self_policy_escalation',
   'auth_mount_bootstrap', 'policy_role_assignment_chain',
 ];
 type Grant = { policy: string; block: PolicyBlock };
@@ -18,6 +19,7 @@ const evidence = (grants: Grant[]) => grants.map(({ policy, block }) => ({
 /** Static observed-assignment chains; these do not execute login or mutation. */
 export function evaluateRelationship(
   rule: RuleView, resource: AuditResource, documents: Map<string, PolicyBlock[]>,
+  resources: AuditResource[], context: AuthContext,
 ): AuditFinding[] {
   if (resource.kind !== 'role') return [];
   const names = [...new Set([
@@ -32,14 +34,35 @@ export function evaluateRelationship(
   const roleGrants = matches(resource.path);
   const authenticate = `authenticate through ${resource.path}`;
   const result: AuditFinding[] = [];
-  const emit = (data: Record<string, unknown>, sources: Grant[]) => result.push({
-    ruleId: rule.id, path: resource.path, title: rule.title, severity: rule.severity,
+  const emit = (data: Record<string, unknown>, sources: Grant[], severity = rule.severity, related: NonNullable<AuditFinding['relatedObjects']> = []) => result.push({
+    ruleId: rule.id, path: resource.path, title: rule.title, severity,
     recommendation: rule.remediation, evidence: JSON.stringify(data),
-    relatedObjects: [...new Set(sources.map(g => g.policy))].sort().map(name => ({
+    relatedObjects: [...[...new Set(sources.map(g => g.policy))].sort().map(name => ({
       kind: 'policy', path: `sys/policies/acl/${name}`, name,
-    })),
+    })), ...related],
   });
   switch (rule.detector) {
+    case 'token_role_escalation':
+      for (const target of resources.filter(r => r.kind === 'role' && r.data.auth_type === 'token')) {
+        const roleAdmin = matches(target.path);
+        const issuancePath = target.path.replace('/roles/', '/create/');
+        const issuance = matches(issuancePath);
+        if (!roleAdmin.length || !issuance.length) continue;
+        const privileged = policyPrivilegeReasons(strings(target.data.allowed_policies), context);
+        const scope = [...new Set([...strings(target.data.allowed_policies),
+          ...strings(target.data.allowed_policies_glob)])].sort();
+        emit({
+          confidence: 'proven_capability_chain', token_role: target.path,
+          issuance_path: issuancePath, role_administration_grants: evidence(roleAdmin),
+          token_issuance_grants: evidence(issuance), current_allowed_policy_scope: scope,
+          current_privileged_policies: privileged,
+          chain: [authenticate, `modify token role ${target.path}`, `issue a token through ${issuancePath}`],
+        }, [...roleAdmin, ...issuance], Object.keys(privileged).length ? 'critical' : 'high', [
+          { kind: 'role', path: target.path, name: String(target.data.name ?? target.path.split('/').pop()) },
+          ...Object.keys(privileged).sort().map(name => ({ kind: 'policy', path: `sys/policies/acl/${name}`, name })),
+        ]);
+      }
+      break;
     case 'escalation_graph':
       if (roleGrants.length) emit({
         confidence: 'proven_from_observed_assignment', role_path: resource.path,

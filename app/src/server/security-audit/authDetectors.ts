@@ -92,6 +92,20 @@ export interface AuthContext {
   config: Record<string, unknown>;
   privilegeReasons?: Map<string, string[]>;
 }
+export function policyPrivilegeReasons(names: string[], context: AuthContext): Record<string, string[]> {
+  const priv = record(context.config.privileged_policies);
+  const privileged: Record<string, string[]> = {};
+  for (const name of values(names)) {
+    const reasons = [...(context.privilegeReasons?.get(name) ?? [])];
+    if (
+      values(priv.exact ?? ['root', 'vault-admins']).includes(name) ||
+      values(priv.patterns).some((p) => globMatch(p, name))
+    )
+      reasons.push('configured_privileged_policy');
+    if (reasons.length) privileged[name] = values(reasons);
+  }
+  return privileged;
+}
 export function evaluateAuth(
   rule: RuleView,
   resource: AuditResource,
@@ -109,19 +123,9 @@ export function evaluateAuth(
   const app = record(c.approle),
     jwt = record(c.jwt),
     kube = record(c.kubernetes),
-    threshold = record(c.thresholds),
-    priv = record(c.privileged_policies);
+    threshold = record(c.thresholds);
   const assigned = values([...values(m.token_policies), ...values(m.policies)]);
-  const privileged: Record<string, string[]> = {};
-  for (const name of assigned) {
-    const reasons = [...(context.privilegeReasons?.get(name) ?? [])];
-    if (
-      values(priv.exact ?? ['root', 'vault-admins']).includes(name) ||
-      values(priv.patterns).some((p) => globMatch(p, name))
-    )
-      reasons.push('configured_privileged_policy');
-    if (reasons.length) privileged[name] = values(reasons);
-  }
+  const privileged = policyPrivilegeReasons(assigned, context);
   const hasPrivilege = Object.keys(privileged).length > 0;
   const output: AuditFinding[] = [];
   function emit(

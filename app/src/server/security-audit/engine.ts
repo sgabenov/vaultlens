@@ -21,7 +21,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '5';
+export const ENGINE_VERSION = '6';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -203,7 +203,7 @@ export function execute(
     if (POLICY_DETECTORS.includes(rule.detector))
       candidates = policyResults.get(rule.id) ?? [];
     else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {
-      candidates = snapshot.resources.flatMap(resource => evaluateRelationship(rule, resource, documents));
+      candidates = snapshot.resources.flatMap(resource => evaluateRelationship(rule, resource, documents, snapshot.resources, { config: config.raw, privilegeReasons }));
     } else if (AUTH_DETECTORS.includes(rule.detector)) {
       for (const resource of snapshot.resources)
         candidates.push(
