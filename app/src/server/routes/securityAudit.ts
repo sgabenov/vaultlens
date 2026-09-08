@@ -1,3 +1,4 @@
+import { COLLECTION_SOURCES } from '../security-audit/collectionStages.js';
 import { prepareResume } from '../security-audit/resume.js';
 import { snapshotNamespaces } from '../security-audit/namespaces.js';
 import { parseBaseline, applyBaseline, createBaseline } from '../security-audit/baseline.js';
@@ -166,6 +167,22 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
   const db = storage();
   const sourceRunId=req.body?.sourceRunId;
   const resumeRunId=req.body?.resumeRunId;
+  const refreshRunId=req.body?.refreshRunId;
+  if([sourceRunId,resumeRunId,refreshRunId].filter(value=>value!==undefined).length>1) {
+    res.status(400).json({error:'Choose one of reanalysis, resume or refresh'});return;
+  }
+  if(refreshRunId!==undefined) {
+    if(typeof refreshRunId!=='string' || req.body?.collectionOptions!==undefined) {
+      res.status(400).json({error:'Refresh requires a run ID and its saved collection settings'});return;
+    }
+    const source=db.get(refreshRunId,config.vaultAddr);
+    if(!source?.snapshot?.collection || !['collected','completed','partial'].includes(source.run.status)) {
+      res.status(404).json({error:'Finished native source snapshot not found'});return;
+    }
+    try {collectionOptions=parseCollectionOptions({...source.snapshot.collection.requestPolicy,sources:req.body?.refreshSources??COLLECTION_SOURCES});}
+    catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid refresh sources'});return;}
+  }
+
   const checkpointMaxAgeMs=req.body?.checkpointMaxAgeMs??86400000;
   if(resumeRunId!==undefined) {
     if(typeof resumeRunId!=='string' || sourceRunId!==undefined || req.body?.collectionOptions!==undefined) {
@@ -217,6 +234,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         collectionOptions,
         sourceRunId,
         resumeRunId,
+        refreshRunId,
         checkpointMaxAgeMs,
       },
     });

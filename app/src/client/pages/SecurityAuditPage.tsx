@@ -1,3 +1,4 @@
+import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportUpload from '../components/AuditImportUpload';
 import AuditImportDetails from '../components/AuditImportDetails';
@@ -254,6 +255,8 @@ export default function SecurityAuditPage() {
                 <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and the controls selected above. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
+              {detail.data.snapshot?.collection && ['collected','completed','partial'].includes(detail.data.run.status) && <AuditRefreshPanel key={`refresh:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onRefreshed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
+              {detail.data.snapshot?.refresh && <p className="text-sm">Refreshed: {detail.data.snapshot.refresh.sources.join(', ')}. Retained {detail.data.snapshot.refresh.retainedResources} resources from {detail.data.snapshot.refresh.retainedFrom}.</p>}
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot && <AuditPolicyUsage key={`usage:${id}`} snapshot={detail.data.snapshot} />}
