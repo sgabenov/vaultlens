@@ -5,7 +5,7 @@ import type { PolicyBlock } from './policyParser.js';
 import { vaultPatternMatches } from './policyDetectors.js';
 
 export const RELATIONSHIP_DETECTORS = [
-  'token_role_escalation', 'escalation_graph', 'self_policy_escalation',
+  'privileged_role_mutation', 'token_role_escalation', 'escalation_graph', 'self_policy_escalation',
   'auth_mount_bootstrap', 'policy_role_assignment_chain',
 ];
 type Grant = { policy: string; block: PolicyBlock };
@@ -20,6 +20,7 @@ const evidence = (grants: Grant[]) => grants.map(({ policy, block }) => ({
 export function evaluateRelationship(
   rule: RuleView, resource: AuditResource, documents: Map<string, PolicyBlock[]>,
   resources: AuditResource[], context: AuthContext,
+  entityIds: Map<string, Set<string>>,
 ): AuditFinding[] {
   if (resource.kind !== 'role') return [];
   const names = [...new Set([
@@ -42,6 +43,35 @@ export function evaluateRelationship(
     })), ...related],
   });
   switch (rule.detector) {
+    case 'privileged_role_mutation':
+      for (const target of resources.filter(r => r.kind === 'role' && r.data.auth_type !== 'token' && r.path !== resource.path)) {
+        const privileged = policyPrivilegeReasons([
+          ...strings(target.data.token_policies), ...strings(target.data.policies),
+          ...(target.data.token_no_default_policy ? [] : ['default']),
+        ], context);
+        const mutation = matches(target.path);
+        if (!Object.keys(privileged).length || !mutation.length) continue;
+        const shared = [...(entityIds.get(resource.path) ?? [])]
+          .filter(id => entityIds.get(target.path)?.has(id)).sort();
+        emit({
+          confidence: shared.length ? 'observed_same_identity_role_association' : 'inferred_authentication_step',
+          target_role: target.path,
+          target_role_kind: ({approle:'approle', jwt:'jwt_role', oidc:'jwt_role', kubernetes:'kubernetes_role'} as Record<string,string>)[String(target.data.auth_type)] ?? 'auth_role',
+          privileged_policies: privileged, shared_identity_entities: shared,
+          mutation_grants: evidence(mutation),
+          chain: [authenticate, `modify ${target.path}`,
+            shared.length ? 'authenticate through the target role; the same canonical Identity entity has observed aliases for both AppRoles'
+              : 'authenticate through the target role (not observed)', 'receive the target privileged policies'],
+          missing_context: shared.length
+            ? 'Shared AppRole Identity aliases prove an observed role association, but do not prove possession of a currently valid target SecretID'
+            : 'No identity evidence proves the source principal can authenticate through the target role',
+        }, mutation, rule.severity, [
+          { kind: 'role', path: target.path, name: String(target.data.name ?? target.path.split('/').pop()) },
+          ...Object.keys(privileged).sort().map(name => ({kind:'policy', path:`sys/policies/acl/${name}`, name})),
+          ...shared.map(name => ({kind:'entity', path:`identity/entity/id/${name}`, name})),
+        ]);
+      }
+      break;
     case 'token_role_escalation':
       for (const target of resources.filter(r => r.kind === 'role' && r.data.auth_type === 'token')) {
         const roleAdmin = matches(target.path);

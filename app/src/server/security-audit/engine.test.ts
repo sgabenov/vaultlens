@@ -149,7 +149,7 @@ test('catalog validates YAML, profiles, overrides and duplicate IDs without exec
     /Unknown/,
   );
 });
-test('custom rule runs with scoped object types and severity overrides; unported checks are explicit', () => {
+test('custom rule runs with scoped object types and severity overrides', () => {
   const s = snapshot();
   s.resources[1].data.token_ttl = 7200;
   const settings = {
@@ -164,7 +164,7 @@ test('custom rule runs with scoped object types and severity overrides; unported
     'critical',
   );
   assert.ok(
-    result.configuration.issues.some((i) => i.path === 'rules/POL-013'),
+    !result.configuration.issues.some((i) => i.path.startsWith('rules/')),
   );
   assert.equal(result.configuration.fingerprint.length, 64);
   s.resources[1].data.auth_type = 'approle';
@@ -417,15 +417,27 @@ test('auth bootstrap requires both configuration and mount administration grants
 });
 
 import relationshipFixtures from './fixtures/relationship-parity.json' with { type: 'json' };
-test('five relationship detectors match Python evidence and severity', () => {
+test('six relationship detectors match Python evidence and severity', () => {
   const settings = { ...DEFAULT_SETTINGS, configYaml: 'version: 1\nprofile: extended\n' };
   for (const fixture of relationshipFixtures) {
     const s = snapshot();
     s.resources = fixture.resources;
     const actual = execute(s, settings).findings.filter(f => f.path === fixture.path &&
-      ['POL-010', 'POL-011', 'POL-012', 'POL-014', 'POL-015'].includes(f.ruleId))
+      ['POL-010', 'POL-011', 'POL-012', 'POL-013', 'POL-014', 'POL-015'].includes(f.ruleId))
       .map(f => ({ruleId:f.ruleId, severity:f.severity, evidence:JSON.parse(f.evidence)}))
       .sort((a,b) => a.ruleId.localeCompare(b.ruleId));
     assert.deepEqual(actual, fixture.expected, fixture.name);
   }
+});
+
+import { roleEntityIds } from './identity.js';
+test('identity correlation requires the same AppRole accessor and RoleID hash', () => {
+  const fixture = relationshipFixtures.find(f => f.name === 'cross-role-True-True-True')!;
+  const resources: AuditSnapshot['resources'] = structuredClone(fixture.resources);
+  assert.deepEqual([...roleEntityIds(resources).get('auth/approle/role/source')!], ['entity-a']);
+  const alias = resources.find(r => r.path === 'identity/entity-alias/id/source')!;
+  alias.data = {...alias.data, mount_accessor: 'different-mount'};
+  assert.equal(roleEntityIds(resources).has('auth/approle/role/source'), false);
+  alias.data = {...alias.data, mount_accessor:'test-accessor', name_sha256:'different-role'};
+  assert.equal(roleEntityIds(resources).has('auth/approle/role/source'), false);
 });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
 export const COLLECTED_FIELDS = [
@@ -109,6 +110,16 @@ export async function collect(
       if (data) snapshot.resources.push({ kind, path, data: select(data) });
     }
   }
+  const aliasBase = 'identity/entity-alias/id';
+  for (const id of keys(await read(aliasBase, true))) {
+    const path = `${aliasBase}/${encodeURIComponent(id)}`;
+    const data = await read(path);
+    if (data) snapshot.resources.push({ kind: 'alias', path, data: {
+      canonical_id: data.canonical_id, mount_accessor: data.mount_accessor,
+      name_sha256: typeof data.name === 'string'
+        ? createHash('sha256').update(data.name).digest('hex') : undefined,
+    } });
+  }
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
     snapshot.resources.push({
@@ -132,7 +143,7 @@ export async function collect(
     snapshot.resources.push({
       kind: 'auth-mount',
       path: `auth/${mount}`,
-      data: { type },
+      data: { type, accessor: (value as Record<string, unknown>).accessor },
     });
     if (!supported[type]) {
       snapshot.issues.push({
@@ -145,12 +156,20 @@ export async function collect(
     for (const name of keys(await read(base, true))) {
       const path = `${base}/${encodeURIComponent(name)}`;
       const data = await read(path);
-      if (data)
+      if (data) {
+        const selected = select(data);
+        if (type === 'approle') {
+          const roleId = await read(`${path}/role-id`);
+          if (typeof roleId?.role_id === 'string')
+            selected.role_id_sha256 = createHash('sha256').update(roleId.role_id).digest('hex');
+          else if (roleId) snapshot.issues.push({ path: `${path}/role-id`, reason: 'RoleID response is missing role_id' });
+        }
         snapshot.resources.push({
           kind: 'role',
           path,
-          data: { ...select(data), auth_type: type },
+          data: { ...selected, auth_type: type },
         });
+      }
     }
   }
   snapshot.finishedAt = new Date().toISOString();

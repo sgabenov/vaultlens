@@ -2,7 +2,7 @@
 Usage: python generate-relationship-parity.py OUTPUT.json
 Does not connect to Vault or read credentials.
 """
-import itertools, json, sys
+import itertools, json, sys, hashlib
 from pathlib import Path
 from vault_security_audit.analysis.base import AuditContext, RoleTarget
 from vault_security_audit.analysis.parser import parse_policy
@@ -38,5 +38,26 @@ for index,(caps,include_default,allowed) in enumerate(itertools.product(
       {'kind':'role','path':path,'data':{'auth_type':'approle',**metadata}},
       {'kind':'role','path':token_path,'data':{'auth_type':'token',**token_data}},
     ],'path':path,'expected':sorted(expected,key=lambda f:f['ruleId'])})
+for shared, privileged, can_write in itertools.product([False,True], repeat=3):
+    source_path='auth/approle/role/source'
+    target_path='auth/approle/role/target'
+    source=role('approle',source_path,'approle',{},[('source','assigned')])
+    target=role('approle',target_path,'approle',{},[('root' if privileged else 'reader','assigned')])
+    hcl='path "'+target_path+'" { capabilities = '+json.dumps(['update'] if can_write else ['read'])+' }'
+    entities={('',source_path):frozenset(['entity-a']),('',target_path):frozenset(['entity-a' if shared else 'entity-b'])}
+    context=AuditContext(AuditConfig(),{}, {('','source'):parse_policy(hcl)},
+        privileged_role_targets=((target,{'root':['configured_privileged_policy']}),) if privileged else (),
+        role_entity_ids=entities)
+    expected=[{'ruleId':f.rule.rule_id,'severity':f.rule.severity,'evidence':f.evidence_data}
+        for f in RELATIONSHIP_DETECTORS['privileged_role_mutation'].evaluate(source,context)]
+    resources=[{'kind':'policy','path':'sys/policies/acl/source','data':{'name':'source','hcl':hcl}},
+        {'kind':'auth-mount','path':'auth/approle/','data':{'type':'approle','accessor':'test-accessor'}}]
+    for name,path,policies,entity in [('source',source_path,['source'],'entity-a'),('target',target_path,['root' if privileged else 'reader'],'entity-a' if shared else 'entity-b')]:
+        digest=hashlib.sha256(name.encode()).hexdigest()
+        resources.extend([
+          {'kind':'role','path':path,'data':{'auth_type':'approle','token_policies':policies,'token_no_default_policy':True,'role_id_sha256':digest}},
+          {'kind':'alias','path':'identity/entity-alias/id/'+name,'data':{'canonical_id':entity,'mount_accessor':'test-accessor','name_sha256':digest}},
+        ])
+    output.append({'name':f'cross-role-{shared}-{privileged}-{can_write}','resources':resources,'path':source_path,'expected':expected})
 Path(sys.argv[1]).write_text(json.dumps(output,separators=(',',':'))+'\n')
 print(f'{len(output)} relationship fixtures; {sum(len(c["expected"]) for c in output)} findings')
