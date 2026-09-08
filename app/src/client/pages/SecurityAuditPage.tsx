@@ -1,3 +1,4 @@
+import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportUpload from '../components/AuditImportUpload';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
@@ -196,6 +197,7 @@ export default function SecurityAuditPage() {
               {detail.data.snapshot?.checkpoint && ['failed','interrupted'].includes(detail.data.run.status) && <p className="text-sm">
                 Checkpoint retained from {detail.data.snapshot.checkpoint.savedAt}: {detail.data.snapshot.resources.length} resources. Collection did not finish.
               </p>}
+              {detail.data.snapshot?.checkpoint && ['failed','interrupted'].includes(detail.data.run.status) && <AuditResumeButton key={`resume:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onResumed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
               {detail.data.run.status === 'running' && (
                 <p className="text-sm text-gray-600">
                   {detail.data.run.progress ? `${detail.data.run.progress.phase} · namespace ${detail.data.run.progress.namespace || 'root'} · ${detail.data.run.progress.resources} resources · ${detail.data.run.progress.requests} requests` : 'Audit is running in the background. You can leave this page.'}

@@ -1,3 +1,4 @@
+import { prepareResume } from '../security-audit/resume.js';
 import { snapshotNamespaces } from '../security-audit/namespaces.js';
 import { parseBaseline, applyBaseline, createBaseline } from '../security-audit/baseline.js';
 import { parseExceptions } from '../security-audit/exceptions.js';
@@ -164,6 +165,20 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
   catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid collection options'});return;}
   const db = storage();
   const sourceRunId=req.body?.sourceRunId;
+  const resumeRunId=req.body?.resumeRunId;
+  const checkpointMaxAgeMs=req.body?.checkpointMaxAgeMs??86400000;
+  if(resumeRunId!==undefined) {
+    if(typeof resumeRunId!=='string' || sourceRunId!==undefined || req.body?.collectionOptions!==undefined) {
+      res.status(400).json({error:'Resume requires its own run ID and the saved collection options'});return;
+    }
+    const source=db.get(resumeRunId,config.vaultAddr);
+    if(!source?.snapshot || !['failed','interrupted'].includes(source.run.status)) {
+      res.status(404).json({error:'Failed or interrupted checkpoint not found'});return;
+    }
+    try {collectionOptions=prepareResume(source.snapshot,config.vaultAddr,checkpointMaxAgeMs).options;}
+    catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid checkpoint'});return;}
+  }
+
   if(sourceRunId!==undefined) {
     if(typeof sourceRunId!=='string') {res.status(400).json({error:'Invalid source run ID'});return;}
     const source=db.get(sourceRunId,config.vaultAddr);
@@ -201,6 +216,8 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         exceptions,
         collectionOptions,
         sourceRunId,
+        resumeRunId,
+        checkpointMaxAgeMs,
       },
     });
     active.once('error', () => db.fail(id));

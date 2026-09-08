@@ -1211,3 +1211,7 @@ export async function importPythonAudit(file:File):Promise<{id:string}> {
   const {data}=await api.post<{id:string}>('/security-audit/imports/python',file,{headers:{'Content-Type':'application/octet-stream'}});
   return data;
 }
+
+export async function resumeSecurityAudit(resumeRunId:string,checkpointMaxAgeMs:number,controls:{baselineYaml:string;exceptionsYaml:string}) {
+  const {data}=await api.post<{id:string}>('/security-audit/runs',{resumeRunId,checkpointMaxAgeMs,...controls});return data;
+}
