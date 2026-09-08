@@ -1,3 +1,4 @@
+import { reportArchive } from '../security-audit/reportArchive.js';
 import { COLLECTION_SOURCES } from '../security-audit/collectionStages.js';
 import { prepareResume } from '../security-audit/resume.js';
 import { snapshotNamespaces } from '../security-audit/namespaces.js';
@@ -131,7 +132,7 @@ router.get('/runs/:id/baseline', (req,res)=>{
 });
 router.get('/runs/:id/export', (req, res) => {
   const format=req.query['format'] ?? 'json';
-  if(typeof format!=='string' || !EXPORT_FORMATS.includes(format as ExportFormat)) {
+  if(typeof format!=='string' || ![...EXPORT_FORMATS,'zip'].includes(format)) {
     res.status(400).json({error:'Unsupported export format'});return;
   }
   const redact = req.query['redactPolicySource'] ?? 'false';
@@ -141,9 +142,9 @@ router.get('/runs/:id/export', (req, res) => {
   const detail=storage().get(String(req.params['id']),config.vaultAddr);
   if(!detail) {res.status(404).json({error:'Audit run not found'});return;}
   try {
-    const body=exportAudit(detail,format as ExportFormat,redact === 'true');
-    const contentTypes={json:'application/json',jsonl:'application/x-ndjson',yaml:'application/yaml',csv:'text/csv'};
-    res.type(contentTypes[format as ExportFormat]);
+    const body=format==='zip'?reportArchive(detail,redact==='true'):exportAudit(detail,format as ExportFormat,redact === 'true');
+    const contentTypes={zip:'application/zip',json:'application/json',jsonl:'application/x-ndjson',yaml:'application/yaml',csv:'text/csv'};
+    res.type(contentTypes[format as keyof typeof contentTypes]);
     res.setHeader('Content-Disposition', `attachment; filename="audit-report.${format}"`);
     res.send(body);
   } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Export failed'});}

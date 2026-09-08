@@ -142,3 +142,24 @@ The policy corpus contains 186 Python-derived cases and 102 expected findings. S
 High/critical policy signals now feed auth checks independently of the profile and disabled policy findings. A dedicated integration test confirms a disabled `POL-001` finding still identifies a privileged AppRole through its assigned policy. Parse errors and incomplete policy inventories remain explicit gaps. The previous blanket HCL-privilege implementation gap is removed; six relationship detectors remain pending.
 
 Twelve native tests pass, including the 128 auth cases and 186 policy cases. The default profile can now finish without implementation gaps; that does not imply the extended profile or the overall Python parity checklist is complete.
+
+### Complete report archives
+
+Select **ZIP · complete report** in the audit report format selector to download
+one archive containing summaries, coverage, policy usage and risk indexes,
+per-resource YAML, the snapshot and JSONL reports. The source-omission checkbox
+also applies to ZIP; matched finding evidence remains in the report.
+
+For offline export, run from `app` with the audit database and `VAULT_ADDR`
+configured:
+
+```sh
+npm run audit -- export-archive RUN_ID report.zip --redact-policy-source
+```
+
+The CLI creates a new file with mode 0600 and refuses to overwrite an existing
+file. ZIP exports allow up to 5,000 resources and 64 MiB of entry content; use
+`export-directory RUN_ID DIRECTORY` for larger reports (up to 50,000 resources).
+ZIP entries are stored without compression to limit server CPU work. The bundled
+JavaScript dependency `fflate` provides ZIP support; no system archive command or
+additional service is required. Report schemas are native VaultLens schemas.

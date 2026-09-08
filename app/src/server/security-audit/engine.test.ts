@@ -1201,3 +1201,15 @@ test('directory reports link resources and protect existing output and source re
     assert.equal(parseAuditArguments(['export-directory','run',destination,'--redact-policy-source']).redactPolicySource,true);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });
+
+import { reportArchive } from './reportArchive.js';
+import { unzipSync, strFromU8 } from 'fflate';
+test('ZIP report contains linked indexes and respects source omission', () => {
+  const s=snapshot();const detail:import('../../shared/securityAudit.js').AuditDetail={run:{id:'zip',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:0},snapshot:s,findings:[]};
+  const files=unzipSync(reportArchive(detail,true));
+  assert.ok(files['overview.yml']);assert.ok(files['machine/report.jsonl']);
+  assert.equal(JSON.parse(strFromU8(files['snapshot.json'])).snapshot.resources[0].data.hcl,undefined);
+  const overview=parseYamlReport(strFromU8(files['overview.yml']));
+  assert.ok(overview.objects.every((entry:{file:string})=>files[entry.file]));
+  assert.equal(parseAuditArguments(['export-archive','run','report.zip','--redact-policy-source']).redactPolicySource,true);
+});
