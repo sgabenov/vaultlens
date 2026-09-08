@@ -1240,3 +1240,31 @@ test('legacy Python schema 2 imports without lifecycle metadata and preserves re
     assert.deepEqual(importPythonSnapshot(path,'http://example.invalid').namespaces,['team']);
   } finally {db.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+
+test('Python coverage contradictions never establish policy or alias absence', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-python-coverage-'));
+  const path=join(directory,'python.sqlite');
+  const db=new DatabaseSync(path);
+  try {
+    db.exec(pythonImportFixture.sql);
+    db.exec("UPDATE assignments SET policy_name='missing' WHERE subject_kind='approle'");
+    assert.ok(execute(importPythonSnapshot(path,'http://example.invalid'),DEFAULT_SETTINGS).findings.some(f=>f.ruleId==='REF-001'));
+    db.exec("UPDATE coverage SET discovered=2 WHERE source='policies'");
+    let imported=importPythonSnapshot(path,'http://example.invalid');
+    assert.equal(imported.policiesComplete,false);
+    assert.ok(imported.issues.some(issue=>issue.reason.includes('counts disagree')));
+    assert.ok(!execute(imported,DEFAULT_SETTINGS).findings.some(f=>f.ruleId==='REF-001'));
+    db.exec("UPDATE coverage SET discovered=2,scanned=2 WHERE source='policies'");
+    assert.equal(importPythonSnapshot(path,'http://example.invalid').policiesComplete,false);
+    db.exec("UPDATE coverage SET discovered=1,scanned=1 WHERE source='policies'");
+    db.exec("INSERT INTO coverage VALUES('team/','policies','complete',1,1,NULL)");
+    imported=importPythonSnapshot(path,'http://example.invalid');
+    assert.equal(imported.policiesComplete,false);
+    assert.ok(imported.issues.some(issue=>issue.reason.includes('Duplicate')));
+    db.exec("DELETE FROM subjects WHERE kind='identity_alias'");
+    imported=importPythonSnapshot(path,'http://example.invalid');
+    assert.equal(imported.namespaceAliasCompleteness?.team,false);
+    assert.equal(imported.importedCoverage!.find(row=>row.source==='identity_alias')!.status,'complete');
+  } finally {db.close();rmSync(directory,{recursive:true,force:true});}
+});

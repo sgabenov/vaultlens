@@ -119,13 +119,29 @@ export function importPythonSnapshot(path:string, target:string):AuditSnapshot {
       const prior=Array.isArray(subject.data[field])?subject.data[field] as string[]:[];
       subject.data[field]=[...new Set([...prior,text(assignment.policy_name)])];
     }
+    // Coverage is evidence for absence checks, not just report metadata.
+    const resourceCounts=new Map<string,number>();
+    for(const resource of snapshot.resources) {
+      const countKey=JSON.stringify([resource.namespace,resource.kind]);
+      resourceCounts.set(countKey,(resourceCounts.get(countKey)??0)+1);
+    }
+    const seenCoverage=new Set<string>();
     for (const coverage of rows('coverage')) {
       const namespace=ns(coverage),source=text(coverage.source),status=text(coverage.status);
       if (!Number.isSafeInteger(coverage.discovered) || !Number.isSafeInteger(coverage.scanned) || Number(coverage.discovered)<0 || Number(coverage.scanned)<0)
         throw new Error('Invalid Python coverage counts');
       snapshot.importedCoverage!.push({namespace,source,status,discovered:Number(coverage.discovered),scanned:Number(coverage.scanned),details:coverage.details===null?null:text(coverage.details)});
-      if (source==='policies') snapshot.namespacePolicyCompleteness![namespace]=status==='complete';
-      if (source==='identity_alias') snapshot.namespaceAliasCompleteness![namespace]=status==='complete';
+      const coverageKey=JSON.stringify([namespace,source]);
+      const duplicate=seenCoverage.has(coverageKey);
+      seenCoverage.add(coverageKey);
+      const kind=source==='policies'?'policy':source==='identity_alias'?'alias':undefined;
+      const inconsistent=status==='complete' && (coverage.discovered!==coverage.scanned ||
+        (kind!==undefined && coverage.scanned!==(resourceCounts.get(JSON.stringify([namespace,kind]))??0)));
+      const complete=status==='complete' && !duplicate && !inconsistent;
+      if (source==='policies') snapshot.namespacePolicyCompleteness![namespace]=complete && snapshot.namespacePolicyCompleteness![namespace]!==false;
+      if (source==='identity_alias') snapshot.namespaceAliasCompleteness![namespace]=complete && snapshot.namespaceAliasCompleteness![namespace]!==false;
+      if(duplicate || inconsistent) snapshot.issues.push({namespace,path:`import/coverage/${source}`,
+        reason:duplicate?'Duplicate Python coverage records cannot establish completeness':'Python complete coverage counts disagree with collected records'});
       if (status!=='complete') snapshot.issues.push({namespace,path:`import/coverage/${source}`,reason:`Python coverage ${status}: ${coverage.details??''}`});
     }
     for (const warning of rows('warnings')) snapshot.issues.push({path:'import/warning',reason:text(warning.message)});
