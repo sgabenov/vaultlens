@@ -24,7 +24,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '11';
+export const ENGINE_VERSION = '12';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -186,7 +186,7 @@ function executeScoped(
   }
 
   const knownPolicies = new Set(['root', ...snapshot.resources.filter(r => r.kind === 'policy').map(r => String(r.data.name))]);
-  const identity = analyzeIdentity(snapshot.resources);
+  const identity = analyzeIdentity(snapshot.resources, snapshot.namespaceAliasCompleteness?.[snapshot.namespaces?.[0] ?? ''] === true);
   issues.push(...identity.issues);
   const entityIds = roleEntityIds(snapshot.resources);
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
@@ -320,7 +320,7 @@ export function execute(snapshot:AuditSnapshot,settings:RuleSettings):ReturnType
   const namespaces=snapshotNamespaces(snapshot);
   if(namespaces.length===1 && namespaces[0]==='') return executeScoped(snapshot,settings);
   const results=namespaces.map(namespace=>{
-    const result=executeScoped({...snapshot,
+    const result=executeScoped({...snapshot,namespaces:[namespace],
       resources:snapshot.resources.filter(resource=>(resource.namespace??'')===namespace),
       policiesComplete:snapshot.namespacePolicyCompleteness?.[namespace]??snapshot.policiesComplete,
     },settings);

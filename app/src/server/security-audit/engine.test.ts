@@ -748,3 +748,31 @@ test('alias reference gaps stay within their namespace and preserve raw inventor
     'Alias is missing its auth mount accessor',
   ]);
 });
+
+import { sanitizeAlias } from './identity.js';
+test('embedded alias reconciliation respects catalog coverage and retains no raw name', () => {
+  const alias = sanitizeAlias({id:'alias-a',canonical_id:'person',mount_accessor:'accessor',name:'sensitive-role-id',metadata:{secret:'discard'}});
+  assert.equal(alias.name, undefined);
+  assert.equal(alias.metadata, undefined);
+  assert.equal(typeof alias.name_sha256, 'string');
+  const resources: AuditSnapshot['resources'] = [
+    {kind:'entity',path:'identity/entity/id/person',data:{aliases:[alias]}},
+    {kind:'auth-mount',path:'auth/approle/',data:{accessor:'accessor'}},
+  ];
+  assert.deepEqual(analyzeIdentity(resources, false).issues, []);
+  assert.match(analyzeIdentity(resources, true).issues[0].reason, /absent from.*catalog/);
+  resources.push({kind:'alias',path:'identity/entity-alias/id/alias-a',data:alias});
+  assert.deepEqual(analyzeIdentity(resources, true).issues, []);
+  resources[2].data = {...alias,name_sha256:'changed'};
+  assert.match(analyzeIdentity(resources, true).issues[0].reason, /differs.*not atomic/);
+  resources[2].data = {...alias,id:'another-id'};
+  resources[2].path = 'identity/entity-alias/id/another-id';
+  assert.deepEqual(analyzeIdentity(resources, true).issues, []);
+  const s = snapshot();
+  s.namespaces = ['team-a','team-b'];
+  s.namespaceAliasCompleteness = {'team-a':true,'team-b':false};
+  s.resources = ['team-a','team-b'].flatMap(namespace => resources.slice(0,2).map(resource => ({...resource,namespace})));
+  const issues = execute(s, DEFAULT_SETTINGS).identity.issues;
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].namespace, 'team-a');
+});

@@ -1,4 +1,13 @@
+import { createHash } from 'node:crypto';
 import type { AuditResource } from '../../shared/securityAudit.js';
+
+/** Retain only reference fields and a one-way name hash from Vault aliases. */
+export function sanitizeAlias(data: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...Object.fromEntries(['id', 'canonical_id', 'mount_accessor'].filter(key => typeof data[key] === 'string').map(key => [key, data[key]])),
+    ...(typeof data.name === 'string' ? {name_sha256:createHash('sha256').update(data.name).digest('hex')} : {}),
+  };
+}
 
 /** Correlate only RoleID hashes on the same observed auth mount accessor. */
 export function roleEntityIds(resources: AuditResource[]): Map<string, Set<string>> {
@@ -27,7 +36,7 @@ import type { IdentityAnalysis } from '../../shared/securityAudit.js';
 import { values } from './authDetectors.js';
 
 /** Derive group inheritance without changing the observed resource inventory. */
-export function analyzeIdentity(resources: AuditResource[]): IdentityAnalysis {
+export function analyzeIdentity(resources: AuditResource[], aliasesComplete = false): IdentityAnalysis {
   const id = (r: AuditResource) => String(r.data.id ?? decodeURIComponent(r.path.split('/').pop() ?? ''));
   const groups = new Map(resources.filter(r => r.kind === 'group').map(r => [id(r), r]));
   const entities = new Map(resources.filter(r => r.kind === 'entity').map(r => [id(r), r]));
@@ -65,6 +74,32 @@ export function analyzeIdentity(resources: AuditResource[]): IdentityAnalysis {
       gap(alias.path, 'Alias is missing its auth mount accessor');
     else if (!accessors.has(accessor))
       gap(alias.path, 'Alias auth mount was not collected; stale alias status cannot be established');
+  }
+  const catalogAliases = resources.filter(resource => resource.kind === 'alias');
+  const signature = (data: Record<string, unknown>) => JSON.stringify([
+    data.canonical_id, data.mount_accessor, data.name_sha256,
+  ]);
+  const aliasesById = new Map(catalogAliases.map(alias => [id(alias), alias]));
+  const aliasSignatures = new Set(catalogAliases.map(alias => signature(alias.data)));
+  for (const [entityId, entity] of entities) {
+    if (!Array.isArray(entity.data.aliases)) continue;
+    for (const [index, raw] of entity.data.aliases.entries()) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        gap(entity.path, `Embedded alias ${index} is malformed`);
+        continue;
+      }
+      const alias = {...raw, canonical_id:raw.canonical_id || entityId};
+      const catalogAlias = typeof raw.id === 'string' ? aliasesById.get(raw.id) : undefined;
+      const label = `Embedded alias ${index}`;
+      if (catalogAlias && signature(catalogAlias.data) !== signature(alias))
+        gap(entity.path, `${label} differs from its catalog entry; collection is not atomic`);
+      else if (!catalogAlias && !aliasSignatures.has(signature(alias)) && aliasesComplete)
+        gap(entity.path, `${label} is absent from the collected alias catalog`);
+      if (alias.canonical_id !== entityId)
+        gap(entity.path, `${label} references a different canonical entity`);
+      if (!accessors.has(raw.mount_accessor))
+        gap(entity.path, `${label} auth mount was not collected`);
+    }
   }
   const ancestors = new Map<string, Set<string>>();
   for (const groupId of groups.keys()) {

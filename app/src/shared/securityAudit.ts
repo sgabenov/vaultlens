@@ -17,6 +17,7 @@ export interface IdentityAnalysis {
 }
 export interface AuditSnapshot {
   namespaces?:string[];
+  namespaceAliasCompleteness?:Record<string,boolean>;
   namespacePolicyCompleteness?:Record<string,boolean>;
   controls?: AuditControls;
   analysisPerformed?: boolean;

@@ -1,3 +1,4 @@
+import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
 import { forEachConcurrent } from './concurrency.js';
 import { createRequestPolicy, parseCollectionOptions, type CollectionOptions } from './requestPolicy.js';
@@ -71,6 +72,7 @@ export async function collect(
     policiesComplete: false,
     collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics,scope:{policyFilters:policyOptions.policyFilters,authMountFilters:policyOptions.authMountFilters,authTypeFilters:policyOptions.authTypeFilters,skipIdentity:policyOptions.skipIdentity}},
   };
+  let aliasesComplete=false;
   let countedObjects=0;
   function addResource(resource: import('../../shared/securityAudit.js').AuditResource) {
     if(signal.aborted) return;
@@ -140,18 +142,23 @@ export async function collect(
     await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
       const path = `${base}/${encodeURIComponent(id)}`;
       const data = await read(path);
-      if (data) addResource({ kind, path, data: select(data) });
+      if (data) {
+        const selected = select(data);
+        if (kind === 'entity' && Array.isArray(data.aliases))
+          selected.aliases = data.aliases.map(alias => alias && typeof alias === 'object' && !Array.isArray(alias)
+            ? sanitizeAlias(alias as Record<string, unknown>) : null);
+        addResource({ kind, path, data: selected });
+      }
     });
   }
   const aliasBase = 'identity/entity-alias/id';
-  await forEachConcurrent(keys(await read(aliasBase,true)),workers,async id=>{
+  const aliasList = await read(aliasBase,true);
+  aliasesComplete = aliasList !== null;
+  await forEachConcurrent(keys(aliasList),workers,async id=>{
     const path = `${aliasBase}/${encodeURIComponent(id)}`;
     const data = await read(path);
-    if (data) addResource({ kind: 'alias', path, data: {
-      canonical_id: data.canonical_id, mount_accessor: data.mount_accessor,
-      name_sha256: typeof data.name === 'string'
-        ? createHash('sha256').update(data.name).digest('hex') : undefined,
-    } });
+    if (data) addResource({ kind: 'alias', path, data: sanitizeAlias(data) });
+    else aliasesComplete = false;
   });
   } else snapshot.issues.push({path:'identity',reason:'Identity collection was explicitly skipped'});
   const secretMounts = await read('sys/mounts');
@@ -209,6 +216,7 @@ export async function collect(
   }
   snapshot.resources.sort((a,b)=>a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
   snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
+  snapshot.namespaceAliasCompleteness={[policyOptions.namespace]:aliasesComplete && !signal.aborted};
   snapshot.namespacePolicyCompleteness={[policyOptions.namespace]:snapshot.policiesComplete};
   if(policyOptions.namespace) snapshot.issues=snapshot.issues.map(issue=>({...issue,namespace:policyOptions.namespace}));
   snapshot.finishedAt = new Date().toISOString();
