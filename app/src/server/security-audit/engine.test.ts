@@ -776,3 +776,52 @@ test('embedded alias reconciliation respects catalog coverage and retains no raw
   assert.equal(issues.length, 1);
   assert.equal(issues[0].namespace, 'team-a');
 });
+
+import { createServer as createRawServer } from 'node:net';
+import { collect } from './collector.js';
+test('collector rejects malformed catalogs and missing ACL source instead of proving absence', async () => {
+  let mode: 'malformed'|'source'|'empty' = 'malformed';
+  const server = createRawServer(socket => {
+    let request = '';
+    socket.on('data', chunk => {
+      request += chunk.toString();
+      if (!request.includes('\r\n\r\n')) return;
+      const [method,path] = request.split('\r\n')[0].split(' ');
+      let status = 200;
+      let body: unknown = {data:{}};
+      if (method === 'LIST') {
+        body = {data:{keys:[]}};
+        if (path === '/v1/sys/policies/acl') {
+          if (mode === 'malformed') body = {data:{keys:['default',123]}};
+          if (mode === 'source') body = {data:{keys:['default']}};
+          if (mode === 'empty') {status = 404; body = {errors:[]};}
+        }
+        if (path === '/v1/identity/entity-alias/id' && mode === 'malformed') body = {data:{}};
+      }
+      const payload = JSON.stringify(body);
+      socket.end(`HTTP/1.1 ${status} ${status === 200 ? 'OK' : 'Not Found'}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`);
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0,'127.0.0.1',resolve));
+  try {
+    const address = server.address() as import('node:net').AddressInfo;
+    const target = `http://127.0.0.1:${address.port}`;
+    const options = {retries:0,requestsPerSecond:1000,maxDurationMs:5000};
+    const malformed = await collect(target,'fixture-token',false,options);
+    assert.equal(malformed.policiesComplete,false);
+    assert.equal(malformed.namespaceAliasCompleteness?.[''],false);
+    assert.equal(malformed.issues.filter(issue => issue.reason.includes('invalid keys')).length,2);
+    mode = 'source';
+    const missingSource = await collect(target,'fixture-token',false,options);
+    assert.equal(missingSource.policiesComplete,false);
+    assert.equal(missingSource.resources.some(resource => resource.kind === 'policy'),false);
+    assert.match(missingSource.issues[0].reason,/missing its ACL source/);
+    mode = 'empty';
+    const empty = await collect(target,'fixture-token',false,options);
+    assert.equal(empty.policiesComplete,true);
+    assert.equal(empty.namespaceAliasCompleteness?.[''],true);
+    assert.deepEqual(empty.issues,[]);
+  } finally {
+    await new Promise<void>((resolve,reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});

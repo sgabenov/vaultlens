@@ -93,7 +93,16 @@ export async function collect(
       const response = await policy.request(() => list
         ? client.list<{ data: Record<string, unknown> }>(path, token)
         : client.get<{ data: Record<string, unknown> }>(path, token));
-      return response.data ?? {};
+      const data = response?.data;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        snapshot.issues.push({path,reason:'Vault response is missing an object data field'});
+        return null;
+      }
+      if (list && (!Array.isArray(data.keys) || data.keys.some(key => typeof key !== 'string' || !key))) {
+        snapshot.issues.push({path,reason:'Vault LIST response contains an invalid keys field'});
+        return null;
+      }
+      return data;
     } catch (error) {
       if(signal.aborted) {
         if(!limitAbort.signal.aborted && !snapshot.issues.some(issue=>issue.path==='collection/deadline'))
@@ -128,7 +137,10 @@ export async function collect(
   await forEachConcurrent(keys(policyList).filter(name=>name!=='root' && matches(name,policyOptions.policyFilters)),workers,async name=>{
     const path = `sys/policies/acl/${encodeURIComponent(name)}`;
     const data = await read(path);
-    if (data)
+    if (data && typeof (data.policy ?? data.rules) !== 'string') {
+      snapshot.issues.push({path,reason:'Policy response is missing its ACL source'});
+      snapshot.policiesComplete = false;
+    } else if (data)
       addResource({
         kind: 'policy',
         path,
