@@ -1,10 +1,7 @@
 import { parseDocument } from 'yaml';
 import { globMatch } from './authDetectors.js';
 import type { AuditFinding } from '../../shared/securityAudit.js';
-export interface FindingException {
-  id:string; rule_id:string; namespace:string; object_path:string; policy_path?:string;
-  owner:string; reason:string; expires:string;
-}
+export type FindingException = import('../../shared/securityAudit.js').AuditException;
 export function validDate(value:unknown): value is string {
   if(typeof value!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date=new Date(value+'T00:00:00Z');

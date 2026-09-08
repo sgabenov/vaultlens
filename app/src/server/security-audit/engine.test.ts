@@ -672,3 +672,21 @@ test('collection deadline cancels queued rate waits without starting more operat
   assert.equal(parseAuditArguments(['scan','--timeout-ms','100','--max-duration-ms','200']).requestPolicy.maxDurationMs,200);
   assert.throws(()=>parseCollectionOptions({timeoutMs:0}),/timeoutMs/);
 });
+
+test('saved controls retain their application date and exception metadata across SQLite reads', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-controls-'));
+  const store=new AuditStore(join(directory,'audit.sqlite'));
+  try {
+    const s=snapshot(),result=execute(s,DEFAULT_SETTINGS);
+    const exception={id:'temporary',rule_id:result.findings[0].ruleId,namespace:'root',object_path:result.findings[0].path,owner:'reviewer',reason:'Migration',expires:'2026-09-08'};
+    s.controls=applyBaseline(result.findings,result.configuration,s.target,undefined,[exception],'2026-09-08');
+    const id=store.create(s.target);store.finish(id,s,result.findings,result.configuration);
+    exception.owner='changed later';
+    const saved=store.get(id,s.target)!;
+    assert.equal(saved.snapshot?.controls?.appliedOn,'2026-09-08');
+    assert.equal(saved.snapshot?.controls?.exceptionDefinitions[0].owner,'reviewer');
+    assert.equal(saved.snapshot?.controls?.states[0].suppressed,true);
+    assert.ok(exportAudit(saved,'csv').includes('"temporary"'));
+    assert.ok(exportAudit(saved,'jsonl').includes('"appliedOn":"2026-09-08"'));
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});

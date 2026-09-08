@@ -42,7 +42,7 @@ export function parseBaseline(source:string): AuditBaseline {
     throw new Error('Invalid baseline fingerprints');
   return raw as AuditBaseline;
 }
-export function applyBaseline(findings:AuditFinding[], configuration:RunConfiguration, target:string, baseline?:AuditBaseline, exceptions:FindingException[]=[], today=localDate()) {
+export function applyBaseline(findings:AuditFinding[], configuration:RunConfiguration, target:string, baseline?:AuditBaseline, exceptions:FindingException[]=[], today=localDate()):import('../../shared/securityAudit.js').AuditControls {
   if(baseline && (baseline.target!==target || baseline.config_hash!==configuration.fingerprint || baseline.engine_version!==configuration.engineVersion))
     throw new Error('Baseline target, configuration or engine version is incompatible');
   if(!validDate(today)) throw new Error('Invalid controls date');
@@ -55,7 +55,7 @@ export function applyBaseline(findings:AuditFinding[], configuration:RunConfigur
     if(exception) used.add(exception.id);
     return {fingerprint,baselineStatus,suppressed:!!exception,exception:exception??null,gate:!exception && baselineStatus!=='unchanged'};
   });
-  return {states,exceptions:{configured:exceptions.length,active:active.length,expired,unused:active.filter(e=>!used.has(e.id))},absentFingerprints:[...known].filter(f=>!current.has(f)).sort()};
+  return {appliedOn:today,baseline:baseline??null,exceptionDefinitions:exceptions,states,exceptions:{configured:exceptions.length,active:active.length,expired,unused:active.filter(e=>!used.has(e.id))},absentFingerprints:[...known].filter(f=>!current.has(f)).sort()};
 }
 
 function localDate(): string {

@@ -205,6 +205,12 @@ export default function SecurityAuditPage() {
                   <option value="info">Info</option>
                 </select>
               </div>
+              {detail.data.snapshot?.controls && <details className="rounded border p-3 text-sm">
+                <summary>Baseline and exceptions · applied {detail.data.snapshot.controls.appliedOn}</summary>
+                <p className="my-2">{detail.data.snapshot.controls.states.filter(s=>s.gate).length} findings count toward the severity gate; {detail.data.snapshot.controls.states.filter(s=>s.suppressed).length} have active exceptions.</p>
+                <p>Historical evaluation: expiration is assessed on the application date. Apply controls explicitly during a new analysis to assess them today.</p>
+                <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.controls,null,2)}</pre>
+              </details>}
               {detail.data.snapshot?.collection && <details className="rounded border p-3 text-sm">
                 <summary>Collection parameters and metrics</summary>
                 <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
@@ -212,7 +218,7 @@ export default function SecurityAuditPage() {
               <div className="rounded border p-3 text-sm">
                 <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending}
                   onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
-                <p className="mt-2 text-xs text-gray-500">Creates a new result from saved resources. Collection timestamps remain unchanged.</p>
+                <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and no baseline or exceptions. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
               <AuditExportButton key={`export:${id}`} runId={id} />

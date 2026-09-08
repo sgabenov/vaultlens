@@ -14,6 +14,7 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  controls?: AuditControls;
   analysisPerformed?: boolean;
   sourceRunId?: string;
   collection?: {
@@ -67,4 +68,17 @@ export interface AuditDiff {
   warnings: string[];
   statistics: Record<string, Record<string, number>>;
   changes: Record<string, {change: 'added'|'removed'|'changed'|'unchanged'; old?: unknown; new?: unknown}[]>;
+}
+
+export interface AuditException {
+  id:string;rule_id:string;namespace:string;object_path:string;policy_path?:string;
+  owner:string;reason:string;expires:string;
+}
+export interface AuditControls {
+  appliedOn:string;
+  baseline:{source_scan_id:string;config_hash:string;engine_version:string;fingerprints:string[];target:string}|null;
+  exceptionDefinitions:AuditException[];
+  states:{fingerprint:string;baselineStatus:string|null;suppressed:boolean;gate:boolean;exception:AuditException|null}[];
+  exceptions:{configured:number;active:number;expired:AuditException[];unused:AuditException[]};
+  absentFingerprints:string[];
 }

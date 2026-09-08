@@ -1,3 +1,4 @@
+import { applyBaseline } from './baseline.js';
 import { workerData } from 'node:worker_threads';
 import { collect } from './collector.js';
 import { execute } from './engine.js';
@@ -9,6 +10,7 @@ try {
   if(!snapshot) throw new Error('Source snapshot not found');
   if(sourceRunId) snapshot.sourceRunId=sourceRunId;
   const result = execute(snapshot, settings ?? store.settings());
+  snapshot.controls = applyBaseline(result.findings,result.configuration,target);
   snapshot.analysisPerformed = true;
   snapshot.identity = result.identity;
   store.finish(id, snapshot, result.findings, result.configuration);

@@ -45,6 +45,7 @@ try {
       const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy);
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
+      snapshot.controls = controls;
       snapshot.analysisPerformed = true;
       snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
@@ -74,7 +75,7 @@ try {
     const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
     let resultId=argument;
     if(options.save) {
-      const snapshot={...detail.snapshot,identity,analysisPerformed:true,sourceRunId:argument};
+      const snapshot={...detail.snapshot,identity,controls,analysisPerformed:true,sourceRunId:argument};
       resultId=store.create(target);
       try {store.finish(resultId,snapshot,findings,configuration);} catch(error) {store.fail(resultId);throw error;}
     }
