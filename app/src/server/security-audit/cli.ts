@@ -1,3 +1,4 @@
+import { writeReportDirectory } from './reportDirectory.js';
 import { mergeRefresh } from './refresh.js';
 import { parseCollectionOptions } from './requestPolicy.js';
 import { prepareResume } from './resume.js';
@@ -27,7 +28,11 @@ try {
   const exceptionSource=options.exceptions ? readFileSync(options.exceptions,'utf8') : undefined;
   const exceptionSettings=command==='analyze' && argument && !options.currentRules ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();
   const exceptions=exceptionSource !== undefined ? parseExceptions(exceptionSource,new Set((exceptionSettings as import('../../shared/auditRules.js').RunConfiguration).catalog?.map(r=>r.id) ?? catalog(exceptionSettings).map(r=>r.id))) : [];
-  if (command === 'import-python' && argument) {
+  if (command === 'export-directory' && argument && second) {
+    const detail=store.get(argument,target);
+    if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
+    console.log(JSON.stringify({directory:second,files:writeReportDirectory(detail,second,options.redactPolicySource)}));
+  } else if (command === 'import-python' && argument) {
     const snapshot=importPythonSnapshot(argument,target);
     const id=store.create(target);
     try {store.finish(id,snapshot,[]);} catch(error) {store.fail(id);throw error;}

@@ -1176,3 +1176,28 @@ test('refresh preserves original resource age across repeated updates without cr
   const next=structuredClone(old);next.snapshot=second;
   assert.equal(compareRuns(old,next).statistics.resources.changed,0);
 });
+
+import { reportFiles, writeReportDirectory } from './reportDirectory.js';
+import { existsSync, statSync } from 'node:fs';
+import { parse as parseYamlReport } from 'yaml';
+test('directory reports link resources and protect existing output and source redaction', () => {
+  const s=snapshot();s.resources[0].path='../../outside';
+  const detail:import('../../shared/securityAudit.js').AuditDetail={run:{id:'report',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:1},snapshot:s,findings:[{ruleId:'DEMO',path:'../../outside',severity:'high',title:'Review',evidence:'evidence',recommendation:'Review'}]};
+  const files=reportFiles(detail,true);
+  const overview=parseYamlReport(files.get('overview.yml')!);
+  assert.equal(overview.objects.length,2);
+  for(const entry of overview.objects) {assert.match(entry.file,/^objects\/[a-f0-9]{64}\.yml$/);assert.ok(files.has(entry.file));}
+  assert.equal(parseYamlReport(files.get('indexes/risky-policies.yml')!).policies.length,1);
+  assert.equal(parseYamlReport(files.get('indexes/unassigned-dangerous-policies.yml')!).policies.length,0);
+  assert.ok(!files.get('snapshot.json')!.includes('# not evaluated'));
+  const directory=mkdtempSync(join(tmpdir(),'audit-directory-'));
+  try {
+    const destination=join(directory,'report');writeReportDirectory(detail,destination,true);
+    assert.ok(existsSync(join(destination,'coverage.yml')));
+    assert.equal(statSync(join(destination,'snapshot.json')).mode&0o777,0o600);
+    const before=readFileSync(join(destination,'overview.yml'),'utf8');
+    assert.throws(()=>writeReportDirectory(detail,destination),/EEXIST/);
+    assert.equal(readFileSync(join(destination,'overview.yml'),'utf8'),before);
+    assert.equal(parseAuditArguments(['export-directory','run',destination,'--redact-policy-source']).redactPolicySource,true);
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});
