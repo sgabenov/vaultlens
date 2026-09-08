@@ -725,3 +725,26 @@ test('namespace selection normalizes boundaries and rejects invalid header/path 
   assert.throws(()=>parseCollectionOptions({namespace:'team/../other'}),/namespace/);
   assert.throws(()=>parseCollectionOptions({namespace:'team//child'}),/namespace/);
 });
+
+
+test('alias reference gaps stay within their namespace and preserve raw inventory', () => {
+  const s = snapshot();
+  s.namespaces = ['team-a', 'team-b'];
+  s.resources = [
+    {namespace:'team-a',kind:'alias',path:'identity/entity-alias/id/demo',data:{canonical_id:'person',mount_accessor:'shared'}},
+    {namespace:'team-b',kind:'entity',path:'identity/entity/id/person',data:{policies:[]}},
+    {namespace:'team-b',kind:'auth-mount',path:'auth/approle/',data:{type:'approle',accessor:'shared'}},
+  ];
+  const before = structuredClone(s.resources);
+  const result = execute(s, DEFAULT_SETTINGS);
+  assert.equal(result.identity.issues.length, 2);
+  assert.ok(result.identity.issues.every(issue => issue.namespace === 'team-a'));
+  assert.deepEqual(s.resources, before);
+  const resolved = s.resources.map(resource => ({...resource,namespace:'team-a'}));
+  assert.deepEqual(analyzeIdentity(resolved).issues, []);
+  resolved[0] = {...resolved[0], data:{canonical_id:'',mount_accessor:''}};
+  assert.deepEqual(analyzeIdentity(resolved).issues.map(issue => issue.reason), [
+    'Alias is missing its canonical entity ID',
+    'Alias is missing its auth mount accessor',
+  ]);
+});

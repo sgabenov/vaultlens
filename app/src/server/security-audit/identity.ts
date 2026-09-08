@@ -50,6 +50,22 @@ export function analyzeIdentity(resources: AuditResource[]): IdentityAnalysis {
   }
   for (const entity of membership.keys())
     if (!entities.has(entity)) gap(`identity/entity/id/${entity}`, 'Referenced member entity was not collected');
+  // Missing observations are coverage gaps, not proof that an alias is stale:
+  // older snapshots do not record complete auth-mount/alias inventories.
+  const accessors = new Set(resources.filter(resource => resource.kind === 'auth-mount')
+    .map(resource => resource.data.accessor).filter(value => typeof value === 'string' && value));
+  for (const alias of resources.filter(resource => resource.kind === 'alias')) {
+    const canonicalId = alias.data.canonical_id;
+    if (typeof canonicalId !== 'string' || !canonicalId)
+      gap(alias.path, 'Alias is missing its canonical entity ID');
+    else if (!entities.has(canonicalId))
+      gap(alias.path, 'Alias canonical entity was not collected');
+    const accessor = alias.data.mount_accessor;
+    if (typeof accessor !== 'string' || !accessor)
+      gap(alias.path, 'Alias is missing its auth mount accessor');
+    else if (!accessors.has(accessor))
+      gap(alias.path, 'Alias auth mount was not collected; stale alias status cannot be established');
+  }
   const ancestors = new Map<string, Set<string>>();
   for (const groupId of groups.keys()) {
     const seen = new Set<string>(), queue = [...(parents.get(groupId) ?? [])];
