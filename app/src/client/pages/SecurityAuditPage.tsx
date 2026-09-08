@@ -1,3 +1,4 @@
+import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditControlsEditor from '../components/AuditControlsEditor';
 import AuditExportButton from '../components/AuditExportButton';
@@ -235,6 +236,7 @@ export default function SecurityAuditPage() {
                 <p>Historical evaluation: expiration is assessed on the application date. Apply controls explicitly during a new analysis to assess them today.</p>
                 <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.controls,null,2)}</pre>
               </details>}
+              {detail.data.snapshot && <AuditImportDetails key={`import:${id}`} snapshot={detail.data.snapshot} />}
               {detail.data.snapshot?.collection && <details className="rounded border p-3 text-sm">
                 <summary>Collection parameters and metrics</summary>
                 <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
