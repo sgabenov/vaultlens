@@ -1,3 +1,4 @@
+import AuditDiffPanel from '../components/AuditDiffPanel';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -181,6 +182,7 @@ export default function SecurityAuditPage() {
                   <option value="info">Info</option>
                 </select>
               </div>
+              <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot?.identity && (
                 <details className="rounded border p-3 text-sm">
                   <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>

@@ -1,3 +1,4 @@
+import { compareRuns } from '../security-audit/diff.js';
 import { Router } from 'express';
 import { Worker } from 'node:worker_threads';
 import path from 'node:path';
@@ -68,6 +69,16 @@ router.put('/rules', (req, res) => {
 router.get('/runs', (_req, res) =>
   res.json({ runs: storage().list(config.vaultAddr) }),
 );
+router.get('/diff', (req, res) => {
+  if (typeof req.query['old'] !== 'string' || typeof req.query['new'] !== 'string') {
+    res.status(400).json({error:'Expected old and new run IDs'}); return;
+  }
+  const old = storage().get(req.query['old'], config.vaultAddr);
+  const next = storage().get(req.query['new'], config.vaultAddr);
+  if (!old || !next) { res.status(404).json({error:'Audit run not found'}); return; }
+  try { res.json(compareRuns(old, next)); }
+  catch(error) { res.status(400).json({error:error instanceof Error ? error.message : 'Snapshots cannot be compared'}); }
+});
 router.get('/runs/:id', (req, res) => {
   const detail = storage().get(String(req.params['id']), config.vaultAddr);
   if (!detail) {

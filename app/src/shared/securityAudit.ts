@@ -52,3 +52,12 @@ export interface AuditDetail {
   findings: AuditFinding[];
   configuration?: import('./auditRules.js').RunConfiguration | null;
 }
+
+export interface AuditDiff {
+  oldRunId: string;
+  newRunId: string;
+  target: string;
+  warnings: string[];
+  statistics: Record<string, Record<string, number>>;
+  changes: Record<string, {change: 'added'|'removed'|'changed'|'unchanged'; old?: unknown; new?: unknown}[]>;
+}

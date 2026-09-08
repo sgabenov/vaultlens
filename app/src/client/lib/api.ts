@@ -1187,3 +1187,8 @@ export async function getAuditRules() {
 export async function saveAuditRules(settings: import('../../shared/auditRules').RuleSettings) {
   const {data}=await api.put<import('../../shared/auditRules').SettingsView>('/security-audit/rules',settings);return data;
 }
+
+export async function getSecurityAuditDiff(oldId: string, newId: string) {
+  const {data}=await api.get<import('../../shared/securityAudit').AuditDiff>('/security-audit/diff', {params:{old:oldId,new:newId}});
+  return data;
+}
