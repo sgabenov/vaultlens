@@ -18,7 +18,7 @@ export interface AuditSnapshot {
 }
 export interface AuditFinding {
   ruleId: string;
-  severity: 'high' | 'medium';
+  severity: import('./auditRules.js').Severity;
   path: string;
   title: string;
   evidence: string;
@@ -38,4 +38,5 @@ export interface AuditDetail {
   run: AuditRun;
   snapshot: AuditSnapshot | null;
   findings: AuditFinding[];
+  configuration?: import('./auditRules.js').RunConfiguration | null;
 }

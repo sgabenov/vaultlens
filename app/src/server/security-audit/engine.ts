@@ -1,8 +1,17 @@
+import {
+  catalog,
+  settingsFingerprint,
+  SUPPORTED_DETECTORS,
+} from './catalog.js';
+import type {
+  RuleSettings,
+  RunConfiguration,
+} from '../../shared/auditRules.js';
 import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '1';
+export const ENGINE_VERSION = '2';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -95,4 +104,128 @@ export function analyze(snapshot: AuditSnapshot): AuditFinding[] {
   return findings.sort(
     (a, b) => a.path.localeCompare(b.path) || a.ruleId.localeCompare(b.ruleId),
   );
+}
+
+// Run through a versioned catalog; unknown implementation coverage is explicit.
+export function execute(
+  snapshot: AuditSnapshot,
+  settings: RuleSettings,
+): { findings: AuditFinding[]; configuration: RunConfiguration } {
+  const pinned = (settings as RunConfiguration).catalog;
+  const definitions = (pinned ?? catalog(settings)).map((rule) => ({
+    ...rule,
+    supported: SUPPORTED_DETECTORS.includes(rule.detector),
+  }));
+  const legacy = analyze(snapshot);
+  const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
+  const bindings: Record<string, string> = {
+    native_root_assignment: 'assignment.root',
+    native_unbound_approle: 'approle.unbound-login',
+    missing_policy_reference: 'assignment.missing-policy',
+    kubernetes_double_wildcard: 'kubernetes.unbounded-subject',
+  };
+  const findings: AuditFinding[] = [];
+  const issues: { path: string; reason: string }[] = [];
+  for (const rule of definitions.filter((r) => r.active)) {
+    if (!rule.supported) {
+      issues.push({
+        path: `rules/${rule.id}`,
+        reason: `Detector ${rule.detector} has not been ported yet`,
+      });
+      continue;
+    }
+    let candidates: AuditFinding[] = [];
+    if (rule.detector === 'field_compare') {
+      const { field, operator, value } = rule.parameters;
+      for (const resource of snapshot.resources) {
+        const type =
+          resource.kind === 'role'
+            ? (
+                {
+                  approle: 'approle',
+                  kubernetes: 'kubernetes_role',
+                  jwt: 'jwt_role',
+                  oidc: 'jwt_role',
+                  token: 'token_role',
+                } as Record<string, string>
+              )[String(resource.data.auth_type)]
+            : resource.kind === 'policy'
+              ? 'acl_policy'
+              : resource.kind;
+        if (
+          !rule.object_types.includes(type) &&
+          !rule.object_types.includes(resource.kind)
+        )
+          continue;
+        const actual = resource.data[String(field)];
+        const matched =
+          operator === 'missing'
+            ? actual === undefined || actual === null
+            : operator === 'equals'
+              ? actual === value
+              : operator === 'contains'
+                ? Array.isArray(actual) && actual.includes(value)
+                : typeof actual === 'number' && actual > Number(value);
+        if (matched)
+          candidates.push({
+            ruleId: rule.id,
+            path: resource.path,
+            severity: rule.effectiveSeverity,
+            title: rule.title,
+            evidence: JSON.stringify({
+              field,
+              operator,
+              expected: value,
+              actual: actual ?? null,
+            }),
+            recommendation: rule.remediation,
+          });
+      }
+    } else
+      candidates = legacy.filter((f) => f.ruleId === bindings[rule.detector]);
+    findings.push(
+      ...candidates
+        .filter((f) => {
+          const resource = resourcesByPath.get(f.path);
+          if (!resource) return false;
+          const type =
+            resource.kind === 'role'
+              ? (
+                  {
+                    approle: 'approle',
+                    kubernetes: 'kubernetes_role',
+                    jwt: 'jwt_role',
+                    oidc: 'jwt_role',
+                    token: 'token_role',
+                  } as Record<string, string>
+                )[String(resource.data.auth_type)]
+              : resource.kind === 'policy'
+                ? 'acl_policy'
+                : resource.kind;
+          return (
+            rule.object_types.includes(type) ||
+            rule.object_types.includes(resource.kind) ||
+            (resource.kind === 'role' &&
+              rule.object_types.includes('auth_role'))
+          );
+        })
+        .map((f) => ({
+          ...f,
+          ruleId: rule.id,
+          title: rule.title,
+          recommendation: rule.remediation,
+          severity: rule.effectiveSeverity,
+        })),
+    );
+  }
+  return {
+    findings,
+    configuration: {
+      ...settings,
+      engineVersion: ENGINE_VERSION,
+      catalog: definitions,
+      fingerprint: settingsFingerprint(settings),
+      issues,
+    },
+  };
 }

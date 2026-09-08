@@ -6,7 +6,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { AuditStore } from '../security-audit/store.js';
-import { RULES } from '../security-audit/engine.js';
+import { catalog, SUPPORTED_DETECTORS } from '../security-audit/catalog.js';
 const router = Router();
 const dbPath = path.resolve(
   process.env['VAULTLENS_AUDIT_DB'] || 'data/security-audit.sqlite',
@@ -25,7 +25,46 @@ router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
-router.get('/rules', (_req, res) => res.json({ rules: RULES }));
+router.get('/rules', (_req, res) => {
+  const settings = storage().settings();
+  res.json({
+    settings,
+    catalog: catalog(settings),
+    detectors: SUPPORTED_DETECTORS,
+  });
+});
+router.put('/rules', (req, res) => {
+  const { revision, configYaml, customRulesYaml } = req.body ?? {};
+  if (
+    !Number.isInteger(revision) ||
+    revision < 0 ||
+    typeof configYaml !== 'string' ||
+    typeof customRulesYaml !== 'string'
+  ) {
+    res
+      .status(400)
+      .json({ error: 'Expected revision, configYaml and customRulesYaml' });
+    return;
+  }
+  try {
+    const settings = storage().saveSettings({
+      revision,
+      configYaml,
+      customRulesYaml,
+    });
+    res.json({
+      settings,
+      catalog: catalog(settings),
+      detectors: SUPPORTED_DETECTORS,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Invalid configuration';
+    res
+      .status(message.includes('Settings changed') ? 409 : 400)
+      .json({ error: message });
+  }
+});
 router.get('/runs', (_req, res) =>
   res.json({ runs: storage().list(config.vaultAddr) }),
 );
@@ -66,6 +105,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         target: config.vaultAddr,
         token: req.vaultToken,
         skipTlsVerify: config.vaultSkipTlsVerify,
+        settings: db.settings(),
       },
     });
     active.once('error', () => db.fail(id));

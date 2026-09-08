@@ -1,4 +1,4 @@
-# Native Security Audit: first implementation
+# Native Security Audit
 
 Upstream proposal: https://github.com/Jasonrve/vaultlens/issues/17
 
@@ -12,7 +12,7 @@ The `/security-audit` page adds configuration assessment separately from Vault r
 - An offline CLI using the same engine. No Python, Redis or external database is required.
 - Missing policy checks are suppressed when the policy inventory is incomplete. Unsupported auth types and failed reads make a run partial.
 
-This is a first vertical slice, not a port of the complete Python audit tool. No effective HCL authorization evaluation, policy-manifest planning, aliases, secret-engine configuration, enterprise namespaces, snapshot diff, exceptions, user-supplied rules, remediation or cancellation is implemented yet. Rule definitions are currently TypeScript. A completed run means the implemented collection finished; it does not certify the cluster as secure.
+This remains a partial port of the Python audit tool. See [the parity tracker](audit-parity.md) for the full completion checklist. No effective HCL authorization evaluation, policy-manifest planning, aliases, secret-engine configuration, enterprise namespaces, snapshot diff, exceptions, remediation or cancellation is implemented yet. Rule definitions and configuration are now editable/importable YAML through the Rules and configuration page; execution remains limited to registered native detectors. A completed run means the implemented collection finished; it does not certify the cluster as secure.
 
 ## Run
 
@@ -69,9 +69,9 @@ npm run test:security-audit
 npm run build
 ```
 
-Four focused tests cover policy-name handling, suppression under incomplete coverage, AppRole restriction controls, SQLite persistence, target isolation, the single-running-job constraint and interrupted-run recovery.
+The initial focused tests cover policy-name handling, suppression under incomplete coverage, AppRole restriction controls, SQLite persistence, target isolation, the single-running-job constraint and interrupted-run recovery.
 
-Live synthetic Vault checks confirmed:
+The initial four-rule live synthetic Vault checks confirmed:
 
 - CLI and UI find the missing policy and unbounded Kubernetes subject in a seeded role.
 - CLI exits 1 for that high finding.
@@ -88,3 +88,27 @@ vault server -dev -dev-no-store-token -dev-root-token-id=native-audit-demo -dev-
 ```
 
 Use only synthetic data and a separate application configuration/database directory for this setup.
+
+
+## Rule catalog and configuration revisions
+
+`/security-audit/rules` shows the 35 Python rule definitions plus two temporary native configuration checks. This is a catalog migration, not a claim that all detectors have been ported. Pending detectors remain visible; enabling one produces an analysis coverage gap and exit code 2. Collection gaps and analysis gaps are stored separately and displayed together in the report.
+
+Built-in definitions are immutable package defaults. The environment YAML uses the Python vocabulary: profiles, thresholds, AppRole/JWT/Kubernetes settings, privileged policy names/patterns, and per-rule enabled/severity overrides. Not every setting has a consuming native detector yet; pending rules make that limitation explicit.
+
+Custom rules are YAML documents (`version: 1`, `rule: ...`), separated with `---`. Paste text, import a local YAML file, or append the example in the UI. Import replaces the editor contents; it does not save automatically. Save validates all documents and the configuration together. Duplicate IDs, unknown detectors, invalid overrides, YAML aliases and unknown fields are rejected. Custom YAML is limited to 256 KB and 100 definitions.
+
+The `field_compare` detector supports `equals`, `contains`, `missing` and numeric `greater_than` against direct allowlisted snapshot fields. Rules select object types and carry title, remediation, severity and status. This is a declarative extension mechanism, not JavaScript evaluation. New kinds of analysis still require registered native detector implementations.
+
+SQLite retains configuration revisions. Saves use optimistic concurrency: a stale editor receives HTTP 409 instead of overwriting another save. Each run stores its initiating revision, configuration YAML, custom YAML, resolved rule definitions, engine version, fingerprint and analysis gaps. Previous runs are not changed by later saves. This pins configuration, but native detector code still belongs to the installed engine version; full historical engine replay is not claimed.
+
+The CLI shares the same settings and catalog:
+
+```sh
+node dist/server/security-audit/cli.js rules
+node dist/server/security-audit/cli.js configure audit-config.yml custom-rules.yml
+```
+
+The custom file is optional; omitting it preserves the saved custom rules. `analyze` uses the run's saved configuration where available, with saved rule definitions when present and the currently installed engine. Use separate databases for concurrent CLI/server deployments.
+
+Seven focused tests now include catalog parsing, profile/severity overrides, executable-expression rejection, duplicate IDs, custom detector execution, explicit unported coverage, conflicting updates and historical configuration retention. Browser verification covered appending a YAML rule, saving revision 1, and launching a scan with that rule against the synthetic Kubernetes role.

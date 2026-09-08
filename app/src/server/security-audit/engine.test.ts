@@ -90,3 +90,112 @@ test('durable snapshot, target isolation, one running job and crash recovery', (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+import { catalog, DEFAULT_SETTINGS, parseRule } from './catalog.js';
+import { execute } from './engine.js';
+const customRule = `version: 1
+rule:
+  id: CUSTOM-TTL
+  status: stable
+  severity: low
+  finding_kind: risky_configuration
+  title: Team TTL limit
+  description: Team roles should use short-lived tokens.
+  remediation: Reduce token_ttl.
+  object_types: [kubernetes_role]
+  detector: field_compare
+  parameters: {field: token_ttl, operator: greater_than, value: 3600}
+`;
+test('catalog validates YAML, profiles, overrides and duplicate IDs without executing expressions', () => {
+  const definitions = catalog(DEFAULT_SETTINGS);
+  assert.equal(
+    definitions.filter(
+      (r) => r.source === 'builtin' && !r.id.startsWith('LOCAL-'),
+    ).length,
+    35,
+  );
+  assert.equal(definitions.find((r) => r.id === 'POL-008')?.active, false);
+  const extended = catalog({
+    ...DEFAULT_SETTINGS,
+    configYaml:
+      'version: 1\nprofile: extended\nrules:\n  POL-008: {severity: low}\n',
+  });
+  assert.equal(
+    extended.find((r) => r.id === 'POL-008')?.effectiveSeverity,
+    'low',
+  );
+  assert.equal(extended.find((r) => r.id === 'POL-008')?.active, true);
+  assert.throws(
+    () => parseRule(customRule.replace('field_compare', 'eval')),
+    /Unregistered/,
+  );
+  assert.throws(() =>
+    parseRule(customRule.replace('value: 3600', 'value: 3600, value: 10')),
+  );
+  assert.throws(
+    () =>
+      catalog({
+        ...DEFAULT_SETTINGS,
+        customRulesYaml: customRule + '\n---\n' + customRule,
+      }),
+    /Duplicate/,
+  );
+  assert.throws(
+    () =>
+      catalog({
+        ...DEFAULT_SETTINGS,
+        configYaml: 'version: 1\nrules: {TYPO: {enabled: true}}',
+      }),
+    /Unknown/,
+  );
+});
+test('custom rule runs with scoped object types and severity overrides; unported checks are explicit', () => {
+  const s = snapshot();
+  s.resources[1].data.token_ttl = 7200;
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    customRulesYaml: customRule,
+    configYaml: 'version: 1\nrules:\n  CUSTOM-TTL: {severity: critical}\n',
+  };
+  const result = execute(s, settings);
+  assert.equal(
+    result.findings.find((f) => f.ruleId === 'CUSTOM-TTL')?.severity,
+    'critical',
+  );
+  assert.ok(
+    result.configuration.issues.some((i) => i.path === 'rules/POL-001'),
+  );
+  assert.equal(result.configuration.fingerprint.length, 64);
+  s.resources[1].data.auth_type = 'approle';
+  assert.equal(
+    execute(s, settings).findings.some((f) => f.ruleId === 'CUSTOM-TTL'),
+    false,
+  );
+});
+test('settings revisions reject lost updates and historical runs retain their own configuration', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-settings-'));
+  const store = new AuditStore(join(dir, 'db.sqlite'));
+  try {
+    const current = store.settings();
+    const saved = store.saveSettings({
+      ...current,
+      customRulesYaml: customRule,
+    });
+    assert.equal(saved.revision, 1);
+    assert.throws(() => store.saveSettings(current), /Settings changed/);
+    const s = snapshot();
+    const result = execute(s, saved);
+    const id = store.create(s.target);
+    store.finish(id, s, result.findings, result.configuration);
+    store.saveSettings({ ...saved, customRulesYaml: '' });
+    assert.equal(store.get(id, s.target)?.configuration?.revision, 1);
+    assert.equal(
+      store.get(id, s.target)?.configuration?.customRulesYaml,
+      customRule,
+    );
+    assert.equal(store.get(id, s.target)?.run.status, 'partial');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -45,7 +45,7 @@ api.interceptors.response.use(
         path.startsWith('/shared/') ||
         path.startsWith('/oidc-callback/');
       if (!isPublicPage) {
-        window.location.href = path === '/security-audit' ? '/login?returnTo=security-audit' : '/login';
+        window.location.href = path.startsWith('/security-audit') ? '/login?returnTo=security-audit' : '/login';
       }
     }
     return Promise.reject(error);
@@ -1179,4 +1179,11 @@ export async function getSecurityAuditRun(id: string) {
 }
 export async function startSecurityAudit() {
   const {data} = await api.post<{id: string}>('/security-audit/runs'); return data;
+}
+
+export async function getAuditRules() {
+  const {data}=await api.get<import('../../shared/auditRules').SettingsView>('/security-audit/rules');return data;
+}
+export async function saveAuditRules(settings: import('../../shared/auditRules').RuleSettings) {
+  const {data}=await api.put<import('../../shared/auditRules').SettingsView>('/security-audit/rules',settings);return data;
 }

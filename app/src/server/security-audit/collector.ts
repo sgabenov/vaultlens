@@ -1,6 +1,6 @@
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
-const fields = [
+export const COLLECTED_FIELDS = [
   'name',
   'type',
   'policies',
@@ -14,6 +14,14 @@ const fields = [
   'member_entity_ids',
   'member_group_ids',
   'disabled',
+  'token_ttl',
+  'token_max_ttl',
+  'token_explicit_max_ttl',
+  'token_period',
+  'token_num_uses',
+  'secret_id_ttl',
+  'secret_id_num_uses',
+  'bound_service_account_namespace_selector',
 ];
 export async function collect(
   target: string,
@@ -59,7 +67,7 @@ export async function collect(
       : [];
   const select = (data: Record<string, unknown>) =>
     Object.fromEntries(
-      fields.filter((k) => k in data).map((k) => [k, data[k]]),
+      COLLECTED_FIELDS.filter((k) => k in data).map((k) => [k, data[k]]),
     );
   // Deliberately serial in v1: bounded Vault load and deterministic evidence.
   const policyList = await read('sys/policies/acl', true);

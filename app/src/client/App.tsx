@@ -7,6 +7,7 @@ import * as api from './lib/api';
 import Layout from './components/layout/Layout';
 import LoginPage from './components/auth/LoginPage';
 import OidcCallbackPage from './pages/OidcCallbackPage';
+import AuditRulesPage from './pages/AuditRulesPage';
 import SecurityAuditPage from './pages/SecurityAuditPage';
 import DashboardPage from './pages/DashboardPage';
 import SecretsPage from './pages/SecretsPage';
@@ -45,7 +46,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
 
   if (!isAuthenticated) {
-    return <Navigate to={location.pathname === '/security-audit' ? '/login?returnTo=security-audit' : '/login'} replace />;
+    return <Navigate to={location.pathname.startsWith('/security-audit') ? '/login?returnTo=security-audit' : '/login'} replace />;
   }
   return <>{children}</>;
 }
@@ -241,6 +242,7 @@ function AppRoutes() {
       {/* Read-only audit does not need background-service provisioning. */}
       <Route path="/security-audit" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<SecurityAuditPage />} />
+        <Route path="rules" element={<AuditRulesPage />} />
       </Route>
         <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -34,9 +35,19 @@ export default function SecurityAuditPage() {
     detail.data?.findings.filter(
       (f) => severity === 'all' || f.severity === severity,
     ) ?? [];
+  const issues = [
+    ...(detail.data?.snapshot?.issues ?? []),
+    ...(detail.data?.configuration?.issues ?? []),
+  ];
   const error = runs.error || detail.error || start.error;
   return (
     <div className="space-y-6">
+      <Link
+        to="/security-audit/rules"
+        className="text-sm text-blue-700 underline"
+      >
+        Rules and configuration
+      </Link>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
@@ -63,8 +74,9 @@ export default function SecurityAuditPage() {
       </div>
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
         Read-only collection using your current Vault session. No secret values
-        are collected. This first version checks four configuration rules; it
-        does not prove effective access or evaluate HCL permissions.
+        are collected. Rules use a saved configuration revision. Pending
+        detectors are reported as coverage gaps; this assessment does not prove
+        effective access.
       </div>
       {error && (
         <p
@@ -108,7 +120,7 @@ export default function SecurityAuditPage() {
                 {[
                   ['Resources', detail.data.run.resourceCount],
                   ['Findings', detail.data.run.findingCount],
-                  ['Collection gaps', detail.data.run.issueCount],
+                  ['Coverage gaps', detail.data.run.issueCount],
                 ].map(([label, count]) => (
                   <div
                     key={label}
@@ -131,7 +143,7 @@ export default function SecurityAuditPage() {
                   page.
                 </p>
               )}
-              {!!detail.data.snapshot?.issues.length && (
+              {!!issues.length && (
                 <details
                   className="rounded-lg border border-amber-300 bg-amber-50 p-4"
                   open
@@ -141,7 +153,7 @@ export default function SecurityAuditPage() {
                     check
                   </summary>
                   <ul className="mt-2 space-y-1 text-sm">
-                    {detail.data.snapshot.issues.map((issue, i) => (
+                    {issues.map((issue, i) => (
                       <li key={i}>
                         <code>{issue.path}</code>: {issue.reason}
                       </li>
@@ -158,10 +170,24 @@ export default function SecurityAuditPage() {
                   className="rounded border border-gray-300 p-2 text-sm"
                 >
                   <option value="all">All severities</option>
+                  <option value="critical">Critical</option>
                   <option value="high">High</option>
                   <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                  <option value="info">Info</option>
                 </select>
               </div>
+              {detail.data.configuration && (
+                <details className="rounded border p-3 text-sm">
+                  <summary>
+                    Configuration revision {detail.data.configuration.revision}{' '}
+                    · engine {detail.data.configuration.engineVersion}
+                  </summary>
+                  <pre className="mt-2 overflow-auto text-xs">
+                    {detail.data.configuration.configYaml}
+                  </pre>
+                </details>
+              )}
               {detail.data.snapshot && findings.length === 0 && (
                 <p className="text-sm text-gray-500">
                   No findings match this filter within the implemented checks.
@@ -175,7 +201,7 @@ export default function SecurityAuditPage() {
                 >
                   <div className="flex gap-2">
                     <span
-                      className={`rounded px-2 py-1 text-xs font-semibold ${finding.severity === 'high' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}
+                      className={`rounded px-2 py-1 text-xs font-semibold ${['critical', 'high'].includes(finding.severity) ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}
                     >
                       {finding.severity}
                     </span>
