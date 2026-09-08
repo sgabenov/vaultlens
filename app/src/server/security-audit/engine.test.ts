@@ -555,3 +555,24 @@ test('baseline preserves findings and gates only new identities under the same c
   const a={...original[0],evidence:'{"a":1,"b":2}'};
   assert.equal(findingFingerprint(a),findingFingerprint({...a,evidence:'{"b":2,"a":1}'}));
 });
+
+import { parseExceptions } from './exceptions.js';
+test('expiring exceptions preserve findings, scope policy paths and report unused entries', () => {
+  const s=snapshot(),configuration=execute(s,DEFAULT_SETTINGS).configuration;
+  const finding={ruleId:'POL-001',path:'sys/policies/acl/demo',policyPath:'secret/team/*',severity:'high' as const,title:'Demo',recommendation:'Review',evidence:'{}'};
+  const entry={id:'approved',rule_id:'POL-001',namespace:'root',object_path:'sys/policies/acl/demo',policy_path:'secret/team/*',owner:'security',reason:'Migration deadline',expires:'2026-09-08'};
+  const load=(entries:unknown[])=>parseExceptions(JSON.stringify({version:1,exceptions:entries}),new Set(['POL-001']));
+  const entries=load([entry,{...entry,id:'unused',object_path:'other'},{...entry,id:'expired',expires:'2026-09-07'}]);
+  let controls=applyBaseline([finding],configuration,s.target,undefined,entries,'2026-09-08');
+  assert.equal(controls.states[0].gate,false);
+  assert.equal(controls.states[0].exception?.owner,'security');
+  assert.deepEqual(controls.exceptions.unused.map(e=>e.id),['unused']);
+  assert.deepEqual(controls.exceptions.expired.map(e=>e.id),['expired']);
+  controls=applyBaseline([finding],configuration,s.target,undefined,entries,'2026-09-09');
+  assert.equal(controls.states[0].gate,true);
+  assert.equal(applyBaseline([{...finding,policyPath:'other'}],configuration,s.target,undefined,entries,'2026-09-08').states[0].gate,true);
+  assert.throws(()=>load([entry,entry]),/Duplicate/);
+  assert.throws(()=>load([{...entry,expires:'2026-02-30'}]),/expires/);
+  assert.throws(()=>load([{...entry,owner:''}]),/requires owner/);
+  assert.throws(()=>load([{...entry,rule_id:'unknown'}]),/Unknown/);
+});

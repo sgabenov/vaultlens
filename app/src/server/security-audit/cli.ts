@@ -1,3 +1,4 @@
+import { parseExceptions } from './exceptions.js';
 import { createBaseline, parseBaseline, applyBaseline } from './baseline.js';
 import { compareRuns } from './diff.js';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -14,6 +15,9 @@ const baselineFlag = process.argv.indexOf('--baseline');
 try {
   if(baselineFlag >= 0 && !process.argv[baselineFlag+1]) throw new Error('--baseline requires a file');
   const baseline = baselineFlag < 0 ? undefined : parseBaseline(readFileSync(process.argv[baselineFlag+1], 'utf8'));
+  const exceptionsFlag=process.argv.indexOf('--exceptions');
+  if(exceptionsFlag>=0 && !process.argv[exceptionsFlag+1]) throw new Error('--exceptions requires a file');
+  const exceptions=exceptionsFlag<0 ? [] : parseExceptions(readFileSync(process.argv[exceptionsFlag+1],'utf8'),new Set(catalog(store.settings()).map(r=>r.id)));
   if (command === 'baseline-create' && argument && process.argv[4]) {
     const detail=store.get(argument,target);
     if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
@@ -25,7 +29,7 @@ try {
     try {
       const snapshot = await collect(target, process.env['VAULT_TOKEN']);
       const { findings, configuration, identity } = execute(snapshot, store.settings());
-      const controls=applyBaseline(findings,configuration,target,baseline);
+      const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
       snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
       console.log(
@@ -56,7 +60,7 @@ try {
       detail.snapshot,
       detail.configuration ?? store.settings(),
     );
-    const controls=applyBaseline(findings,configuration,target,baseline);
+    const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
     console.log(
       JSON.stringify(
         {
@@ -93,7 +97,7 @@ try {
     console.log(JSON.stringify(store.list(target), null, 2));
   else
     throw new Error(
-      'Usage: audit scan [--baseline FILE] | list | analyze RUN_ID [--baseline FILE] | baseline-create RUN_ID FILE | diff OLD_RUN_ID NEW_RUN_ID | rules | configure CONFIG_YAML [CUSTOM_RULES_YAML]',
+      'Usage: audit scan [--baseline FILE] [--exceptions FILE] | list | analyze RUN_ID [--baseline FILE] [--exceptions FILE] | baseline-create RUN_ID FILE | diff OLD_RUN_ID NEW_RUN_ID | rules | configure CONFIG_YAML [CUSTOM_RULES_YAML]',
     );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Audit failed');

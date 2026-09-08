@@ -1,3 +1,4 @@
+import { exceptionMatches, validDate, type FindingException } from './exceptions.js';
 import { createHash } from 'node:crypto';
 import { parseDocument } from 'yaml';
 import { canonical } from './diff.js';
@@ -41,14 +42,23 @@ export function parseBaseline(source:string): AuditBaseline {
     throw new Error('Invalid baseline fingerprints');
   return raw as AuditBaseline;
 }
-export function applyBaseline(findings:AuditFinding[], configuration:RunConfiguration, target:string, baseline?:AuditBaseline) {
+export function applyBaseline(findings:AuditFinding[], configuration:RunConfiguration, target:string, baseline?:AuditBaseline, exceptions:FindingException[]=[], today=localDate()) {
   if(baseline && (baseline.target!==target || baseline.config_hash!==configuration.fingerprint || baseline.engine_version!==configuration.engineVersion))
     throw new Error('Baseline target, configuration or engine version is incompatible');
+  if(!validDate(today)) throw new Error('Invalid controls date');
+  const active=exceptions.filter(e=>e.expires>=today), expired=exceptions.filter(e=>e.expires<today), used=new Set<string>();
   const known=new Set(baseline?.fingerprints??[]), current=new Set<string>();
   const states=findings.map(finding=>{
     const fingerprint=findingFingerprint(finding);current.add(fingerprint);
     const baselineStatus=baseline ? known.has(fingerprint)?'unchanged':'new' : null;
-    return {fingerprint,baselineStatus,gate:baselineStatus!=='unchanged'};
+    const exception=active.find(e=>exceptionMatches(e,finding));
+    if(exception) used.add(exception.id);
+    return {fingerprint,baselineStatus,suppressed:!!exception,exception:exception??null,gate:!exception && baselineStatus!=='unchanged'};
   });
-  return {states,absentFingerprints:[...known].filter(f=>!current.has(f)).sort()};
+  return {states,exceptions:{configured:exceptions.length,active:active.length,expired,unused:active.filter(e=>!used.has(e.id))},absentFingerprints:[...known].filter(f=>!current.has(f)).sort()};
+}
+
+function localDate(): string {
+  const now=new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 }
