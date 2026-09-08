@@ -7,6 +7,7 @@ import * as api from './lib/api';
 import Layout from './components/layout/Layout';
 import LoginPage from './components/auth/LoginPage';
 import OidcCallbackPage from './pages/OidcCallbackPage';
+import SecurityAuditPage from './pages/SecurityAuditPage';
 import DashboardPage from './pages/DashboardPage';
 import SecretsPage from './pages/SecretsPage';
 import PoliciesPage from './pages/PoliciesPage';
@@ -40,9 +41,12 @@ const queryClient = new QueryClient({
 });
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const { isAuthenticated } = useAuthStore();
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to={location.pathname === '/security-audit' ? '/login?returnTo=security-audit' : '/login'} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -159,6 +163,7 @@ function SetupRouteGuard({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
+  const location = useLocation();
   const { checkAuth, isAuthenticated } = useAuthStore();
   const { loadBranding } = useBrandingStore();
   const [checking, setChecking] = useState(true);
@@ -180,7 +185,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={
-        isAuthenticated ? <Navigate to="/app" replace /> : <LoginPage />
+        isAuthenticated ? <Navigate to={new URLSearchParams(location.search).get('returnTo') === 'security-audit' ? '/security-audit' : '/app'} replace /> : <LoginPage />
       } />
       {/* OIDC popup callback — public, no Layout, no auth guard */}
       <Route path="/oidc-callback/:mountPath" element={<OidcCallbackPage />} />
@@ -232,6 +237,10 @@ function AppRoutes() {
         <Route path="/admin/sharing-audit" element={<VaultLensAuditPage />} />
         <Route path="/tools/share" element={<ShareSecretPage />} />
         <Route path="/tools/generator" element={<SecretGeneratorPage />} />
+      </Route>
+      {/* Read-only audit does not need background-service provisioning. */}
+      <Route path="/security-audit" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route index element={<SecurityAuditPage />} />
       </Route>
         <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

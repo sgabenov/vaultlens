@@ -1,0 +1,90 @@
+# Native Security Audit: first implementation
+
+Upstream proposal: https://github.com/Jasonrve/vaultlens/issues/17
+
+The `/security-audit` page adds configuration assessment separately from Vault request audit logs. The TypeScript collector, rule engine and CLI live in `app/src/server/security-audit`; shared response types live in `app/src/shared/securityAudit.ts`.
+
+## Included
+
+- Read-only API collection of ACL policy source, entities, groups and roles for AppRole, Kubernetes, JWT/OIDC and token auth mounts.
+- Four checks: root policy assignments, missing assigned policies, AppRole without SecretID/CIDR bindings, and Kubernetes roles wildcarding both service accounts and namespaces.
+- A SQLite snapshot and findings per run, history, severity filtering, collection gap details, and a background worker.
+- An offline CLI using the same engine. No Python, Redis or external database is required.
+- Missing policy checks are suppressed when the policy inventory is incomplete. Unsupported auth types and failed reads make a run partial.
+
+This is a first vertical slice, not a port of the complete Python audit tool. No effective HCL authorization evaluation, policy-manifest planning, aliases, secret-engine configuration, enterprise namespaces, snapshot diff, exceptions, user-supplied rules, remediation or cancellation is implemented yet. Rule definitions are currently TypeScript. A completed run means the implemented collection finished; it does not certify the cluster as secure.
+
+## Run
+
+Requires Node.js 22.13 or newer (uses built-in `node:sqlite`). Tested locally with Node 26.0.0 and Vault 1.21.4.
+
+```sh
+cd app
+npm ci
+npm run build
+HOST=127.0.0.1 VAULT_ADDR=https://vault.example.com npm start
+```
+
+Open `http://127.0.0.1:3001/security-audit` and sign in. This route bypasses the background-service setup wizard, but still requires authentication and server-side administrator authorization (`root` or `vaultlens-admin`, consistent with the existing admin middleware). Direct login from the audit page returns to it.
+
+The audit worker uses the initiating user's token in memory. It does not use the system token, persist login tokens, or collect secret values. Stored resource fields are allowlisted; arbitrary auth configuration and identity metadata are not copied. Policy source is preserved as configuration evidence, so the database is still sensitive.
+
+For a read-only evaluation, leave `VAULT_SYSTEM_TOKEN` and other background-service credentials unset. Existing VaultLens startup behavior with configured service credentials is unchanged and can write service policies or start other background services. Do not interpret this module's read-only collector as making the entire application read-only.
+
+Use `VAULTLENS_AUDIT_DB=/path/to/security-audit.sqlite` to set the database path (default: `app/data/security-audit.sqlite` when started from `app`). The file is created with mode 0600, uses WAL and needs a writable persistent directory. The standard `app/data` directory is ignored by Git.
+
+The initial deployment contract is one application instance and one active audit job. Do not share its database with another server or concurrently running CLI. At first authenticated access after a server restart, stale running jobs are marked interrupted; no credentials are retained to resume them. Completed snapshots remain available. There is no automated retention policy yet; use a separate CLI database for experiments.
+
+All current VaultLens administrators can read snapshots for the configured Vault address. This is not per-user snapshot isolation. Collection privileges can differ from snapshot-viewing privileges; deploy only where this administrator trust boundary is appropriate. Namespace support and finer audit-specific RBAC need a separate change.
+
+Collection is serial in v1 to limit load, and records start/end times rather than claiming atomic consistency. SQLite stores one JSON snapshot per run; large-inventory pagination and storage optimization have not been implemented or load-tested.
+
+## CLI and CI
+
+The CLI reads `VAULT_ADDR` and `VAULT_TOKEN` from the environment. It does not read or write `~/.vault-token`.
+
+```sh
+# From app/, after npm run build. Supply VAULT_TOKEN through your normal secret mechanism.
+VAULTLENS_AUDIT_DB=/tmp/audit-ci.sqlite npm run audit -- scan
+VAULTLENS_AUDIT_DB=/tmp/audit-ci.sqlite npm run audit -- list
+VAULTLENS_AUDIT_DB=/tmp/audit-ci.sqlite npm run audit -- analyze RUN_ID
+```
+
+Keep the same `VAULT_ADDR` for offline lookup. `analyze` requires no token or network connection and does not overwrite the original findings. To capture clean JSON, invoke `node dist/server/security-audit/cli.js ...` directly; npm prints its own script banner.
+
+Exit codes: 0 = no high findings within implemented checks and complete collection; 1 = high findings; 2 = incomplete collection, failed execution or invalid command. Partial coverage takes precedence over findings. Medium findings remain in the report but do not fail CI in v1.
+
+API endpoints, all protected by authentication and administrator checks:
+
+- `GET /api/security-audit/rules`
+- `GET /api/security-audit/runs`
+- `POST /api/security-audit/runs` (CSRF protection applies; returns 202 and run ID)
+- `GET /api/security-audit/runs/:id`
+
+## Validation
+
+```sh
+cd app
+npm run test:security-audit
+npm run build
+```
+
+Four focused tests cover policy-name handling, suppression under incomplete coverage, AppRole restriction controls, SQLite persistence, target isolation, the single-running-job constraint and interrupted-run recovery.
+
+Live synthetic Vault checks confirmed:
+
+- CLI and UI find the missing policy and unbounded Kubernetes subject in a seeded role.
+- CLI exits 1 for that high finding.
+- An unauthenticated API request gets 401; a default-policy user gets 403.
+- An administrator token without collection privileges produces a partial run with four collection gaps and no fabricated missing-policy finding.
+- Browser login, background execution and rendered findings work without a system token.
+- Both production and development worker entry points complete against the disposable Vault.
+- The new page passes targeted ESLint. Full client typechecking reports the same existing errors as unmodified upstream; the production build and server typecheck pass.
+
+Disposable Vault command (never omit the no-store flag):
+
+```sh
+vault server -dev -dev-no-store-token -dev-root-token-id=native-audit-demo -dev-listen-address=127.0.0.1:18200
+```
+
+Use only synthetic data and a separate application configuration/database directory for this setup.

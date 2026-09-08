@@ -45,7 +45,7 @@ api.interceptors.response.use(
         path.startsWith('/shared/') ||
         path.startsWith('/oidc-callback/');
       if (!isPublicPage) {
-        window.location.href = '/login';
+        window.location.href = path === '/security-audit' ? '/login?returnTo=security-audit' : '/login';
       }
     }
     return Promise.reject(error);
@@ -1168,4 +1168,15 @@ export interface ChangelogEntry {
 export async function getChangelog(): Promise<Record<string, ChangelogEntry>> {
   const { data } = await api.get<Record<string, ChangelogEntry>>('/sys/changelog');
   return data;
+}
+
+// Configuration snapshot audit (separate from Vault request audit logs).
+export async function getSecurityAuditRuns() {
+  const {data} = await api.get<{runs: import('../../shared/securityAudit').AuditRun[]}>('/security-audit/runs'); return data.runs;
+}
+export async function getSecurityAuditRun(id: string) {
+  const {data} = await api.get<import('../../shared/securityAudit').AuditDetail>(`/security-audit/runs/${encodeURIComponent(id)}`); return data;
+}
+export async function startSecurityAudit() {
+  const {data} = await api.post<{id: string}>('/security-audit/runs'); return data;
 }
