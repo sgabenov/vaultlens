@@ -1053,6 +1053,14 @@ test('recursive collection scopes headers and shares object limits across namesp
     assert.ok(checkpoints.length>3);
     assert.ok(checkpoints.every(value=>value.finishedAt==='' && value.analysisPerformed===false));
     assert.deepEqual(checkpoints.at(-1)?.checkpoint?.completedNamespaces,['','team','team/child']);
+    const checkpoint=checkpoints.find(value=>value.checkpoint?.completedNamespaces.length===1)!;
+    seen.length=0;
+    const resumed=await collect(target,'fixture-token',false,options,undefined,undefined,{snapshot:checkpoint,maxAgeMs:86400000});
+    assert.equal(resumed.resources.length,3);
+    assert.ok(!seen.includes(':/v1/sys/policies/acl'));
+    assert.ok(seen.includes('team:/v1/sys/policies/acl'));
+    assert.equal(resumed.startedAt,checkpoint.startedAt);
+    await assert.rejects(()=>collect(target,'fixture-token',false,{...options,workers:1},undefined,undefined,{snapshot:checkpoint,maxAgeMs:86400000}),/options differ/);
     assert.ok(progress.some(value=>value.phase==='Policies' && value.namespace==='team/child'));
     assert.equal(progress.at(-1)?.resources,3);
     assert.equal(progress.at(-1)?.requests,s.collection?.metrics.requests);
@@ -1116,4 +1124,18 @@ test('checkpoints survive recovery without becoming finished snapshots or retain
     assert.equal(store.get(id,s.target)!.snapshot!.resources.length,2);
     assert.throws(()=>exportAudit(saved,'json'),/finished snapshot/);
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+import { prepareResume } from './resume.js';
+test('resume validates checkpoint age and recollects namespaces with missing source', () => {
+  const s=snapshot();s.finishedAt='';
+  s.checkpoint={savedAt:new Date().toISOString(),completedNamespaces:['']};
+  s.collection={requestPolicy:parseCollectionOptions({}),metrics:{requests:1,retries:0,rateWaitMs:0,retryWaitMs:0}};
+  assert.ok(prepareResume(s,s.target).reusable.has(''));
+  delete s.resources[0].data.hcl;
+  assert.equal(prepareResume(s,s.target).reusable.size,0);
+  assert.throws(()=>prepareResume(s,s.target,1000,Date.now()+2000),/too old/);
+  assert.throws(()=>prepareResume(s,'http://different.invalid'),/matching/);
+  assert.equal(parseAuditArguments(['resume','run','--checkpoint-max-age-ms','1000']).checkpointMaxAgeMs,1000);
+  assert.throws(()=>parseAuditArguments(['resume','run','--checkpoint-max-age-ms','0']),/max age/);
 });

@@ -1,3 +1,4 @@
+import { prepareResume } from './resume.js';
 import { normalizeNamespace } from './namespaces.js';
 import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
@@ -62,8 +63,11 @@ export async function collect(
   requestOptions: Partial<CollectionOptions> = {},
   onProgress?: (progress:import('../../shared/securityAudit.js').AuditProgress)=>void,
   onCheckpoint?: (snapshot:AuditSnapshot)=>void,
+  resume?:{snapshot:AuditSnapshot;maxAgeMs:number},
 ): Promise<AuditSnapshot> {
   const policyOptions=parseCollectionOptions(requestOptions);
+  const previous=resume?prepareResume(resume.snapshot,target,resume.maxAgeMs):undefined;
+  if(previous && JSON.stringify(previous.options)!==JSON.stringify(policyOptions)) throw new Error('Checkpoint collection options differ');
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
   const matches=(value:string,patterns:string[])=>!patterns.length||patterns.some(pattern=>globMatch(pattern,value));
   const limitAbort=new AbortController();
@@ -287,7 +291,20 @@ export async function collect(
   snapshot.namespaces=selected;
   snapshot.namespacePolicyCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
   snapshot.namespaceAliasCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
+  if(resume && previous) {
+    snapshot.startedAt=resume.snapshot.startedAt;
+    for(const current of selected.filter(namespace=>previous.reusable.has(namespace))) {
+      snapshot.resources.push(...structuredClone(resume.snapshot.resources.filter(resource=>(resource.namespace??'')===current)));
+      snapshot.namespacePolicyCompleteness[current]=resume.snapshot.namespacePolicyCompleteness?.[current]??false;
+      snapshot.namespaceAliasCompleteness[current]=resume.snapshot.namespaceAliasCompleteness?.[current]??false;
+      completedNamespaces.push(current);
+    }
+    countedObjects=snapshot.resources.filter(resource=>!['auth-mount','secret-mount'].includes(resource.kind)).length;
+    for(const metric of ['requests','retries','rateWaitMs','retryWaitMs'] as const)
+      policy.metrics[metric]+=resume.snapshot.collection!.metrics[metric];
+  }
   for(const current of selected) {
+    if(completedNamespaces.includes(current)) continue;
     if(signal.aborted) break;
     selectNamespace(current);
     const issueStart=snapshot.issues.length;

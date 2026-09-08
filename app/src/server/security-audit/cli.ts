@@ -1,3 +1,4 @@
+import { prepareResume } from './resume.js';
 import { importPythonSnapshot } from './pythonImport.js';
 import { withoutPolicySource } from './sourceRedaction.js';
 import { snapshotNamespaces, normalizeNamespace } from './namespaces.js';
@@ -48,11 +49,16 @@ try {
       console.log(JSON.stringify({id,snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot,analysisPerformed:false},null,2));
       process.exitCode=snapshot.issues.length && options.requireComplete ? 2 : 0;
     } catch(error) {store.fail(id);throw error;}
-  } else if (command === 'scan') {
+  } else if (command === 'scan' || command === 'resume') {
     if (!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
+    const source=command==='resume'?store.get(argument,target):null;
+    if(command==='resume' && (!source?.snapshot || !['interrupted','failed'].includes(source.run.status))) throw new Error('Resume requires a failed or interrupted checkpoint');
+    const resume=source?.snapshot?{snapshot:source.snapshot,maxAgeMs:options.checkpointMaxAgeMs}:undefined;
+    const requestPolicy=resume?prepareResume(resume.snapshot,target,resume.maxAgeMs).options:options.requestPolicy;
     const id = store.create(target);
     try {
-      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot));
+      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot),resume);
+      if(source) snapshot.sourceRunId=source.run.id;
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));
       snapshot.controls = controls;
@@ -60,7 +66,7 @@ try {
       snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
       console.log(
-        JSON.stringify({ id, snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot, findings, configuration, controls }, null, 2),
+        JSON.stringify({ id, snapshot:requestPolicy.redactPolicySource?withoutPolicySource(snapshot):snapshot, findings, configuration, controls }, null, 2),
       );
       process.exitCode = auditExitCode(findings.filter((_,i)=>controls.states[i].gate).map(f=>f.severity),
         !!(snapshot.issues.length || configuration.issues.length),options);

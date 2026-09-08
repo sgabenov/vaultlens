@@ -4,9 +4,9 @@ import { SEVERITIES, type Severity } from '../../shared/auditRules.js';
 export function parseAuditArguments(args:string[]) {
   const command=args[0], positionals:string[]=[], options:Record<string,string|boolean>={};
   const filters:Record<string,string[]>={'--namespace-filter':[],'--policy-filter':[],'--auth-mount-filter':[],'--auth-type-filter':[]};
-  const arities:Record<string,[number,number]>={'import-python':[1,1],export:[2,2],collect:[0,0],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
+  const arities:Record<string,[number,number]>={resume:[1,1],'import-python':[1,1],export:[2,2],collect:[0,0],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
   if(!command || !arities[command]) throw new Error('Expected import-python, export, collect, scan, analyze, diff, baseline-create, rules, list or configure');
-  const analysis=['scan','analyze'].includes(command), gating=analysis||command==='diff';
+  const analysis=['resume','scan','analyze'].includes(command), gating=analysis||command==='diff';
   for(let i=1;i<args.length;i++) {
     const token=args[i];
     if(!token.startsWith('--')) {positionals.push(token);continue;}
@@ -16,7 +16,7 @@ export function parseAuditArguments(args:string[]) {
       filters[token].push(value);continue;
     }
     if(Object.hasOwn(options,token)) throw new Error(`Duplicate option ${token}`);
-    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--namespace','--policy-filter','--auth-mount-filter','--auth-type-filter','--max-objects','--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && ['scan','collect'].includes(command)) {
+    if(token==='--checkpoint-max-age-ms' && command==='resume' || ['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--namespace','--policy-filter','--auth-mount-filter','--auth-type-filter','--max-objects','--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && ['scan','collect'].includes(command)) {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
     } else if(token==='--recursive-namespaces' && ['scan','collect'].includes(command)) options[token]=true;
@@ -33,13 +33,15 @@ export function parseAuditArguments(args:string[]) {
   if(failOn!=='none' && !SEVERITIES.includes(failOn as Severity)) throw new Error('Invalid --fail-on severity');
   const format=String(options['--format']??'json');
   if(!EXPORT_FORMATS.includes(format as ExportFormat)) throw new Error('Invalid export format');
+  const checkpointMaxAgeMs=Number(options['--checkpoint-max-age-ms']??86400000);
+  if(!Number.isSafeInteger(checkpointMaxAgeMs)||checkpointMaxAgeMs<1||checkpointMaxAgeMs>604800000) throw new Error('Invalid checkpoint max age');
   const requestPolicy={...DEFAULT_REQUEST_POLICY};
   for(const [flag,key] of [['--retries','retries'],['--requests-per-second','requestsPerSecond'],['--retry-backoff-ms','retryBackoffMs']] as const)
     if(options[flag]!==undefined) requestPolicy[key]=Number(options[flag]);
   validateRequestPolicy(requestPolicy);
   const workers=Number(options['--workers']??10);
   if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  return {command,positionals,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,redactPolicySource:!!options['--redact-policy-source'],recursiveNamespaces:!!options['--recursive-namespaces'],namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],namespaceFilters:filters['--namespace-filter'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  return {command,positionals,checkpointMaxAgeMs,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,redactPolicySource:!!options['--redact-policy-source'],recursiveNamespaces:!!options['--recursive-namespaces'],namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],namespaceFilters:filters['--namespace-filter'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }
