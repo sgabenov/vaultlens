@@ -1,0 +1,26 @@
+import { stringify } from 'yaml';
+import type { AuditDetail } from '../../shared/securityAudit.js';
+export const EXPORT_FORMATS=['json','jsonl','yaml','csv'] as const;
+export type ExportFormat=typeof EXPORT_FORMATS[number];
+export function exportAudit(detail:AuditDetail,format:ExportFormat):string {
+  if(!detail.snapshot || !['completed','partial'].includes(detail.run.status)) throw new Error('Export requires a finished snapshot');
+  if(format==='json') return JSON.stringify(detail,null,2)+'\n';
+  if(format==='yaml') return stringify(detail,{lineWidth:0});
+  if(format==='jsonl') return [
+    {type:'metadata',run:detail.run,configuration:detail.configuration??null},
+    ...detail.snapshot.resources.map(resource=>({type:'resource',resource})),
+    ...detail.findings.map(finding=>({type:'finding',finding})),
+    ...detail.snapshot.issues.map(issue=>({type:'collection_issue',issue})),
+    ...(detail.configuration?.issues??[]).map(issue=>({type:'analysis_issue',issue})),
+    ...(detail.snapshot.identity?.assignments??[]).map(assignment=>({type:'identity_assignment',assignment})),
+  ].map(record=>JSON.stringify(record)).join('\n')+'\n';
+  // Spreadsheet programs can execute untrusted policy names as formulas.
+  const cell=(value:unknown)=>{
+    let text=value==null?'':String(value);
+    if(/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text="'"+text;
+    return '"'+text.replaceAll('"','""')+'"';
+  };
+  const rows:unknown[][]=[['run_id','rule_id','severity','object_path','policy_path','title','evidence','recommendation']];
+  for(const f of detail.findings) rows.push([detail.run.id,f.ruleId,f.severity,f.path,f.policyPath,f.title,f.evidence,f.recommendation]);
+  return rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
+}

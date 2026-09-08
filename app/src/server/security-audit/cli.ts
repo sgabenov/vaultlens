@@ -1,3 +1,4 @@
+import { exportAudit } from './exporter.js';
 import { parseAuditArguments, auditExitCode } from './cliOptions.js';
 import { parseExceptions } from './exceptions.js';
 import { createBaseline, parseBaseline, applyBaseline } from './baseline.js';
@@ -18,7 +19,12 @@ try {
   const exceptionSource=options.exceptions ? readFileSync(options.exceptions,'utf8') : undefined;
   const exceptionSettings=command==='analyze' && argument ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();
   const exceptions=exceptionSource !== undefined ? parseExceptions(exceptionSource,new Set((exceptionSettings as import('../../shared/auditRules.js').RunConfiguration).catalog?.map(r=>r.id) ?? catalog(exceptionSettings).map(r=>r.id))) : [];
-  if (command === 'baseline-create' && argument && second) {
+  if (command === 'export' && argument && second) {
+    const detail=store.get(argument,target);
+    if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
+    writeFileSync(second,exportAudit(detail,options.format),{mode:0o600,flag:'wx'});
+    console.log(JSON.stringify({export:second,format:options.format,runId:argument}));
+  } else if (command === 'baseline-create' && argument && second) {
     const detail=store.get(argument,target);
     if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
     writeFileSync(second, JSON.stringify(createBaseline(detail),null,2)+'\n', {mode:0o600,flag:'wx'});

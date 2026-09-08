@@ -593,3 +593,21 @@ test('CI arguments reject ignored flags and gate severity independently of compl
   assert.equal(auditExitCode(['critical'],false,{...options,failOn:'none'}),0);
   assert.equal(auditExitCode([],true,parseAuditArguments(['scan','--allow-incomplete'])),0);
 });
+
+import { exportAudit } from './exporter.js';
+test('offline exports preserve evidence and protect CSV cells from formula execution', () => {
+  const s=snapshot(),result=execute(s,DEFAULT_SETTINGS);
+  const detail: import('../../shared/securityAudit.js').AuditDetail={snapshot:s,configuration:result.configuration,findings:[{
+    ruleId:'DEMO',path:'=HYPERLINK("external")',severity:'high',title:'A, "quote"',evidence:'first\nsecond',recommendation:'Review'}],
+    run:{id:'demo',target:s.target,startedAt:s.startedAt,finishedAt:s.finishedAt,status:'completed',resourceCount:2,issueCount:0,findingCount:1}};
+  assert.deepEqual(JSON.parse(exportAudit(detail,'json')),detail);
+  const lines=exportAudit(detail,'jsonl').trim().split('\n').map(line=>JSON.parse(line));
+  assert.equal(lines.filter(r=>r.type==='finding')[0].finding.evidence,'first\nsecond');
+  assert.equal(lines.filter(r=>r.type==='resource').length,s.resources.length);
+  const csv=exportAudit(detail,'csv');
+  assert.ok(csv.includes('"\'=HYPERLINK(""external"")"'));
+  assert.ok(csv.includes('"A, ""quote"""'));
+  assert.ok(exportAudit(detail,'yaml').includes('ruleId: DEMO'));
+  assert.equal(parseAuditArguments(['export','run','file','--format','jsonl']).format,'jsonl');
+  assert.throws(()=>parseAuditArguments(['export','run','file','--format','unknown']),/format/);
+});

@@ -1,14 +1,15 @@
+import { EXPORT_FORMATS, type ExportFormat } from './exporter.js';
 import { SEVERITIES, type Severity } from '../../shared/auditRules.js';
 export function parseAuditArguments(args:string[]) {
   const command=args[0], positionals:string[]=[], options:Record<string,string|boolean>={};
-  const arities:Record<string,[number,number]>={scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
-  if(!command || !arities[command]) throw new Error('Expected scan, analyze, diff, baseline-create, rules, list or configure');
+  const arities:Record<string,[number,number]>={export:[2,2],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
+  if(!command || !arities[command]) throw new Error('Expected export, scan, analyze, diff, baseline-create, rules, list or configure');
   const analysis=['scan','analyze'].includes(command), gating=analysis||command==='diff';
   for(let i=1;i<args.length;i++) {
     const token=args[i];
     if(!token.startsWith('--')) {positionals.push(token);continue;}
     if(Object.hasOwn(options,token)) throw new Error(`Duplicate option ${token}`);
-    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating) {
+    if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export') {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
     } else if(['--require-complete','--allow-incomplete'].includes(token) && gating) options[token]=true;
@@ -19,7 +20,9 @@ export function parseAuditArguments(args:string[]) {
   if(options['--require-complete'] && options['--allow-incomplete']) throw new Error('Conflicting completeness options');
   const failOn=String(options['--fail-on']??'high');
   if(failOn!=='none' && !SEVERITIES.includes(failOn as Severity)) throw new Error('Invalid --fail-on severity');
-  return {command,positionals,baseline:options['--baseline'] as string|undefined,
+  const format=String(options['--format']??'json');
+  if(!EXPORT_FORMATS.includes(format as ExportFormat)) throw new Error('Invalid export format');
+  return {command,positionals,format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }
