@@ -20,7 +20,7 @@ try {
     progress({namespace:'',phase:'Importing Python snapshot',resources:0,requests:0,updatedAt:new Date().toISOString()});
     store.finish(id,importPythonSnapshot(importPath,target),[]);
   } else {
-  const snapshot = sourceRunId ? store.get(sourceRunId,target)?.snapshot : await collect(target, token, skipTlsVerify, collectionOptions,progress);
+  const snapshot = sourceRunId ? store.get(sourceRunId,target)?.snapshot : await collect(target, token, skipTlsVerify, collectionOptions,progress,snapshot=>store.saveCheckpoint(id,snapshot));
   if(!snapshot) throw new Error('Source snapshot not found');
   if(sourceRunId) snapshot.sourceRunId=sourceRunId;
   progress({namespace:'',phase:'Analyzing snapshot',resources:snapshot.resources.length,requests:snapshot.collection?.metrics.requests??0,updatedAt:new Date().toISOString()});

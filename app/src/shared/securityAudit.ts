@@ -16,6 +16,7 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  checkpoint?:{savedAt:string;completedNamespaces:string[]};
   importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string;collection?:{
     scope:{policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
     maxObjects:number;sources:string[];recursiveNamespaces:boolean;namespaceFilters:string[];

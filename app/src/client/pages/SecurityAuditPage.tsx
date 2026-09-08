@@ -193,6 +193,9 @@ export default function SecurityAuditPage() {
                   {detail.data.run.failureReason || 'This run did not finish and has no valid completed snapshot.'}
                 </p>
               )}
+              {detail.data.snapshot?.checkpoint && ['failed','interrupted'].includes(detail.data.run.status) && <p className="text-sm">
+                Checkpoint retained from {detail.data.snapshot.checkpoint.savedAt}: {detail.data.snapshot.resources.length} resources. Collection did not finish.
+              </p>}
               {detail.data.run.status === 'running' && (
                 <p className="text-sm text-gray-600">
                   {detail.data.run.progress ? `${detail.data.run.progress.phase} · namespace ${detail.data.run.progress.namespace || 'root'} · ${detail.data.run.progress.resources} resources · ${detail.data.run.progress.requests} requests` : 'Audit is running in the background. You can leave this page.'}
@@ -244,7 +247,7 @@ export default function SecurityAuditPage() {
                 <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
               </details>}
               <div className="rounded border p-3 text-sm">
-                <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending}
+                <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending||!['collected','completed','partial'].includes(detail.data.run.status)}
                   onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
                 <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and the controls selected above. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}

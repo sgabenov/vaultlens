@@ -61,6 +61,7 @@ export async function collect(
   skipTlsVerify = false,
   requestOptions: Partial<CollectionOptions> = {},
   onProgress?: (progress:import('../../shared/securityAudit.js').AuditProgress)=>void,
+  onCheckpoint?: (snapshot:AuditSnapshot)=>void,
 ): Promise<AuditSnapshot> {
   const policyOptions=parseCollectionOptions(requestOptions);
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
@@ -82,9 +83,11 @@ export async function collect(
     policiesComplete: false,
     collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics,scope:{policyFilters:policyOptions.policyFilters,authMountFilters:policyOptions.authMountFilters,authTypeFilters:policyOptions.authTypeFilters,skipIdentity:policyOptions.skipIdentity}},
   };
+  const completedNamespaces:string[]=[];
+  const checkpoint=()=>onCheckpoint?.({...snapshot,finishedAt:'',analysisPerformed:false,policiesComplete:false,checkpoint:{savedAt:new Date().toISOString(),completedNamespaces:[...completedNamespaces]}});
   let phase='Starting';
   const report=()=>onProgress?.({namespace,phase,resources:snapshot.resources.length,requests:policy.metrics.requests,updatedAt:new Date().toISOString()});
-  const stage=(value:string)=>{phase=value;report();};
+  const stage=(value:string)=>{phase=value;report();if(value!=='Namespace discovery' && value!=='Collection finished') checkpoint();};
   let aliasesComplete=false;
   let countedObjects=0;
   function addResource(resource: import('../../shared/securityAudit.js').AuditResource) {
@@ -292,6 +295,8 @@ export async function collect(
     snapshot.namespacePolicyCompleteness[current]=snapshot.policiesComplete && !signal.aborted;
     snapshot.namespaceAliasCompleteness[current]=aliasesComplete && !signal.aborted;
     for(const issue of snapshot.issues.slice(issueStart)) if(current) issue.namespace=current;
+    if(!signal.aborted) completedNamespaces.push(current);
+    checkpoint();
   }
   snapshot.policiesComplete=selected.length>0 && selected.every(value=>snapshot.namespacePolicyCompleteness![value]);
   snapshot.resources.sort((a,b)=>(a.namespace??'').localeCompare(b.namespace??'')||a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));

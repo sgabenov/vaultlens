@@ -123,6 +123,11 @@ export class AuditStore {
         id,
       );
   }
+  saveCheckpoint(id:string,snapshot:AuditSnapshot) {
+    const saved=snapshot.collection?.requestPolicy.redactPolicySource ? withoutPolicySource(snapshot) : snapshot;
+    this.db.prepare("UPDATE audit_runs SET snapshot=?,resourceCount=? WHERE id=? AND status='running'")
+      .run(JSON.stringify({...saved,analysisPerformed:false,finishedAt:'',policiesComplete:false}),snapshot.resources.length,id);
+  }
   updateProgress(id:string,progress:import('../../shared/securityAudit.js').AuditProgress) {
     this.db.prepare("UPDATE audit_runs SET progress=?,resourceCount=? WHERE id=? AND status='running'").run(JSON.stringify(progress),progress.resources,id);
   }

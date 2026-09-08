@@ -43,7 +43,7 @@ try {
     if(!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
     const id=store.create(target);
     try {
-      const snapshot=await collect(target,process.env['VAULT_TOKEN'],false,options.requestPolicy);
+      const snapshot=await collect(target,process.env['VAULT_TOKEN'],false,options.requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot));
       store.finish(id,snapshot,[]);
       console.log(JSON.stringify({id,snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot,analysisPerformed:false},null,2));
       process.exitCode=snapshot.issues.length && options.requireComplete ? 2 : 0;
@@ -52,7 +52,7 @@ try {
     if (!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
     const id = store.create(target);
     try {
-      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy);
+      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot));
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));
       snapshot.controls = controls;
@@ -78,6 +78,7 @@ try {
   } else if (command === 'analyze' && argument) {
     const detail = store.get(argument, target);
     if (!detail?.snapshot) throw new Error('Snapshot not found for VAULT_ADDR');
+    if (!detail.snapshot.finishedAt || !['collected','completed','partial'].includes(detail.run.status)) throw new Error('Analysis requires a finished snapshot; the saved checkpoint is incomplete');
     const { findings, configuration, identity } = execute(
       detail.snapshot,
       options.currentRules ? store.settings() : detail.configuration ?? store.settings(),

@@ -1048,7 +1048,11 @@ test('recursive collection scopes headers and shares object limits across namesp
     const target=`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
     const options={recursiveNamespaces:true,retries:0,requestsPerSecond:1000,maxDurationMs:5000};
     const progress:import('../../shared/securityAudit.js').AuditProgress[]=[];
-    const s=await collect(target,'fixture-token',false,options,value=>progress.push(value));
+    const checkpoints:AuditSnapshot[]=[];
+    const s=await collect(target,'fixture-token',false,options,value=>progress.push(value),value=>checkpoints.push(structuredClone(value)));
+    assert.ok(checkpoints.length>3);
+    assert.ok(checkpoints.every(value=>value.finishedAt==='' && value.analysisPerformed===false));
+    assert.deepEqual(checkpoints.at(-1)?.checkpoint?.completedNamespaces,['','team','team/child']);
     assert.ok(progress.some(value=>value.phase==='Policies' && value.namespace==='team/child'));
     assert.equal(progress.at(-1)?.resources,3);
     assert.equal(progress.at(-1)?.requests,s.collection?.metrics.requests);
@@ -1089,5 +1093,27 @@ test('saved progress is observable only while a run can still change', () => {
     store.updateProgress(id,{...progress,resources:999});
     assert.equal(store.get(id,s.target)!.run.resourceCount,s.resources.length);
     assert.deepEqual(store.get(id,s.target)!.run.progress,progress);
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('checkpoints survive recovery without becoming finished snapshots or retaining source', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-checkpoint-'));
+  const path=join(directory,'audit.sqlite');
+  let store=new AuditStore(path);
+  try {
+    const s=snapshot(),id=store.create(s.target);
+    s.collection={requestPolicy:{retries:0,requestsPerSecond:10,retryBackoffMs:0,redactPolicySource:true},metrics:{requests:2,retries:0,rateWaitMs:0,retryWaitMs:0}};
+    s.checkpoint={savedAt:new Date().toISOString(),completedNamespaces:['team']};
+    store.saveCheckpoint(id,s);store.close();store=new AuditStore(path);store.recover();
+    const saved=store.get(id,s.target)!;
+    assert.equal(saved.run.status,'interrupted');
+    assert.equal(saved.snapshot!.finishedAt,'');
+    assert.equal(saved.snapshot!.analysisPerformed,false);
+    assert.equal(saved.snapshot!.policiesComplete,false);
+    assert.equal(saved.snapshot!.resources[0].data.hcl,undefined);
+    assert.deepEqual(saved.snapshot!.checkpoint?.completedNamespaces,['team']);
+    store.saveCheckpoint(id,{...s,resources:[]});
+    assert.equal(store.get(id,s.target)!.snapshot!.resources.length,2);
+    assert.throws(()=>exportAudit(saved,'json'),/finished snapshot/);
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });
