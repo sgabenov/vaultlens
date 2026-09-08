@@ -58,10 +58,11 @@ export async function collect(
   const limitAbort=new AbortController();
   const signal=AbortSignal.any([AbortSignal.timeout(maxDurationMs),limitAbort.signal]);
   const policy=createRequestPolicy(policyOptions,undefined,signal);
-  const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal});
+  const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal,namespace:policyOptions.namespace});
   const snapshot: AuditSnapshot = {
     version: 1,
     analysisPerformed: false,
+    namespaces:[policyOptions.namespace],
     target,
     startedAt: new Date().toISOString(),
     finishedAt: '',
@@ -80,7 +81,7 @@ export async function collect(
       limitAbort.abort();return;
     }
     if(counted) countedObjects++;
-    snapshot.resources.push(resource);
+    snapshot.resources.push(policyOptions.namespace ? {...resource,namespace:policyOptions.namespace} : resource);
   }
   async function read(
     path: string,
@@ -208,6 +209,8 @@ export async function collect(
   }
   snapshot.resources.sort((a,b)=>a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
   snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
+  snapshot.namespacePolicyCompleteness={[policyOptions.namespace]:snapshot.policiesComplete};
+  if(policyOptions.namespace) snapshot.issues=snapshot.issues.map(issue=>({...issue,namespace:policyOptions.namespace}));
   snapshot.finishedAt = new Date().toISOString();
   return snapshot;
 }

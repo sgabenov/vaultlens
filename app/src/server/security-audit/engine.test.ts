@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,namespace:''});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
@@ -716,4 +716,12 @@ test('namespace partitions isolate policy references, privilege signals and exce
   assert.equal(applyBaseline([finding],result.configuration,s.target,undefined,[exception]).states[0].gate,true);
   assert.equal(applyBaseline([finding],result.configuration,s.target,undefined,[{...exception,namespace:'team-b'}]).states[0].gate,false);
   assert.notEqual(findingFingerprint({...finding,namespace:'team-a'}),findingFingerprint(finding));
+});
+
+test('namespace selection normalizes boundaries and rejects invalid header/path input', () => {
+  assert.equal(parseCollectionOptions({namespace:'/team/child/'}).namespace,'team/child');
+  assert.equal(parseAuditArguments(['collect','--namespace','team/child']).requestPolicy.namespace,'team/child');
+  assert.throws(()=>parseCollectionOptions({namespace:'team\r\nHeader: value'}),/namespace/);
+  assert.throws(()=>parseCollectionOptions({namespace:'team/../other'}),/namespace/);
+  assert.throws(()=>parseCollectionOptions({namespace:'team//child'}),/namespace/);
 });

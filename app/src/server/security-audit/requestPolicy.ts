@@ -1,3 +1,4 @@
+import { normalizeNamespace } from './namespaces.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { VaultError } from '../lib/vaultClient.js';
 export interface RequestPolicyOptions { retries:number; requestsPerSecond:number; retryBackoffMs:number; }
@@ -44,6 +45,7 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock: {now:()=
 }
 
 export interface CollectionOptions extends RequestPolicyOptions {
+  namespace:string;
   workers:number;timeoutMs:number;maxDurationMs:number;maxObjects:number;
   policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean;
 }
@@ -51,14 +53,15 @@ export function parseCollectionOptions(raw:unknown):CollectionOptions {
   if(raw===undefined) raw={};
   if(!raw || typeof raw!=='object'||Array.isArray(raw)) throw new Error('Collection options must be an object');
   const value=raw as Record<string,unknown>;
-  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects','policyFilters','authMountFilters','authTypeFilters','skipIdentity'].includes(key))) throw new Error('Unknown collection option');
-  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,...value} as CollectionOptions;
+  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects','policyFilters','authMountFilters','authTypeFilters','skipIdentity','namespace'].includes(key))) throw new Error('Unknown collection option');
+  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,namespace:'',...value} as CollectionOptions;
   for(const key of ['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects'] as const) if(typeof options[key]!=='number') throw new Error('Collection options must be numeric');
   if(typeof options.skipIdentity!=='boolean') throw new Error('skipIdentity must be boolean');
   for(const key of ['policyFilters','authMountFilters','authTypeFilters'] as const) {
     if(!Array.isArray(options[key])||options[key].length>100||options[key].some(v=>typeof v!=='string'||!v.trim()||v.length>256)) throw new Error(`Invalid ${key}`);
     options[key]=[...new Set(options[key])].sort();
   }
+  options.namespace=normalizeNamespace(options.namespace);
   validateRequestPolicy(options);
   if(!Number.isInteger(options.workers)||options.workers<1||options.workers>32) throw new Error('workers must be an integer from 1 to 32');
   for(const key of ['timeoutMs','maxDurationMs'] as const)

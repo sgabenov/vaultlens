@@ -1,4 +1,4 @@
-import { snapshotNamespaces } from './namespaces.js';
+import { snapshotNamespaces, normalizeNamespace } from './namespaces.js';
 import { exportAudit } from './exporter.js';
 import { parseAuditArguments, auditExitCode } from './cliOptions.js';
 import { parseExceptions } from './exceptions.js';
@@ -16,6 +16,8 @@ const store = new AuditStore(
 try {
   const options=parseAuditArguments(process.argv.slice(2));
   const {command,positionals:[argument,second]}=options;
+  if(['scan','collect'].includes(command) && !process.argv.includes('--namespace'))
+    options.requestPolicy.namespace=normalizeNamespace(process.env['VAULT_NAMESPACE']??'');
   const baseline=options.baseline ? parseBaseline(readFileSync(options.baseline,'utf8')) : undefined;
   const exceptionSource=options.exceptions ? readFileSync(options.exceptions,'utf8') : undefined;
   const exceptionSettings=command==='analyze' && argument && !options.currentRules ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();

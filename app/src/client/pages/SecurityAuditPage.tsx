@@ -11,6 +11,7 @@ import {
   reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
+  const [namespace,setNamespace]=useState('');
   const [scopeText,setScopeText]=useState({policyFilters:'',authMountFilters:'',authTypeFilters:''});
   const [skipIdentity,setSkipIdentity]=useState(false);
   const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
@@ -35,7 +36,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit({...collectionOptions,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity},controlDocuments),
+    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity},controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -91,6 +92,9 @@ export default function SecurityAuditPage() {
       <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
       <details className="rounded border p-3 text-sm">
         <summary>Collection settings</summary>
+        <label className="mt-3 block">Vault namespace (empty = root)
+          <input aria-label="Vault namespace" className="ml-2 rounded border p-2" disabled={!!running||start.isPending} value={namespace} onChange={event=>setNamespace(event.target.value)} />
+        </label>
         <p className="mt-3 text-xs text-gray-500">Optional glob filters, one per line. Empty means all. Auth mount names omit the trailing slash.</p>
         <div className="mt-3 grid gap-3 lg:grid-cols-3">
           {(['policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>

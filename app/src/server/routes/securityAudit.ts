@@ -140,7 +140,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       if(req.body?.[key]!==undefined && typeof req.body[key]!=='string') throw new Error(`${key} must be text`);
     baseline=req.body?.baselineYaml?.trim() ? parseBaseline(req.body.baselineYaml) : undefined;
     exceptions=req.body?.exceptionsYaml?.trim() ? parseExceptions(req.body.exceptionsYaml,new Set(definitions.map(rule=>rule.id))) : [];
-    applyBaseline([],{...settings,catalog:definitions,fingerprint:settingsFingerprint(settings,definitions),engineVersion:ENGINE_VERSION,issues:[]},config.vaultAddr,baseline,exceptions,undefined,sourceRunId?snapshotNamespaces(db.get(sourceRunId,config.vaultAddr)!.snapshot!):['']);
+    applyBaseline([],{...settings,catalog:definitions,fingerprint:settingsFingerprint(settings,definitions),engineVersion:ENGINE_VERSION,issues:[]},config.vaultAddr,baseline,exceptions,undefined,sourceRunId?snapshotNamespaces(db.get(sourceRunId,config.vaultAddr)!.snapshot!):[collectionOptions.namespace]);
   } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid audit controls'});return;}
   let id: string;
   try {
