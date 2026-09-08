@@ -145,24 +145,12 @@ export function parseRule(yaml: string): RuleDefinition {
     throw new Error(`Unregistered detector: ${detector}`);
   const object_types = strings(raw.object_types, 'object_types');
   if (!object_types.length) throw new Error('object_types must not be empty');
-  if (
-    object_types.some(
-      (t) =>
-        ![
-          'acl_policy',
-          'approle',
-          'jwt_role',
-          'kubernetes_role',
-          'token_role',
-          'role',
-          'auth_role',
-          'entity',
-          'group',
-          'auth-mount',
-        ].includes(t),
-    )
-  )
-    throw new Error('Unknown object type');
+  const supportedObjectTypes = [
+    'acl_policy', 'approle', 'jwt_role', 'kubernetes_role', 'token_role',
+    'role', 'auth_role', 'entity', 'group', 'auth-mount',
+  ];
+  if (object_types.some(type => !supportedObjectTypes.includes(type)))
+    throw new Error(`Unknown object type. Supported values: ${supportedObjectTypes.join(', ')}`);
   const parameters = mapping(raw.parameters ?? {}, 'parameters');
   if (
     ['__proto__', 'prototype', 'constructor'].includes(String(parameters.field))

@@ -191,7 +191,7 @@ export default function SecurityAuditPage() {
               )}
               {detail.data.run.status === 'running' && (
                 <p className="text-sm text-gray-600">
-                  Collecting configuration in the background. You can leave this
+                  Audit is running in the background. You can leave this
                   page.
                 </p>
               )}
