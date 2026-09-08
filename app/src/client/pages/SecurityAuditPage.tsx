@@ -11,6 +11,9 @@ import {
   reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
+  const [scopeText,setScopeText]=useState({policyFilters:'',authMountFilters:'',authTypeFilters:''});
+  const [skipIdentity,setSkipIdentity]=useState(false);
+  const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
   const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
   const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
   const [selected, setSelected] = useState('');
@@ -32,7 +35,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit(collectionOptions,controlDocuments),
+    mutationFn: () => startSecurityAudit({...collectionOptions,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity},controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -88,6 +91,15 @@ export default function SecurityAuditPage() {
       <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
       <details className="rounded border p-3 text-sm">
         <summary>Collection settings</summary>
+        <p className="mt-3 text-xs text-gray-500">Optional glob filters, one per line. Empty means all. Auth mount names omit the trailing slash.</p>
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          {(['policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>
+            {{policyFilters:'Policy filters',authMountFilters:'Auth mount filters',authTypeFilters:'Auth type filters'}[key]}
+            <textarea aria-label={key} rows={3} className="mt-2 w-full rounded border p-2 font-mono text-xs" disabled={!!running||start.isPending}
+              value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
+          </label>)}
+        </div>
+        <label className="mt-3 block"><input type="checkbox" checked={skipIdentity} disabled={!!running||start.isPending} onChange={event=>setSkipIdentity(event.target.checked)} /> Skip Identity collection (reported as a coverage gap)</label>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {([
             ['maxObjects','Maximum objects (0 = unlimited)',0,10000000,1],

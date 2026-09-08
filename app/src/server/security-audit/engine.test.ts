@@ -690,3 +690,13 @@ test('saved controls retain their application date and exception metadata across
     assert.ok(exportAudit(saved,'jsonl').includes('"appliedOn":"2026-09-08"'));
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('multiple CLI scope patterns are retained and normalized without allowing duplicate scalar options', () => {
+  const options=parseAuditArguments(['collect','--policy-filter','team-*','--policy-filter','default','--policy-filter','team-*','--auth-type-filter','jwt','--auth-type-filter','approle','--skip-identity']);
+  assert.deepEqual(options.requestPolicy.policyFilters,['default','team-*']);
+  assert.deepEqual(options.requestPolicy.authTypeFilters,['approle','jwt']);
+  assert.equal(options.requestPolicy.skipIdentity,true);
+  assert.throws(()=>parseAuditArguments(['analyze','run','--policy-filter','*']),/Unsupported/);
+  assert.throws(()=>parseAuditArguments(['scan','--workers','1','--workers','2']),/Duplicate/);
+  assert.throws(()=>parseAuditArguments(['collect','--policy-filter']),/requires/);
+});
