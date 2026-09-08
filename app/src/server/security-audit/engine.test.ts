@@ -864,3 +864,24 @@ test('collector inventories Python-supported cloud auth roles with allowlisted t
     await new Promise<void>((resolve,reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+import { policyUsage } from '../../shared/policyUsage.js';
+test('policy usage separates namespace, inheritance and token issuance permissions', () => {
+  const s = snapshot();
+  s.resources = [
+    {namespace:'a',kind:'policy',path:'sys/policies/acl/read',data:{name:'read'}},
+    {namespace:'b',kind:'policy',path:'sys/policies/acl/read',data:{name:'read'}},
+    {namespace:'a',kind:'role',path:'auth/token/roles/demo',data:{auth_type:'token',token_policies:['read','read'],allowed_policies:['admin'],allowed_policies_glob:['team-*']}},
+  ];
+  s.identity = {groupCount:1,entityCount:1,issues:[],assignments:[
+    {namespace:'a',subjectKind:'entity',subjectPath:'identity/entity/id/person',policy:'read',relationship:'inherited',sourcePath:'identity/group/id/team'},
+  ]};
+  const before = structuredClone(s);
+  const result = policyUsage(s);
+  assert.equal(result.find(row => row.namespace === 'b')?.references.length,0);
+  assert.equal(result.find(row => row.name === 'read' && row.namespace === 'a')?.references.length,2);
+  assert.equal(result.find(row => row.name === 'admin')?.references[0].relationship,'allowed');
+  assert.equal(result.find(row => row.name === 'default')?.collected,false);
+  assert.ok(!result.some(row => row.name === 'team-*'));
+  assert.deepEqual(s,before);
+});

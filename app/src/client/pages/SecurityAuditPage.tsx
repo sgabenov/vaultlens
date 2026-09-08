@@ -1,3 +1,4 @@
+import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditControlsEditor from '../components/AuditControlsEditor';
 import AuditExportButton from '../components/AuditExportButton';
 import AuditDiffPanel from '../components/AuditDiffPanel';
@@ -243,6 +244,7 @@ export default function SecurityAuditPage() {
               </div>
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
+              {detail.data.snapshot && <AuditPolicyUsage key={`usage:${id}`} snapshot={detail.data.snapshot} />}
               {detail.data.snapshot?.identity && (
                 <details className="rounded border p-3 text-sm">
                   <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>
