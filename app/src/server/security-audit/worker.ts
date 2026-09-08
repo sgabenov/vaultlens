@@ -7,6 +7,7 @@ const store = new AuditStore(dbPath);
 try {
   const snapshot = await collect(target, token, skipTlsVerify, collectionOptions);
   const result = execute(snapshot, settings ?? store.settings());
+  snapshot.analysisPerformed = true;
   snapshot.identity = result.identity;
   store.finish(id, snapshot, result.findings, result.configuration);
 } catch {

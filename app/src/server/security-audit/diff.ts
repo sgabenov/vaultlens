@@ -36,7 +36,7 @@ const findingRecord = (finding:AuditFinding) => {
 };
 export function compareRuns(old:AuditDetail, next:AuditDetail) {
   if(!old.snapshot || !next.snapshot || !old.snapshot.finishedAt || !next.snapshot.finishedAt ||
-    ['running','failed','interrupted'].includes(old.run.status) || ['running','failed','interrupted'].includes(next.run.status))
+    ['collected','running','failed','interrupted'].includes(old.run.status) || ['collected','running','failed','interrupted'].includes(next.run.status))
     throw new Error('Diff requires two finished snapshots');
   if(old.snapshot.target!==next.snapshot.target || old.snapshot.version!==next.snapshot.version)
     throw new Error('Snapshot targets or schemas are incomparable');

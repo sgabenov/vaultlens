@@ -58,6 +58,7 @@ export async function collect(
   const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal});
   const snapshot: AuditSnapshot = {
     version: 1,
+    analysisPerformed: false,
     target,
     startedAt: new Date().toISOString(),
     finishedAt: '',

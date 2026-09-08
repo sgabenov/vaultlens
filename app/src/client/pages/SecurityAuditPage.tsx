@@ -241,7 +241,10 @@ export default function SecurityAuditPage() {
                   </pre>
                 </details>
               )}
-              {detail.data.snapshot && findings.length === 0 && (
+              {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
+                Configuration collected. Audit rules have not been run for this snapshot. Use CLI analyze to evaluate it offline.
+              </p>}
+              {detail.data.snapshot && detail.data.snapshot.analysisPerformed !== false && findings.length === 0 && (
                 <p className="text-sm text-gray-500">
                   No findings match this filter within the implemented checks.
                   This is not a clean bill of health for the cluster.

@@ -3,7 +3,7 @@ import type { AuditDetail } from '../../shared/securityAudit.js';
 export const EXPORT_FORMATS=['json','jsonl','yaml','csv'] as const;
 export type ExportFormat=typeof EXPORT_FORMATS[number];
 export function exportAudit(detail:AuditDetail,format:ExportFormat):string {
-  if(!detail.snapshot || !['completed','partial'].includes(detail.run.status)) throw new Error('Export requires a finished snapshot');
+  if(!detail.snapshot || !['collected','completed','partial'].includes(detail.run.status)) throw new Error('Export requires a finished snapshot');
   if(format==='json') return JSON.stringify(detail,null,2)+'\n';
   if(format==='yaml') return stringify(detail,{lineWidth:0});
   if(format==='jsonl') return [

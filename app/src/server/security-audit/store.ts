@@ -104,7 +104,7 @@ export class AuditStore {
         "UPDATE audit_runs SET status=?,finishedAt=?,resourceCount=?,issueCount=?,findingCount=?,snapshot=?,findings=?,configuration=? WHERE id=? AND status='running'",
       )
       .run(
-        snapshot.issues.length || configuration?.issues.length
+        snapshot.analysisPerformed === false ? 'collected' : snapshot.issues.length || configuration?.issues.length
           ? 'partial'
           : 'completed',
         snapshot.finishedAt,

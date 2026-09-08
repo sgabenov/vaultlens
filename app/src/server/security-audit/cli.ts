@@ -29,6 +29,15 @@ try {
     if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
     writeFileSync(second, JSON.stringify(createBaseline(detail),null,2)+'\n', {mode:0o600,flag:'wx'});
     console.log(JSON.stringify({baseline:second,sourceRunId:argument}));
+  } else if (command === 'collect') {
+    if(!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
+    const id=store.create(target);
+    try {
+      const snapshot=await collect(target,process.env['VAULT_TOKEN'],false,options.requestPolicy);
+      store.finish(id,snapshot,[]);
+      console.log(JSON.stringify({id,snapshot,analysisPerformed:false},null,2));
+      process.exitCode=snapshot.issues.length && options.requireComplete ? 2 : 0;
+    } catch(error) {store.fail(id);throw error;}
   } else if (command === 'scan') {
     if (!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
     const id = store.create(target);
@@ -36,6 +45,7 @@ try {
       const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, options.requestPolicy);
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
+      snapshot.analysisPerformed = true;
       snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
       console.log(

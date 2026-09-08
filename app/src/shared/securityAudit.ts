@@ -14,6 +14,7 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  analysisPerformed?: boolean;
   collection?: {
     workers?: number;
     requestPolicy: {retries:number;requestsPerSecond:number;retryBackoffMs:number};
@@ -46,7 +47,7 @@ export interface AuditRun {
   target: string;
   startedAt: string;
   finishedAt: string | null;
-  status: 'running' | 'completed' | 'partial' | 'failed' | 'interrupted';
+  status: 'running' | 'collected' | 'completed' | 'partial' | 'failed' | 'interrupted';
   resourceCount: number;
   issueCount: number;
   findingCount: number;
