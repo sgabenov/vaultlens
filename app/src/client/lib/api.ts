@@ -1177,8 +1177,8 @@ export async function getSecurityAuditRuns() {
 export async function getSecurityAuditRun(id: string) {
   const {data} = await api.get<import('../../shared/securityAudit').AuditDetail>(`/security-audit/runs/${encodeURIComponent(id)}`); return data;
 }
-export async function startSecurityAudit(collectionOptions?: {workers:number;retries:number;requestsPerSecond:number;retryBackoffMs:number}) {
-  const {data} = await api.post<{id: string}>('/security-audit/runs', {collectionOptions}); return data;
+export async function startSecurityAudit(collectionOptions?: {workers:number;retries:number;requestsPerSecond:number;retryBackoffMs:number}, controls?:{baselineYaml:string;exceptionsYaml:string}) {
+  const {data} = await api.post<{id: string}>('/security-audit/runs', {collectionOptions,...controls}); return data;
 }
 
 export async function getAuditRules() {
@@ -1198,6 +1198,11 @@ export async function downloadSecurityAudit(id: string, format: string): Promise
   return response.data;
 }
 
-export async function reanalyzeSecurityAudit(sourceRunId:string) {
-  const {data}=await api.post<{id:string}>('/security-audit/runs',{sourceRunId});return data;
+export async function reanalyzeSecurityAudit(sourceRunId:string,controls?:{baselineYaml:string;exceptionsYaml:string}) {
+  const {data}=await api.post<{id:string}>('/security-audit/runs',{sourceRunId,...controls});return data;
+}
+
+export async function getSecurityAuditBaseline(id:string):Promise<string> {
+  const {data}=await api.get(`/security-audit/runs/${encodeURIComponent(id)}/baseline`);
+  return JSON.stringify(data,null,2);
 }

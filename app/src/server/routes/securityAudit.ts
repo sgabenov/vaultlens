@@ -1,3 +1,7 @@
+import { parseBaseline, applyBaseline, createBaseline } from '../security-audit/baseline.js';
+import { parseExceptions } from '../security-audit/exceptions.js';
+import { settingsFingerprint } from '../security-audit/catalog.js';
+import { ENGINE_VERSION } from '../security-audit/engine.js';
 import { parseCollectionOptions } from '../security-audit/requestPolicy.js';
 import { exportAudit, EXPORT_FORMATS, type ExportFormat } from '../security-audit/exporter.js';
 import { compareRuns } from '../security-audit/diff.js';
@@ -81,6 +85,12 @@ router.get('/diff', (req, res) => {
   try { res.json(compareRuns(old, next)); }
   catch(error) { res.status(400).json({error:error instanceof Error ? error.message : 'Snapshots cannot be compared'}); }
 });
+router.get('/runs/:id/baseline', (req,res)=>{
+  const detail=storage().get(String(req.params['id']),config.vaultAddr);
+  if(!detail) {res.status(404).json({error:'Audit run not found'});return;}
+  try {res.json(createBaseline(detail));}
+  catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Baseline unavailable'});}
+});
 router.get('/runs/:id/export', (req, res) => {
   const format=req.query['format'] ?? 'json';
   if(typeof format!=='string' || !EXPORT_FORMATS.includes(format as ExportFormat)) {
@@ -121,6 +131,16 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       res.status(404).json({error:'Finished source snapshot not found'});return;
     }
   }
+  const settings=db.settings(),definitions=catalog(settings);
+  let baseline;
+  let exceptions;
+  try {
+    for(const key of ['baselineYaml','exceptionsYaml'])
+      if(req.body?.[key]!==undefined && typeof req.body[key]!=='string') throw new Error(`${key} must be text`);
+    baseline=req.body?.baselineYaml?.trim() ? parseBaseline(req.body.baselineYaml) : undefined;
+    exceptions=req.body?.exceptionsYaml?.trim() ? parseExceptions(req.body.exceptionsYaml,new Set(definitions.map(rule=>rule.id))) : [];
+    applyBaseline([],{...settings,catalog:definitions,fingerprint:settingsFingerprint(settings,definitions),engineVersion:ENGINE_VERSION,issues:[]},config.vaultAddr,baseline,exceptions);
+  } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid audit controls'});return;}
   let id: string;
   try {
     id = db.create(config.vaultAddr);
@@ -144,7 +164,9 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         target: config.vaultAddr,
         token: req.vaultToken,
         skipTlsVerify: config.vaultSkipTlsVerify,
-        settings: db.settings(),
+        settings,
+        baseline,
+        exceptions,
         collectionOptions,
         sourceRunId,
       },

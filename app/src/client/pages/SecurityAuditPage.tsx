@@ -1,3 +1,4 @@
+import AuditControlsEditor from '../components/AuditControlsEditor';
 import AuditExportButton from '../components/AuditExportButton';
 import AuditDiffPanel from '../components/AuditDiffPanel';
 import { Link } from 'react-router-dom';
@@ -10,6 +11,7 @@ import {
   reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
+  const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
   const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000});
   const [selected, setSelected] = useState('');
   const [identityLimit, setIdentityLimit] = useState(100);
@@ -30,13 +32,13 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit(collectionOptions),
+    mutationFn: () => startSecurityAudit(collectionOptions,controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
     },
   });
-  const reanalyze=useMutation({mutationFn:()=>reanalyzeSecurityAudit(id),onSuccess:result=>{
+  const reanalyze=useMutation({mutationFn:()=>reanalyzeSecurityAudit(id,controlDocuments),onSuccess:result=>{
     setSelected(result.id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});
   }});
   const running = runs.data?.some((r) => r.status === 'running');
@@ -83,6 +85,7 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
+      <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
       <details className="rounded border p-3 text-sm">
         <summary>Collection settings</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -218,7 +221,7 @@ export default function SecurityAuditPage() {
               <div className="rounded border p-3 text-sm">
                 <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending}
                   onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
-                <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and no baseline or exceptions. Collection timestamps remain unchanged.</p>
+                <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and the controls selected above. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
               <AuditExportButton key={`export:${id}`} runId={id} />
