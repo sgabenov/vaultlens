@@ -1,3 +1,4 @@
+import { AUDIT_HELP } from './cliHelp.js';
 import { reportArchive } from './reportArchive.js';
 import { writeReportDirectory } from './reportDirectory.js';
 import { mergeRefresh } from './refresh.js';
@@ -16,12 +17,18 @@ import { catalog } from './catalog.js';
 import { AuditStore } from './store.js';
 import { collect } from './collector.js';
 import { execute } from './engine.js';
+async function main() {
+  const args=process.argv.slice(2);
+  if(args.length===1 && ['help','--help','-h'].includes(args[0])) {
+    console.log(AUDIT_HELP);
+    return;
+  }
+  const options=parseAuditArguments(args);
 const target = process.env['VAULT_ADDR'] || 'http://127.0.0.1:8200';
 const store = new AuditStore(
   process.env['VAULTLENS_AUDIT_DB'] || 'data/security-audit.sqlite',
 );
 try {
-  const options=parseAuditArguments(process.argv.slice(2));
   const {command,positionals:[argument,second]}=options;
   if(['scan','collect'].includes(command) && !process.argv.includes('--namespace'))
     options.requestPolicy.namespace=normalizeNamespace(process.env['VAULT_NAMESPACE']??'');
@@ -142,13 +149,16 @@ try {
     console.log(JSON.stringify(next, null, 2));
   } else if (command === 'list')
     console.log(JSON.stringify(store.list(target), null, 2));
-  else
-    throw new Error(
-      'Usage: audit scan [--baseline FILE] [--exceptions FILE] | list | analyze RUN_ID [--baseline FILE] [--exceptions FILE] | baseline-create RUN_ID FILE | diff OLD_RUN_ID NEW_RUN_ID | rules | configure CONFIG_YAML [CUSTOM_RULES_YAML]',
-    );
+  else throw new Error(AUDIT_HELP);
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Audit failed');
   process.exitCode = 2;
 } finally {
   store.close();
 }
+
+}
+main().catch(error=>{
+  console.error(error instanceof Error ? error.message : 'Audit failed');
+  process.exitCode=2;
+});

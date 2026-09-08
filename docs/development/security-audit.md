@@ -169,3 +169,7 @@ collection and lifecycle metadata; imported configuration can still be analyzed,
 but snapshot comparison requires known collection scope. The source schema is
 retained in import provenance. Historical Python findings and baseline controls
 are not imported; analysis creates native findings from the observed resources.
+
+Run `npm run audit -- --help` from `app` for the complete command and option
+reference. `help` and `-h` are aliases. Help and invalid arguments do not open or
+create the audit database, so help also works before storage is configured.
