@@ -7,6 +7,7 @@ import {
   getSecurityAuditRuns,
   getSecurityAuditRun,
   startSecurityAudit,
+  reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
   const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000});
@@ -35,6 +36,9 @@ export default function SecurityAuditPage() {
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
     },
   });
+  const reanalyze=useMutation({mutationFn:()=>reanalyzeSecurityAudit(id),onSuccess:result=>{
+    setSelected(result.id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});
+  }});
   const running = runs.data?.some((r) => r.status === 'running');
   const findings =
     detail.data?.findings.filter(
@@ -46,7 +50,7 @@ export default function SecurityAuditPage() {
   ];
   const identityAssignments = detail.data?.snapshot?.identity?.assignments.filter(a =>
     [a.subjectPath, a.policy, a.sourcePath].some(v => v.toLowerCase().includes(identityFilter.toLowerCase()))) ?? [];
-  const error = runs.error || detail.error || start.error;
+  const error = runs.error || detail.error || start.error || reanalyze.error;
   return (
     <div className="space-y-6">
       <Link
@@ -205,6 +209,12 @@ export default function SecurityAuditPage() {
                 <summary>Collection parameters and metrics</summary>
                 <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
               </details>}
+              <div className="rounded border p-3 text-sm">
+                <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending}
+                  onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
+                <p className="mt-2 text-xs text-gray-500">Creates a new result from saved resources. Collection timestamps remain unchanged.</p>
+                {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
+              </div>
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
               {detail.data.snapshot?.identity && (
@@ -242,7 +252,7 @@ export default function SecurityAuditPage() {
                 </details>
               )}
               {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
-                Configuration collected. Audit rules have not been run for this snapshot. Use CLI analyze to evaluate it offline.
+                Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
               </p>}
               {detail.data.snapshot && detail.data.snapshot.analysisPerformed !== false && findings.length === 0 && (
                 <p className="text-sm text-gray-500">

@@ -107,7 +107,7 @@ export class AuditStore {
         snapshot.analysisPerformed === false ? 'collected' : snapshot.issues.length || configuration?.issues.length
           ? 'partial'
           : 'completed',
-        snapshot.finishedAt,
+        snapshot.sourceRunId ? new Date().toISOString() : snapshot.finishedAt,
         snapshot.resources.length,
         snapshot.issues.length + (configuration?.issues.length ?? 0),
         findings.length,

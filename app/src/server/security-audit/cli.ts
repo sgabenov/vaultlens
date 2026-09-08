@@ -17,7 +17,7 @@ try {
   const {command,positionals:[argument,second]}=options;
   const baseline=options.baseline ? parseBaseline(readFileSync(options.baseline,'utf8')) : undefined;
   const exceptionSource=options.exceptions ? readFileSync(options.exceptions,'utf8') : undefined;
-  const exceptionSettings=command==='analyze' && argument ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();
+  const exceptionSettings=command==='analyze' && argument && !options.currentRules ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();
   const exceptions=exceptionSource !== undefined ? parseExceptions(exceptionSource,new Set((exceptionSettings as import('../../shared/auditRules.js').RunConfiguration).catalog?.map(r=>r.id) ?? catalog(exceptionSettings).map(r=>r.id))) : [];
   if (command === 'export' && argument && second) {
     const detail=store.get(argument,target);
@@ -69,13 +69,20 @@ try {
     if (!detail?.snapshot) throw new Error('Snapshot not found for VAULT_ADDR');
     const { findings, configuration, identity } = execute(
       detail.snapshot,
-      detail.configuration ?? store.settings(),
+      options.currentRules ? store.settings() : detail.configuration ?? store.settings(),
     );
     const controls=applyBaseline(findings,configuration,target,baseline,exceptions);
+    let resultId=argument;
+    if(options.save) {
+      const snapshot={...detail.snapshot,identity,analysisPerformed:true,sourceRunId:argument};
+      resultId=store.create(target);
+      try {store.finish(resultId,snapshot,findings,configuration);} catch(error) {store.fail(resultId);throw error;}
+    }
     console.log(
       JSON.stringify(
         {
-          id: argument,
+          id: resultId,
+          sourceRunId: argument,
           controls,
           identity,
           findings,

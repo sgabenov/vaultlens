@@ -113,6 +113,14 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
   try {collectionOptions=parseCollectionOptions(req.body?.collectionOptions);}
   catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid collection options'});return;}
   const db = storage();
+  const sourceRunId=req.body?.sourceRunId;
+  if(sourceRunId!==undefined) {
+    if(typeof sourceRunId!=='string') {res.status(400).json({error:'Invalid source run ID'});return;}
+    const source=db.get(sourceRunId,config.vaultAddr);
+    if(!source?.snapshot || !['collected','completed','partial'].includes(source.run.status)) {
+      res.status(404).json({error:'Finished source snapshot not found'});return;
+    }
+  }
   let id: string;
   try {
     id = db.create(config.vaultAddr);
@@ -138,6 +146,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         skipTlsVerify: config.vaultSkipTlsVerify,
         settings: db.settings(),
         collectionOptions,
+        sourceRunId,
       },
     });
     active.once('error', () => db.fail(id));

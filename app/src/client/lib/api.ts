@@ -1197,3 +1197,7 @@ export async function downloadSecurityAudit(id: string, format: string): Promise
   const response=await api.get<Blob>(`/security-audit/runs/${encodeURIComponent(id)}/export`,{params:{format},responseType:'blob'});
   return response.data;
 }
+
+export async function reanalyzeSecurityAudit(sourceRunId:string) {
+  const {data}=await api.post<{id:string}>('/security-audit/runs',{sourceRunId});return data;
+}

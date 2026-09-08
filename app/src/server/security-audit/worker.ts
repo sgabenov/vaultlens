@@ -2,10 +2,12 @@ import { workerData } from 'node:worker_threads';
 import { collect } from './collector.js';
 import { execute } from './engine.js';
 import { AuditStore } from './store.js';
-const { dbPath, id, target, token, skipTlsVerify, settings, collectionOptions } = workerData;
+const { dbPath, id, target, token, skipTlsVerify, settings, collectionOptions, sourceRunId } = workerData;
 const store = new AuditStore(dbPath);
 try {
-  const snapshot = await collect(target, token, skipTlsVerify, collectionOptions);
+  const snapshot = sourceRunId ? store.get(sourceRunId,target)?.snapshot : await collect(target, token, skipTlsVerify, collectionOptions);
+  if(!snapshot) throw new Error('Source snapshot not found');
+  if(sourceRunId) snapshot.sourceRunId=sourceRunId;
   const result = execute(snapshot, settings ?? store.settings());
   snapshot.analysisPerformed = true;
   snapshot.identity = result.identity;

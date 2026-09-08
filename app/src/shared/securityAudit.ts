@@ -15,6 +15,7 @@ export interface IdentityAnalysis {
 }
 export interface AuditSnapshot {
   analysisPerformed?: boolean;
+  sourceRunId?: string;
   collection?: {
     workers?: number;
     requestPolicy: {retries:number;requestsPerSecond:number;retryBackoffMs:number};
