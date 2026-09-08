@@ -30,7 +30,7 @@ export interface AuditSnapshot {
   collection?: {
     workers?: number;
     scope?: {policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
-    requestPolicy: {redactPolicySource?:boolean;maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
+    requestPolicy: {namespaceFilters?:string[];recursiveNamespaces?:boolean;redactPolicySource?:boolean;maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
     metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
   };
   identity?: IdentityAnalysis;

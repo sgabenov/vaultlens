@@ -3,7 +3,7 @@ import { EXPORT_FORMATS, type ExportFormat } from './exporter.js';
 import { SEVERITIES, type Severity } from '../../shared/auditRules.js';
 export function parseAuditArguments(args:string[]) {
   const command=args[0], positionals:string[]=[], options:Record<string,string|boolean>={};
-  const filters:Record<string,string[]>={'--policy-filter':[],'--auth-mount-filter':[],'--auth-type-filter':[]};
+  const filters:Record<string,string[]>={'--namespace-filter':[],'--policy-filter':[],'--auth-mount-filter':[],'--auth-type-filter':[]};
   const arities:Record<string,[number,number]>={'import-python':[1,1],export:[2,2],collect:[0,0],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
   if(!command || !arities[command]) throw new Error('Expected import-python, export, collect, scan, analyze, diff, baseline-create, rules, list or configure');
   const analysis=['scan','analyze'].includes(command), gating=analysis||command==='diff';
@@ -39,7 +39,7 @@ export function parseAuditArguments(args:string[]) {
   validateRequestPolicy(requestPolicy);
   const workers=Number(options['--workers']??10);
   if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  return {command,positionals,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,redactPolicySource:!!options['--redact-policy-source'],recursiveNamespaces:!!options['--recursive-namespaces'],namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  return {command,positionals,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,redactPolicySource:!!options['--redact-policy-source'],recursiveNamespaces:!!options['--recursive-namespaces'],namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],namespaceFilters:filters['--namespace-filter'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }

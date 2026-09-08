@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:''});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,namespaceFilters:[],policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:''});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
@@ -1059,5 +1059,16 @@ test('recursive collection scopes headers and shares object limits across namesp
     assert.equal(limited.policiesComplete,false);
     assert.equal(limited.issues.filter(issue=>issue.path==='collection/object-limit').length,1);
     assert.equal(parseAuditArguments(['collect','--recursive-namespaces']).requestPolicy.recursiveNamespaces,true);
+    seen.length=0;
+    const filtered=await collect(target,'fixture-token',false,{...options,namespaceFilters:['team/child']});
+    assert.deepEqual(filtered.namespaces,['team/child']);
+    assert.equal(filtered.resources.length,1);
+    assert.ok(seen.includes('team:/v1/sys/namespaces'));
+    assert.ok(!seen.includes('team:/v1/sys/policies/acl'));
+    const empty=await collect(target,'fixture-token',false,{...options,namespaceFilters:['absent']});
+    assert.deepEqual(empty.resources,[]);
+    assert.equal(empty.policiesComplete,false);
+    assert.ok(empty.issues.some(issue=>issue.path==='collection/namespaces'));
+    assert.deepEqual(parseAuditArguments(['scan','--namespace-filter','team/*','--namespace-filter','root']).requestPolicy.namespaceFilters,['root','team/*']);
   } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });

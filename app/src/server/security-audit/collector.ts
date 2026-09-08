@@ -268,10 +268,12 @@ export async function collect(
       for(const issue of snapshot.issues.slice(issueStart)) if(namespace) issue.namespace=namespace;
     }
   }
-  snapshot.namespaces=discovered;
-  snapshot.namespacePolicyCompleteness=Object.fromEntries(discovered.map(value=>[value,false]));
-  snapshot.namespaceAliasCompleteness=Object.fromEntries(discovered.map(value=>[value,false]));
-  for(const current of discovered) {
+  const selected=discovered.filter(value=>matches(value||'root',policyOptions.namespaceFilters));
+  if(!selected.length) snapshot.issues.push({path:'collection/namespaces',reason:'Namespace filters selected no discovered namespaces'});
+  snapshot.namespaces=selected;
+  snapshot.namespacePolicyCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
+  snapshot.namespaceAliasCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
+  for(const current of selected) {
     if(signal.aborted) break;
     selectNamespace(current);
     const issueStart=snapshot.issues.length;
@@ -280,7 +282,7 @@ export async function collect(
     snapshot.namespaceAliasCompleteness[current]=aliasesComplete && !signal.aborted;
     for(const issue of snapshot.issues.slice(issueStart)) if(current) issue.namespace=current;
   }
-  snapshot.policiesComplete=discovered.every(value=>snapshot.namespacePolicyCompleteness![value]);
+  snapshot.policiesComplete=selected.length>0 && selected.every(value=>snapshot.namespacePolicyCompleteness![value]);
   snapshot.resources.sort((a,b)=>(a.namespace??'').localeCompare(b.namespace??'')||a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
   snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
   snapshot.finishedAt = new Date().toISOString();

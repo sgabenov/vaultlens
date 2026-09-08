@@ -16,7 +16,7 @@ import {
 export default function SecurityAuditPage() {
   const [recursiveNamespaces,setRecursiveNamespaces]=useState(false);
   const [namespace,setNamespace]=useState('');
-  const [scopeText,setScopeText]=useState({policyFilters:'',authMountFilters:'',authTypeFilters:''});
+  const [scopeText,setScopeText]=useState({namespaceFilters:'',policyFilters:'',authMountFilters:'',authTypeFilters:''});
   const [redactPolicySource,setRedactPolicySource]=useState(false);
   const [skipIdentity,setSkipIdentity]=useState(false);
   const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
@@ -41,7 +41,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource,recursiveNamespaces},controlDocuments),
+    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,namespaceFilters:patterns(scopeText.namespaceFilters),policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource,recursiveNamespaces},controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -103,8 +103,8 @@ export default function SecurityAuditPage() {
         </label>
         <p className="mt-3 text-xs text-gray-500">Optional glob filters, one per line. Empty means all. Auth mount names omit the trailing slash.</p>
         <div className="mt-3 grid gap-3 lg:grid-cols-3">
-          {(['policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>
-            {{policyFilters:'Policy filters',authMountFilters:'Auth mount filters',authTypeFilters:'Auth type filters'}[key]}
+          {(['namespaceFilters','policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>
+            {{namespaceFilters:'Namespace filters (root for root namespace)',policyFilters:'Policy filters',authMountFilters:'Auth mount filters',authTypeFilters:'Auth type filters'}[key]}
             <textarea aria-label={key} rows={3} className="mt-2 w-full rounded border p-2 font-mono text-xs" disabled={!!running||start.isPending}
               value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
           </label>)}
