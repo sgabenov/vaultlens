@@ -1,3 +1,4 @@
+import { withoutPolicySource } from './sourceRedaction.js';
 import { DEFAULT_SETTINGS, catalog } from './catalog.js';
 import type {
   RuleSettings,
@@ -111,7 +112,7 @@ export class AuditStore {
         snapshot.resources.length,
         snapshot.issues.length + (configuration?.issues.length ?? 0),
         findings.length,
-        JSON.stringify(snapshot),
+        JSON.stringify(snapshot.collection?.requestPolicy.redactPolicySource ? withoutPolicySource(snapshot) : snapshot),
         JSON.stringify(findings),
         configuration ? JSON.stringify(configuration) : null,
         id,

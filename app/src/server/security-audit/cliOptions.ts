@@ -19,7 +19,7 @@ export function parseAuditArguments(args:string[]) {
     if(['--baseline','--exceptions'].includes(token) && analysis || token==='--fail-on' && gating || token==='--format' && command==='export' || ['--namespace','--policy-filter','--auth-mount-filter','--auth-type-filter','--max-objects','--timeout-ms','--max-duration-ms','--workers','--retries','--requests-per-second','--retry-backoff-ms'].includes(token) && ['scan','collect'].includes(command)) {
       const value=args[++i]; if(!value || value.startsWith('--')) throw new Error(`${token} requires a value`);
       options[token]=value;
-    } else if(token==='--redact-policy-source' && command==='export') options[token]=true;
+    } else if(token==='--redact-policy-source' && ['export','scan','collect'].includes(command)) options[token]=true;
     else if(token==='--skip-identity' && ['scan','collect'].includes(command)) options[token]=true;
     else if(['--save','--current-rules'].includes(token) && command==='analyze') options[token]=true;
     else if(['--require-complete','--allow-incomplete'].includes(token) && (gating||command==='collect')) options[token]=true;
@@ -38,7 +38,7 @@ export function parseAuditArguments(args:string[]) {
   validateRequestPolicy(requestPolicy);
   const workers=Number(options['--workers']??10);
   if(!Number.isInteger(workers)||workers<1||workers>32) throw new Error('workers must be an integer from 1 to 32');
-  return {command,positionals,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
+  return {command,positionals,redactPolicySource:!!options['--redact-policy-source'],save:!!options['--save'],currentRules:!!options['--current-rules'],requestPolicy:parseCollectionOptions({...requestPolicy,workers,redactPolicySource:!!options['--redact-policy-source'],namespace:String(options['--namespace']??''),timeoutMs:Number(options['--timeout-ms']??30000),maxDurationMs:Number(options['--max-duration-ms']??7200000),maxObjects:Number(options['--max-objects']??0),skipIdentity:!!options['--skip-identity'],policyFilters:filters['--policy-filter'],authMountFilters:filters['--auth-mount-filter'],authTypeFilters:filters['--auth-type-filter']}),format:format as ExportFormat,baseline:options['--baseline'] as string|undefined,
     exceptions:options['--exceptions'] as string|undefined,failOn:failOn as Severity|'none',
     requireComplete:!options['--allow-incomplete']};
 }

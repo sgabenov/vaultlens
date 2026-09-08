@@ -25,7 +25,7 @@ export interface AuditSnapshot {
   collection?: {
     workers?: number;
     scope?: {policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
-    requestPolicy: {maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
+    requestPolicy: {redactPolicySource?:boolean;maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
     metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
   };
   identity?: IdentityAnalysis;

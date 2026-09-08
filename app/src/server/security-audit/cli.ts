@@ -1,3 +1,4 @@
+import { withoutPolicySource } from './sourceRedaction.js';
 import { snapshotNamespaces, normalizeNamespace } from './namespaces.js';
 import { exportAudit } from './exporter.js';
 import { parseAuditArguments, auditExitCode } from './cliOptions.js';
@@ -38,7 +39,7 @@ try {
     try {
       const snapshot=await collect(target,process.env['VAULT_TOKEN'],false,options.requestPolicy);
       store.finish(id,snapshot,[]);
-      console.log(JSON.stringify({id,snapshot,analysisPerformed:false},null,2));
+      console.log(JSON.stringify({id,snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot,analysisPerformed:false},null,2));
       process.exitCode=snapshot.issues.length && options.requireComplete ? 2 : 0;
     } catch(error) {store.fail(id);throw error;}
   } else if (command === 'scan') {
@@ -53,7 +54,7 @@ try {
       snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
       console.log(
-        JSON.stringify({ id, snapshot, findings, configuration, controls }, null, 2),
+        JSON.stringify({ id, snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot, findings, configuration, controls }, null, 2),
       );
       process.exitCode = auditExitCode(findings.filter((_,i)=>controls.states[i].gate).map(f=>f.severity),
         !!(snapshot.issues.length || configuration.issues.length),options);

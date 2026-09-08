@@ -14,6 +14,7 @@ import {
 export default function SecurityAuditPage() {
   const [namespace,setNamespace]=useState('');
   const [scopeText,setScopeText]=useState({policyFilters:'',authMountFilters:'',authTypeFilters:''});
+  const [redactPolicySource,setRedactPolicySource]=useState(false);
   const [skipIdentity,setSkipIdentity]=useState(false);
   const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
   const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
@@ -37,7 +38,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity},controlDocuments),
+    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource},controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -104,6 +105,8 @@ export default function SecurityAuditPage() {
               value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
           </label>)}
         </div>
+        <label className="mt-3 block"><input type="checkbox" checked={redactPolicySource} disabled={!!running||start.isPending} onChange={event=>setRedactPolicySource(event.target.checked)} /> Do not store full policy source</label>
+        <p className="text-xs text-gray-500">Initial analysis uses the source in memory. Matched ACL blocks remain in findings; later offline analysis will have coverage gaps.</p>
         <label className="mt-3 block"><input type="checkbox" checked={skipIdentity} disabled={!!running||start.isPending} onChange={event=>setSkipIdentity(event.target.checked)} /> Skip Identity collection (reported as a coverage gap)</label>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {([

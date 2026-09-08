@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,namespace:''});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,namespace:''});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
@@ -903,4 +903,27 @@ test('report source redaction preserves evidence and leaves the saved snapshot u
   assert.deepEqual(detail,before);
   assert.equal(parseAuditArguments(['export','run','file','--redact-policy-source']).redactPolicySource,true);
   assert.throws(()=>parseAuditArguments(['analyze','run','--redact-policy-source']),/Unsupported/);
+});
+
+test('source-free SQLite retains initial analysis but replay reports unavailable policy source', () => {
+  const directory = mkdtempSync(join(tmpdir(),'audit-source-free-'));
+  const store = new AuditStore(join(directory,'audit.sqlite'));
+  try {
+    const s = snapshot();
+    s.resources[0].data.hcl = 'path "*" { capabilities = ["create", "read", "update", "delete", "sudo"] }';
+    s.collection = {requestPolicy:{retries:0,requestsPerSecond:10,retryBackoffMs:0,redactPolicySource:true},metrics:{requests:0,retries:0,rateWaitMs:0,retryWaitMs:0}};
+    const result = execute(s,DEFAULT_SETTINGS);
+    assert.ok(result.findings.some(finding => finding.ruleId.startsWith('POL-')));
+    const id = store.create(s.target);
+    store.finish(id,s,result.findings,result.configuration);
+    const saved = store.get(id,s.target)!;
+    assert.equal(saved.snapshot!.resources[0].data.hcl,undefined);
+    assert.equal(saved.snapshot!.resources[0].data.source_redacted,true);
+    assert.deepEqual(saved.findings,JSON.parse(JSON.stringify(result.findings)));
+    assert.equal(typeof s.resources[0].data.hcl,'string');
+    assert.ok(execute(saved.snapshot!,DEFAULT_SETTINGS).configuration.issues.some(issue => issue.reason === 'Policy source is unavailable'));
+    assert.equal(parseAuditArguments(['scan','--redact-policy-source']).requestPolicy.redactPolicySource,true);
+    assert.equal(parseAuditArguments(['collect','--redact-policy-source']).requestPolicy.redactPolicySource,true);
+    assert.throws(()=>parseCollectionOptions({redactPolicySource:'true'}),/boolean/);
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });
