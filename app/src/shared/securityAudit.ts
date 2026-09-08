@@ -56,7 +56,11 @@ export interface AuditFinding {
   evidence: string;
   recommendation: string;
 }
+export interface AuditProgress {
+  namespace:string;phase:string;resources:number;requests:number;updatedAt:string;
+}
 export interface AuditRun {
+  progress?:AuditProgress|null;
   failureReason?:string|null;
   id: string;
   target: string;

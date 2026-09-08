@@ -33,6 +33,8 @@ export class AuditStore {
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN configuration TEXT');
     if (!columns.some(c => c.name === 'failureReason'))
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN failureReason TEXT');
+    if (!columns.some(c => c.name === 'progress'))
+      this.db.exec('ALTER TABLE audit_runs ADD COLUMN progress TEXT');
   }
   settings(): RuleSettings {
     const row = this.db
@@ -72,16 +74,17 @@ export class AuditStore {
     const row = this.db
       .prepare('SELECT * FROM audit_runs WHERE id=? AND target=?')
       .get(id, target) as unknown as
-      | (AuditRun & {
+      | (Omit<AuditRun,'progress'> & {
+          progress: string|null;
           snapshot: string | null;
           findings: string;
           configuration: string | null;
         })
       | undefined;
     if (!row) return null;
-    const { snapshot, findings, configuration, ...run } = row;
+    const { snapshot, findings, configuration, progress, ...run } = row;
     return {
-      run,
+      run:{...run,progress:progress?JSON.parse(progress):null},
       snapshot: snapshot ? JSON.parse(snapshot) : null,
       findings: JSON.parse(findings),
       configuration: configuration ? JSON.parse(configuration) : null,
@@ -119,6 +122,9 @@ export class AuditStore {
         configuration ? JSON.stringify(configuration) : null,
         id,
       );
+  }
+  updateProgress(id:string,progress:import('../../shared/securityAudit.js').AuditProgress) {
+    this.db.prepare("UPDATE audit_runs SET progress=?,resourceCount=? WHERE id=? AND status='running'").run(JSON.stringify(progress),progress.resources,id);
   }
   fail(id: string, reason='The background audit stopped before completion.') {
     this.db

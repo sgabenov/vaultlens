@@ -8,13 +8,22 @@ import { execute } from './engine.js';
 import { AuditStore } from './store.js';
 const { importPath, dbPath, id, target, token, skipTlsVerify, settings, collectionOptions, sourceRunId, baseline, exceptions } = workerData;
 const store = new AuditStore(dbPath);
+let lastUpdate=0,lastStage='';
+const progress=(value:import('../../shared/securityAudit.js').AuditProgress)=>{
+  const stage=`${value.namespace}:${value.phase}`;
+  if(stage!==lastStage || Date.now()-lastUpdate>=250) {
+    store.updateProgress(id,value);lastUpdate=Date.now();lastStage=stage;
+  }
+};
 try {
   if (importPath) {
+    progress({namespace:'',phase:'Importing Python snapshot',resources:0,requests:0,updatedAt:new Date().toISOString()});
     store.finish(id,importPythonSnapshot(importPath,target),[]);
   } else {
-  const snapshot = sourceRunId ? store.get(sourceRunId,target)?.snapshot : await collect(target, token, skipTlsVerify, collectionOptions);
+  const snapshot = sourceRunId ? store.get(sourceRunId,target)?.snapshot : await collect(target, token, skipTlsVerify, collectionOptions,progress);
   if(!snapshot) throw new Error('Source snapshot not found');
   if(sourceRunId) snapshot.sourceRunId=sourceRunId;
+  progress({namespace:'',phase:'Analyzing snapshot',resources:snapshot.resources.length,requests:snapshot.collection?.metrics.requests??0,updatedAt:new Date().toISOString()});
   const result = execute(snapshot, settings ?? store.settings());
   snapshot.controls = applyBaseline(result.findings,result.configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));
   snapshot.analysisPerformed = true;

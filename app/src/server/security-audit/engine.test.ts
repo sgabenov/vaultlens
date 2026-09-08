@@ -1047,7 +1047,11 @@ test('recursive collection scopes headers and shares object limits across namesp
   try {
     const target=`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
     const options={recursiveNamespaces:true,retries:0,requestsPerSecond:1000,maxDurationMs:5000};
-    const s=await collect(target,'fixture-token',false,options);
+    const progress:import('../../shared/securityAudit.js').AuditProgress[]=[];
+    const s=await collect(target,'fixture-token',false,options,value=>progress.push(value));
+    assert.ok(progress.some(value=>value.phase==='Policies' && value.namespace==='team/child'));
+    assert.equal(progress.at(-1)?.resources,3);
+    assert.equal(progress.at(-1)?.requests,s.collection?.metrics.requests);
     assert.deepEqual(s.namespaces,['','team','team/child']);
     assert.deepEqual(s.resources.map(resource=>resource.namespace??''),['','team','team/child']);
     assert.ok(s.issues.some(issue=>issue.namespace==='team/child' && issue.reason==='Vault HTTP 403'));
@@ -1071,4 +1075,19 @@ test('recursive collection scopes headers and shares object limits across namesp
     assert.ok(empty.issues.some(issue=>issue.path==='collection/namespaces'));
     assert.deepEqual(parseAuditArguments(['scan','--namespace-filter','team/*','--namespace-filter','root']).requestPolicy.namespaceFilters,['root','team/*']);
   } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
+
+test('saved progress is observable only while a run can still change', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-progress-'));
+  const store=new AuditStore(join(directory,'audit.sqlite'));
+  try {
+    const s=snapshot(),id=store.create(s.target);
+    const progress={namespace:'team',phase:'Policies',resources:3,requests:5,updatedAt:new Date().toISOString()};
+    store.updateProgress(id,progress);
+    assert.deepEqual(store.get(id,s.target)!.run.progress,progress);
+    store.finish(id,s,[]);
+    store.updateProgress(id,{...progress,resources:999});
+    assert.equal(store.get(id,s.target)!.run.resourceCount,s.resources.length);
+    assert.deepEqual(store.get(id,s.target)!.run.progress,progress);
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });

@@ -60,6 +60,7 @@ export async function collect(
   token: string,
   skipTlsVerify = false,
   requestOptions: Partial<CollectionOptions> = {},
+  onProgress?: (progress:import('../../shared/securityAudit.js').AuditProgress)=>void,
 ): Promise<AuditSnapshot> {
   const policyOptions=parseCollectionOptions(requestOptions);
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
@@ -81,6 +82,9 @@ export async function collect(
     policiesComplete: false,
     collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics,scope:{policyFilters:policyOptions.policyFilters,authMountFilters:policyOptions.authMountFilters,authTypeFilters:policyOptions.authTypeFilters,skipIdentity:policyOptions.skipIdentity}},
   };
+  let phase='Starting';
+  const report=()=>onProgress?.({namespace,phase,resources:snapshot.resources.length,requests:policy.metrics.requests,updatedAt:new Date().toISOString()});
+  const stage=(value:string)=>{phase=value;report();};
   let aliasesComplete=false;
   let countedObjects=0;
   function addResource(resource: import('../../shared/securityAudit.js').AuditResource) {
@@ -93,6 +97,7 @@ export async function collect(
     }
     if(counted) countedObjects++;
     snapshot.resources.push(namespace ? {...resource,namespace} : resource);
+    report();
   }
   async function read(
     path: string,
@@ -143,6 +148,7 @@ export async function collect(
   async function collectNamespace() {
     aliasesComplete=false;
   // Discovery stages are ordered; independent reads share one rate limiter.
+  stage('Policies');
   const policyList = await read('sys/policies/acl', true);
   snapshot.policiesComplete = policyList !== null && !policyOptions.policyFilters.length;
   await forEachConcurrent(keys(policyList).filter(name=>name!=='root' && matches(name,policyOptions.policyFilters)),workers,async name=>{
@@ -161,6 +167,7 @@ export async function collect(
   });
   if(!policyOptions.skipIdentity) {
   for (const kind of ['entity', 'group']) {
+    stage(kind==='entity'?'Identity entities':'Identity groups');
     const base = `identity/${kind}/id`;
     await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
       const path = `${base}/${encodeURIComponent(id)}`;
@@ -174,6 +181,7 @@ export async function collect(
       }
     });
   }
+  stage('Identity aliases');
   const aliasBase = 'identity/entity-alias/id';
   const aliasList = await read(aliasBase,true);
   aliasesComplete = aliasList !== null;
@@ -184,6 +192,7 @@ export async function collect(
     else aliasesComplete = false;
   });
   } else snapshot.issues.push({path:'identity',reason:'Identity collection was explicitly skipped'});
+  stage('Secret mounts');
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
     addResource({
@@ -194,6 +203,7 @@ export async function collect(
         type: (value as Record<string, unknown>).type,
       },
     });
+  stage('Auth mounts and roles');
   const auth = await read('sys/auth');
   const supported: Record<string, string> = {
     approle: 'role',
@@ -251,6 +261,7 @@ export async function collect(
   if(policyOptions.recursiveNamespaces) {
     for(let index=0;index<discovered.length && !signal.aborted;index++) {
       selectNamespace(discovered[index]);
+      stage('Namespace discovery');
       const issueStart=snapshot.issues.length;
       const children=keys(await read('sys/namespaces',true));
       for(const rawChild of children) {
@@ -286,5 +297,6 @@ export async function collect(
   snapshot.resources.sort((a,b)=>(a.namespace??'').localeCompare(b.namespace??'')||a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
   snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
   snapshot.finishedAt = new Date().toISOString();
+  stage('Collection finished');
   return snapshot;
 }

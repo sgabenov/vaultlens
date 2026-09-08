@@ -195,8 +195,7 @@ export default function SecurityAuditPage() {
               )}
               {detail.data.run.status === 'running' && (
                 <p className="text-sm text-gray-600">
-                  Audit is running in the background. You can leave this
-                  page.
+                  {detail.data.run.progress ? `${detail.data.run.progress.phase} · namespace ${detail.data.run.progress.namespace || 'root'} · ${detail.data.run.progress.resources} resources · ${detail.data.run.progress.requests} requests` : 'Audit is running in the background. You can leave this page.'}
                 </p>
               )}
               {!!issues.length && (
