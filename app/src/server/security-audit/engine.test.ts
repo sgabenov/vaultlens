@@ -949,3 +949,33 @@ test('diff compares policy content across source retention modes and isolates na
   assert.equal(diff.statistics.coverage.removed,1);
   assert.equal(diff.statistics.coverage.changed,0);
 });
+
+import { DatabaseSync } from 'node:sqlite';
+import pythonImportFixture from './fixtures/python-import.json' with {type:'json'};
+import { importPythonSnapshot } from './pythonImport.js';
+test('Python schema-3 import preserves assignments, aliases, namespace and source coverage', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-python-import-'));
+  const path=join(directory,'python.sqlite');
+  const db=new DatabaseSync(path);
+  try {
+    db.exec(pythonImportFixture.sql);
+    const before=readFileSync(path);
+    const imported=importPythonSnapshot(path,'http://example.invalid');
+    assert.deepEqual(readFileSync(path),before);
+    assert.deepEqual(imported.namespaces,['team']);
+    assert.equal(imported.resources.length,6);
+    assert.equal(imported.policiesComplete,true);
+    assert.equal(imported.namespaceAliasCompleteness?.team,true);
+    assert.deepEqual(imported.resources.find(resource=>resource.kind==='role')!.data.policies,['admin']);
+    assert.ok(!JSON.stringify(imported).includes('sensitive-alias-name'));
+    const result=execute(imported,DEFAULT_SETTINGS);
+    assert.ok(result.identity.assignments.some(assignment=>assignment.subjectPath==='identity/entity/id/person' && assignment.policy==='admin' && assignment.relationship==='inherited'));
+    assert.ok(result.findings.some(finding=>finding.ruleId==='POL-001' && finding.namespace==='team'));
+    assert.throws(()=>importPythonSnapshot(path,'http://different.invalid'),/target/);
+    db.exec("UPDATE policies SET rules=NULL");
+    assert.ok(execute(importPythonSnapshot(path,'http://example.invalid'),DEFAULT_SETTINGS).configuration.issues.some(issue=>issue.reason==='Policy source is unavailable'));
+    db.exec("UPDATE metadata SET value='99' WHERE key='schema_version'");
+    assert.throws(()=>importPythonSnapshot(path,'http://example.invalid'),/schema 3/);
+    assert.equal(parseAuditArguments(['import-python',path]).command,'import-python');
+  } finally {db.close();rmSync(directory,{recursive:true,force:true});}
+});

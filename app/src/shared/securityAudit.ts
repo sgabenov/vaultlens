@@ -16,6 +16,7 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string};
   namespaces?:string[];
   namespaceAliasCompleteness?:Record<string,boolean>;
   namespacePolicyCompleteness?:Record<string,boolean>;

@@ -1,3 +1,4 @@
+import { importPythonSnapshot } from './pythonImport.js';
 import { withoutPolicySource } from './sourceRedaction.js';
 import { snapshotNamespaces, normalizeNamespace } from './namespaces.js';
 import { exportAudit } from './exporter.js';
@@ -23,7 +24,12 @@ try {
   const exceptionSource=options.exceptions ? readFileSync(options.exceptions,'utf8') : undefined;
   const exceptionSettings=command==='analyze' && argument && !options.currentRules ? store.get(argument,target)?.configuration ?? store.settings() : store.settings();
   const exceptions=exceptionSource !== undefined ? parseExceptions(exceptionSource,new Set((exceptionSettings as import('../../shared/auditRules.js').RunConfiguration).catalog?.map(r=>r.id) ?? catalog(exceptionSettings).map(r=>r.id))) : [];
-  if (command === 'export' && argument && second) {
+  if (command === 'import-python' && argument) {
+    const snapshot=importPythonSnapshot(argument,target);
+    const id=store.create(target);
+    try {store.finish(id,snapshot,[]);} catch(error) {store.fail(id);throw error;}
+    console.log(JSON.stringify({id,analysisPerformed:false,resources:snapshot.resources.length,issues:snapshot.issues.length}));
+  } else if (command === 'export' && argument && second) {
     const detail=store.get(argument,target);
     if(!detail) throw new Error('Snapshot not found for VAULT_ADDR');
     writeFileSync(second,exportAudit(detail,options.format,options.redactPolicySource),{mode:0o600,flag:'wx'});

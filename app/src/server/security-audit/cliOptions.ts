@@ -4,8 +4,8 @@ import { SEVERITIES, type Severity } from '../../shared/auditRules.js';
 export function parseAuditArguments(args:string[]) {
   const command=args[0], positionals:string[]=[], options:Record<string,string|boolean>={};
   const filters:Record<string,string[]>={'--policy-filter':[],'--auth-mount-filter':[],'--auth-type-filter':[]};
-  const arities:Record<string,[number,number]>={export:[2,2],collect:[0,0],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
-  if(!command || !arities[command]) throw new Error('Expected export, collect, scan, analyze, diff, baseline-create, rules, list or configure');
+  const arities:Record<string,[number,number]>={'import-python':[1,1],export:[2,2],collect:[0,0],scan:[0,0],analyze:[1,1],diff:[2,2],'baseline-create':[2,2],rules:[0,0],list:[0,0],configure:[1,2]};
+  if(!command || !arities[command]) throw new Error('Expected import-python, export, collect, scan, analyze, diff, baseline-create, rules, list or configure');
   const analysis=['scan','analyze'].includes(command), gating=analysis||command==='diff';
   for(let i=1;i<args.length;i++) {
     const token=args[i];
