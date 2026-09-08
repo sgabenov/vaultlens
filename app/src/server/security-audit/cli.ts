@@ -1,3 +1,5 @@
+import { mergeRefresh } from './refresh.js';
+import { parseCollectionOptions } from './requestPolicy.js';
 import { prepareResume } from './resume.js';
 import { importPythonSnapshot } from './pythonImport.js';
 import { withoutPolicySource } from './sourceRedaction.js';
@@ -49,15 +51,17 @@ try {
       console.log(JSON.stringify({id,snapshot:options.redactPolicySource?withoutPolicySource(snapshot):snapshot,analysisPerformed:false},null,2));
       process.exitCode=snapshot.issues.length && options.requireComplete ? 2 : 0;
     } catch(error) {store.fail(id);throw error;}
-  } else if (command === 'scan' || command === 'resume') {
+  } else if (command === 'scan' || command === 'resume' || command === 'refresh') {
     if (!process.env['VAULT_TOKEN']) throw new Error('VAULT_TOKEN is required');
-    const source=command==='resume'?store.get(argument,target):null;
+    const source=['resume','refresh'].includes(command)?store.get(argument,target):null;
     if(command==='resume' && (!source?.snapshot || !['interrupted','failed'].includes(source.run.status))) throw new Error('Resume requires a failed or interrupted checkpoint');
-    const resume=source?.snapshot?{snapshot:source.snapshot,maxAgeMs:options.checkpointMaxAgeMs}:undefined;
-    const requestPolicy=resume?prepareResume(resume.snapshot,target,resume.maxAgeMs).options:options.requestPolicy;
+    if(command==='refresh' && (!source?.snapshot?.collection || !['collected','completed','partial'].includes(source.run.status))) throw new Error('Refresh requires a finished native collection snapshot');
+    const resume=command==='resume' && source?.snapshot?{snapshot:source.snapshot,maxAgeMs:options.checkpointMaxAgeMs}:undefined;
+    const requestPolicy=resume?prepareResume(resume.snapshot,target,resume.maxAgeMs).options:command==='refresh'?parseCollectionOptions({...source!.snapshot!.collection!.requestPolicy,sources:options.requestPolicy.sources}):options.requestPolicy;
     const id = store.create(target);
     try {
-      const snapshot = await collect(target, process.env['VAULT_TOKEN'], false, requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot),resume);
+      let snapshot = await collect(target, process.env['VAULT_TOKEN'], false, requestPolicy,undefined,snapshot=>store.saveCheckpoint(id,snapshot),resume);
+      if(command==='refresh') snapshot=mergeRefresh(source!.snapshot!,snapshot,requestPolicy.sources);
       if(source) snapshot.sourceRunId=source.run.id;
       const { findings, configuration, identity } = execute(snapshot, store.settings());
       const controls=applyBaseline(findings,configuration,target,baseline,exceptions,undefined,snapshotNamespaces(snapshot));

@@ -1,4 +1,5 @@
-import { prepareResume, RESOURCE_STAGE, stageKey } from './resume.js';
+import { prepareResume } from './resume.js';
+import { RESOURCE_STAGE, SOURCE_STAGES, COLLECTION_SOURCES, stageKey } from './collectionStages.js';
 import { normalizeNamespace } from './namespaces.js';
 import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
@@ -69,6 +70,7 @@ export async function collect(
   const previous=resume?prepareResume(resume.snapshot,target,resume.maxAgeMs):undefined;
   if(previous && JSON.stringify(previous.options)!==JSON.stringify(policyOptions)) throw new Error('Checkpoint collection options differ');
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
+  const selectedStages=new Set(policyOptions.sources.flatMap(source=>SOURCE_STAGES[source]));
   const matches=(value:string,patterns:string[])=>!patterns.length||patterns.some(pattern=>globMatch(pattern,value));
   const limitAbort=new AbortController();
   const signal=AbortSignal.any([AbortSignal.timeout(maxDurationMs),limitAbort.signal]);
@@ -154,6 +156,7 @@ export async function collect(
       COLLECTED_FIELDS.filter((k) => k in data).map((k) => [k, data[k]]),
     );
   async function runStage(name:string,operation:()=>Promise<void>) {
+    if(!selectedStages.has(name)) return;
     stage(name);
     if(completedStages.some(value=>value.namespace===namespace && value.stage===name)) return;
     const issueStart=snapshot.issues.length;
@@ -162,6 +165,8 @@ export async function collect(
     if(name==='Policies') snapshot.namespacePolicyCompleteness![namespace]=snapshot.policiesComplete && !signal.aborted;
     if(name==='Identity aliases') snapshot.namespaceAliasCompleteness![namespace]=aliasesComplete && !signal.aborted;
     if(!signal.aborted && snapshot.issues.length===issueStart) completedStages.push({namespace,stage:name});
+    snapshot.collection!.stageResults??=[];
+    snapshot.collection!.stageResults.push({namespace,stage:name,complete:!signal.aborted && snapshot.issues.length===issueStart,finishedAt:new Date().toISOString()});
     checkpoint();
   }
   async function collectNamespace() {
@@ -307,6 +312,7 @@ export async function collect(
   const selected=discovered.filter(value=>matches(value||'root',policyOptions.namespaceFilters));
   if(!selected.length) snapshot.issues.push({path:'collection/namespaces',reason:'Namespace filters selected no discovered namespaces'});
   snapshot.namespaces=selected;
+  if(policyOptions.sources.length<COLLECTION_SOURCES.length) snapshot.issues.push({path:'collection/source-scope',reason:'Only selected collection sources were refreshed or collected'});
   snapshot.namespacePolicyCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
   snapshot.namespaceAliasCompleteness=Object.fromEntries(selected.map(value=>[value,false]));
   if(resume && previous) {

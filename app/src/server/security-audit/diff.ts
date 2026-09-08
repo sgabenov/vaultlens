@@ -62,7 +62,7 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
     scope:snapshot.importedFrom?.collection?.scope??snapshot.collection?.scope??defaultScope,
     maxObjects:snapshot.importedFrom?.collection?.maxObjects??snapshot.collection?.requestPolicy.maxObjects??0,
     namespaceFilters:snapshot.importedFrom?.collection?.namespaceFilters??snapshot.collection?.requestPolicy.namespaceFilters??[],
-    sources:snapshot.importedFrom?.collection?.sources??['auth_roles','identity','identity_aliases','mounts','policies'],
+    sources:snapshot.importedFrom?.collection?.sources??snapshot.collection?.requestPolicy.sources??['auth_roles','identity','identity_aliases','mounts','policies'],
   });
   if(scope(old.snapshot).maxObjects!==scope(next.snapshot).maxObjects) throw new Error('Snapshot object limits are incomparable');
   if(canonical(scope(old.snapshot))!==canonical(scope(next.snapshot))) throw new Error('Snapshot collection scopes are incomparable');

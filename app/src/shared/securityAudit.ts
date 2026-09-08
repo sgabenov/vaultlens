@@ -16,6 +16,7 @@ export interface IdentityAnalysis {
   entityCount: number;
 }
 export interface AuditSnapshot {
+  refresh?:{sources:string[];retainedResources:number;retainedFrom:string};
   checkpoint?:{savedAt:string;completedNamespaces:string[];completedStages?:{namespace:string;stage:string}[]};
   importedFrom?: {tool:'vault-security-audit';schemaVersion:3;scanId:string;collection?:{
     scope:{policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
@@ -29,9 +30,10 @@ export interface AuditSnapshot {
   analysisPerformed?: boolean;
   sourceRunId?: string;
   collection?: {
+    stageResults?:{namespace:string;stage:string;complete:boolean;finishedAt:string}[];
     workers?: number;
     scope?: {policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean};
-    requestPolicy: {namespaceFilters?:string[];recursiveNamespaces?:boolean;redactPolicySource?:boolean;maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
+    requestPolicy: {sources?:string[];namespaceFilters?:string[];recursiveNamespaces?:boolean;redactPolicySource?:boolean;maxObjects?:number;retries:number;requestsPerSecond:number;retryBackoffMs:number};
     metrics: {requests:number;retries:number;rateWaitMs:number;retryWaitMs:number};
   };
   identity?: IdentityAnalysis;

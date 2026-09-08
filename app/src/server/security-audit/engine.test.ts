@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,namespaceFilters:[],policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:''});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,namespaceFilters:[],policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:'',sources:['auth_roles','identity','identity_aliases','mounts','policies']});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
@@ -1145,4 +1145,19 @@ test('resume validates checkpoint age and recollects namespaces with missing sou
   assert.throws(()=>prepareResume(s,'http://different.invalid'),/matching/);
   assert.equal(parseAuditArguments(['resume','run','--checkpoint-max-age-ms','1000']).checkpointMaxAgeMs,1000);
   assert.throws(()=>parseAuditArguments(['resume','run','--checkpoint-max-age-ms','0']),/max age/);
+});
+
+import { mergeRefresh } from './refresh.js';
+test('selective refresh preserves old objects on failed stages and removes them after complete reads', () => {
+  const base=snapshot();
+  const fresh=structuredClone(base);fresh.resources=[];
+  fresh.collection={requestPolicy:parseCollectionOptions({sources:['policies']}),metrics:{requests:1,retries:0,rateWaitMs:0,retryWaitMs:0},stageResults:[{namespace:'',stage:'Policies',complete:false,finishedAt:fresh.finishedAt}]};
+  fresh.namespacePolicyCompleteness={'':false};fresh.issues=[{path:'sys/policies/acl',reason:'Vault HTTP 403'}];
+  const failed=mergeRefresh(base,fresh,['policies']);
+  assert.equal(failed.resources.length,2);assert.equal(failed.policiesComplete,false);
+  fresh.collection.stageResults![0].complete=true;fresh.namespacePolicyCompleteness['']=true;fresh.issues=[];
+  const success=mergeRefresh(base,fresh,['policies']);
+  assert.equal(success.resources.length,1);assert.equal(success.resources[0].kind,'role');
+  assert.equal(success.refresh?.retainedResources,1);assert.equal(base.resources.length,2);
+  assert.deepEqual(parseAuditArguments(['refresh','run','--source','policies','--source','identity']).requestPolicy.sources,['identity','policies']);
 });

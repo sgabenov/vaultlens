@@ -1,3 +1,4 @@
+import { COLLECTION_SOURCES } from './collectionStages.js';
 import { normalizeNamespace } from './namespaces.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { VaultError } from '../lib/vaultClient.js';
@@ -45,7 +46,7 @@ export function createRequestPolicy(options:RequestPolicyOptions,clock: {now:()=
 }
 
 export interface CollectionOptions extends RequestPolicyOptions {
-  namespace:string;redactPolicySource:boolean;recursiveNamespaces:boolean;
+  sources:string[];namespace:string;redactPolicySource:boolean;recursiveNamespaces:boolean;
   workers:number;timeoutMs:number;maxDurationMs:number;maxObjects:number;
   namespaceFilters:string[];policyFilters:string[];authMountFilters:string[];authTypeFilters:string[];skipIdentity:boolean;
 }
@@ -53,8 +54,8 @@ export function parseCollectionOptions(raw:unknown):CollectionOptions {
   if(raw===undefined) raw={};
   if(!raw || typeof raw!=='object'||Array.isArray(raw)) throw new Error('Collection options must be an object');
   const value=raw as Record<string,unknown>;
-  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects','namespaceFilters','policyFilters','authMountFilters','authTypeFilters','skipIdentity','namespace','redactPolicySource','recursiveNamespaces'].includes(key))) throw new Error('Unknown collection option');
-  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,namespaceFilters:[],policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:'',...value} as CollectionOptions;
+  if(Object.keys(value).some(key=>!['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects','namespaceFilters','policyFilters','authMountFilters','authTypeFilters','skipIdentity','namespace','redactPolicySource','recursiveNamespaces','sources'].includes(key))) throw new Error('Unknown collection option');
+  const options={...DEFAULT_REQUEST_POLICY,workers:10,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,namespaceFilters:[],policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:'',sources:COLLECTION_SOURCES,...value} as CollectionOptions;
   for(const key of ['workers','retries','requestsPerSecond','retryBackoffMs','timeoutMs','maxDurationMs','maxObjects'] as const) if(typeof options[key]!=='number') throw new Error('Collection options must be numeric');
   if(typeof options.recursiveNamespaces!=='boolean') throw new Error('recursiveNamespaces must be boolean');
   if(typeof options.redactPolicySource!=='boolean') throw new Error('redactPolicySource must be boolean');
@@ -63,6 +64,8 @@ export function parseCollectionOptions(raw:unknown):CollectionOptions {
     if(!Array.isArray(options[key])||options[key].length>100||options[key].some(v=>typeof v!=='string'||!v.trim()||v.length>256)) throw new Error(`Invalid ${key}`);
     options[key]=[...new Set(options[key])].sort();
   }
+  if(!Array.isArray(options.sources) || !options.sources.length || options.sources.some(source=>!COLLECTION_SOURCES.includes(source))) throw new Error('Invalid collection sources');
+  options.sources=[...new Set(options.sources)].sort();
   options.namespace=normalizeNamespace(options.namespace);
   validateRequestPolicy(options);
   if(!Number.isInteger(options.workers)||options.workers<1||options.workers>32) throw new Error('workers must be an integer from 1 to 32');
