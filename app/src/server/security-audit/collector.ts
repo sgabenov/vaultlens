@@ -6,6 +6,13 @@ import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
 export const COLLECTED_FIELDS = [
+  'bound_cidrs',
+  'num_uses',
+  'local_secret_ids',
+  'user_claim',
+  'groups_claim',
+  'alias_name_source',
+  'allowed_entity_aliases',
   'name',
   'id',
   'parent_group_ids',
@@ -190,6 +197,11 @@ export async function collect(
     jwt: 'role',
     oidc: 'role',
     token: 'roles',
+    aws: 'role',
+    azure: 'role',
+    alicloud: 'role',
+    oci: 'role',
+    gcp: 'roles',
   };
   for (const [mount, value] of Object.entries(auth ?? {})) {
     const type = String((value as Record<string, unknown>)?.type ?? '');

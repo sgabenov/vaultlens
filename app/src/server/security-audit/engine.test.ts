@@ -825,3 +825,42 @@ test('collector rejects malformed catalogs and missing ACL source instead of pro
     await new Promise<void>((resolve,reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+test('collector inventories Python-supported cloud auth roles with allowlisted token settings', async () => {
+  const types = ['aws','azure','alicloud','oci','gcp'];
+  const requests: string[] = [];
+  const server = createRawServer(socket => {
+    let request = '';
+    socket.on('data', chunk => {
+      request += chunk.toString();
+      if (!request.includes('\r\n\r\n')) return;
+      const [method,path] = request.split('\r\n')[0].split(' ');
+      requests.push(`${method} ${path}`);
+      let data: Record<string,unknown> = method === 'LIST' ? {keys:[]} : {};
+      if (path === '/v1/sys/auth') data = Object.fromEntries(types.map(type => [`${type}/`,{type,accessor:`${type}-accessor`}]));
+      if (method === 'LIST' && path.startsWith('/v1/auth/')) data = {keys:['workload']};
+      if (path.endsWith('/workload')) data = {
+        token_policies:['cloud-read'],token_ttl:600,token_bound_cidrs:['192.0.2.0/24'],
+        secret_access_key:'must-not-persist',client_secret:'must-not-persist',private_key:'must-not-persist',
+      };
+      const payload = JSON.stringify({data});
+      socket.end(`HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`);
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0,'127.0.0.1',resolve));
+  try {
+    const address = server.address() as import('node:net').AddressInfo;
+    const result = await collect(`http://127.0.0.1:${address.port}`,'fixture-token',false,{retries:0,requestsPerSecond:1000,maxDurationMs:5000});
+    assert.deepEqual(result.issues,[]);
+    const roles = result.resources.filter(resource => resource.kind === 'role');
+    assert.equal(roles.length,5);
+    assert.deepEqual(roles.map(role => role.data.auth_type).sort(),[...types].sort());
+    assert.ok(roles.every(role => role.data.token_ttl === 600));
+    assert.ok(!JSON.stringify(result).includes('must-not-persist'));
+    assert.ok(requests.includes('LIST /v1/auth/gcp/roles'));
+    assert.ok(requests.includes('GET /v1/auth/aws/role/workload'));
+    assert.ok(requests.every(request => !request.endsWith('/config')));
+  } finally {
+    await new Promise<void>((resolve,reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
