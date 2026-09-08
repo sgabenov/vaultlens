@@ -1,5 +1,5 @@
 import { evaluateReference } from './referenceDetector.js';
-import { roleEntityIds } from './identity.js';
+import { analyzeIdentity, roleEntityIds } from './identity.js';
 import { RELATIONSHIP_DETECTORS, evaluateRelationship } from './relationshipDetectors.js';
 import type { PolicyBlock } from './policyParser.js';
 import { parsePolicy } from './policyParser.js';
@@ -23,7 +23,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '8';
+export const ENGINE_VERSION = '9';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -122,7 +122,7 @@ export function analyze(snapshot: AuditSnapshot): AuditFinding[] {
 export function execute(
   snapshot: AuditSnapshot,
   settings: RuleSettings,
-): { findings: AuditFinding[]; configuration: RunConfiguration } {
+): { findings: AuditFinding[]; configuration: RunConfiguration; identity: import('../../shared/securityAudit.js').IdentityAnalysis } {
   const pinned = (settings as RunConfiguration).catalog;
   const definitions = (pinned ?? catalog(settings)).map((rule) => ({
     ...rule,
@@ -185,6 +185,8 @@ export function execute(
   }
 
   const knownPolicies = new Set(['root', ...snapshot.resources.filter(r => r.kind === 'policy').map(r => String(r.data.name))]);
+  const identity = analyzeIdentity(snapshot.resources);
+  issues.push(...identity.issues);
   const entityIds = roleEntityIds(snapshot.resources);
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
   const bindings: Record<string, string> = {
@@ -301,6 +303,7 @@ export function execute(
     );
   }
   return {
+    identity,
     findings,
     configuration: {
       ...settings,

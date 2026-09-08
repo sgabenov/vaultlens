@@ -3,6 +3,8 @@ import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
 export const COLLECTED_FIELDS = [
   'name',
+  'id',
+  'parent_group_ids',
   'type',
   'policies',
   'token_policies',

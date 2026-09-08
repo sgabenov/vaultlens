@@ -7,7 +7,14 @@ export interface AuditIssue {
   path: string;
   reason: string;
 }
+export interface IdentityAnalysis {
+  assignments: {subjectPath:string; subjectKind:string; policy:string; relationship:'assigned'|'inherited'; sourcePath:string}[];
+  issues: AuditIssue[];
+  groupCount: number;
+  entityCount: number;
+}
 export interface AuditSnapshot {
+  identity?: IdentityAnalysis;
   version: 1;
   target: string;
   startedAt: string;

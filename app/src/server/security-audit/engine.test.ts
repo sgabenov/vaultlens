@@ -471,3 +471,29 @@ test('implicit default policy participates in auth privilege checks', () => {
   s.resources[1].data.token_no_default_policy = true;
   assert.ok(!execute(s, DEFAULT_SETTINGS).findings.some(f => f.ruleId === 'APPROLE-001'));
 });
+
+import { analyzeIdentity } from './identity.js';
+test('nested Identity groups retain provenance without duplicate diamond assignments', () => {
+  const s = snapshot();
+  s.resources = [
+    {kind:'group',path:'identity/group/id/top',data:{policies:['admin'],member_group_ids:['left','right']}},
+    {kind:'group',path:'identity/group/id/left',data:{policies:['left'],member_group_ids:['leaf']}},
+    {kind:'group',path:'identity/group/id/right',data:{policies:[],member_group_ids:['leaf']}},
+    {kind:'group',path:'identity/group/id/leaf',data:{policies:['read'],member_entity_ids:['person']}},
+    {kind:'entity',path:'identity/entity/id/person',data:{policies:['own']}},
+  ];
+  const before=structuredClone(s.resources);
+  const result=analyzeIdentity(s.resources);
+  assert.equal(result.issues.length,0);
+  const effective=result.assignments.filter(a => a.subjectKind==='entity');
+  assert.deepEqual(effective.map(a=>a.policy), ['admin','left','own','read']);
+  assert.equal(effective.find(a=>a.policy==='admin')?.sourcePath,'identity/group/id/top');
+  assert.deepEqual(s.resources,before);
+  s.resources[0].data.parent_group_ids=['leaf','missing'];
+  s.resources[3].data.member_entity_ids=['absent'];
+  const broken=execute(s,DEFAULT_SETTINGS);
+  assert.ok(broken.configuration.issues.some(i=>i.reason.includes('cycle')));
+  assert.ok(broken.configuration.issues.some(i=>i.path==='identity/group/id/missing'));
+  assert.ok(broken.configuration.issues.some(i=>i.path==='identity/entity/id/absent'));
+  assert.ok(!broken.identity.assignments.some(a=>a.relationship==='inherited' && a.subjectPath===a.sourcePath));
+});

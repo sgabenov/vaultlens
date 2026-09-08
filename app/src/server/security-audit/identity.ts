@@ -22,3 +22,63 @@ export function roleEntityIds(resources: AuditResource[]): Map<string, Set<strin
   }
   return result;
 }
+
+import type { IdentityAnalysis } from '../../shared/securityAudit.js';
+import { values } from './authDetectors.js';
+
+/** Derive group inheritance without changing the observed resource inventory. */
+export function analyzeIdentity(resources: AuditResource[]): IdentityAnalysis {
+  const id = (r: AuditResource) => String(r.data.id ?? decodeURIComponent(r.path.split('/').pop() ?? ''));
+  const groups = new Map(resources.filter(r => r.kind === 'group').map(r => [id(r), r]));
+  const entities = new Map(resources.filter(r => r.kind === 'entity').map(r => [id(r), r]));
+  const parents = new Map<string, Set<string>>();
+  const membership = new Map<string, Set<string>>();
+  const issues = new Map<string, {path:string; reason:string}>();
+  const gap = (path:string, reason:string) => issues.set(`${path}:${reason}`, {path,reason});
+  const edge = (map: Map<string,Set<string>>, child:string, parent:string) => {
+    const set = map.get(child) ?? new Set<string>(); set.add(parent); map.set(child,set);
+  };
+  for (const [groupId, group] of groups) {
+    for (const parent of values(group.data.parent_group_ids)) edge(parents,groupId,parent);
+    for (const child of values(group.data.member_group_ids)) edge(parents,child,groupId);
+    for (const entity of values(group.data.member_entity_ids)) edge(membership,entity,groupId);
+  }
+  for (const [child, parentIds] of parents) {
+    if (!groups.has(child)) gap(`identity/group/id/${child}`, 'Referenced child group was not collected');
+    for (const parent of parentIds)
+      if (!groups.has(parent)) gap(`identity/group/id/${parent}`, 'Referenced parent group was not collected');
+  }
+  for (const entity of membership.keys())
+    if (!entities.has(entity)) gap(`identity/entity/id/${entity}`, 'Referenced member entity was not collected');
+  const ancestors = new Map<string, Set<string>>();
+  for (const groupId of groups.keys()) {
+    const seen = new Set<string>(), queue = [...(parents.get(groupId) ?? [])];
+    for (let index=0; index<queue.length; index++) {
+      const next=queue[index];
+      if (next === groupId) { gap(`identity/group/id/${groupId}`, 'Identity group cycle detected'); continue; }
+      if (seen.has(next)) continue;
+      seen.add(next); queue.push(...(parents.get(next) ?? []));
+    }
+    ancestors.set(groupId, seen);
+  }
+  const assignments: IdentityAnalysis['assignments'] = [];
+  const add = (subject:AuditResource, source:AuditResource, relationship:'assigned'|'inherited') => {
+    for (const policy of values(source.data.policies)) assignments.push({
+      subjectPath:subject.path, subjectKind:subject.kind, policy, relationship, sourcePath:source.path,
+    });
+  };
+  for (const [groupId,group] of groups) {
+    add(group,group,'assigned');
+    for (const ancestor of ancestors.get(groupId) ?? []) {
+      const source = groups.get(ancestor); if (source) add(group,source,'inherited');
+    }
+  }
+  for (const [entityId,entity] of entities) {
+    add(entity,entity,'assigned');
+    const effective = new Set(membership.get(entityId) ?? []);
+    for (const direct of [...effective]) for (const ancestor of ancestors.get(direct) ?? []) effective.add(ancestor);
+    for (const groupId of effective) { const source=groups.get(groupId); if(source) add(entity,source,'inherited'); }
+  }
+  assignments.sort((a,b) => a.subjectPath.localeCompare(b.subjectPath) || a.policy.localeCompare(b.policy) || a.sourcePath.localeCompare(b.sourcePath));
+  return {assignments, issues:[...issues.values()], groupCount:groups.size, entityCount:entities.size};
+}

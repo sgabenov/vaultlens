@@ -14,7 +14,8 @@ try {
     const id = store.create(target);
     try {
       const snapshot = await collect(target, process.env['VAULT_TOKEN']);
-      const { findings, configuration } = execute(snapshot, store.settings());
+      const { findings, configuration, identity } = execute(snapshot, store.settings());
+      snapshot.identity = identity;
       store.finish(id, snapshot, findings, configuration);
       console.log(
         JSON.stringify({ id, snapshot, findings, configuration }, null, 2),
@@ -32,7 +33,7 @@ try {
   } else if (command === 'analyze' && argument) {
     const detail = store.get(argument, target);
     if (!detail?.snapshot) throw new Error('Snapshot not found for VAULT_ADDR');
-    const { findings, configuration } = execute(
+    const { findings, configuration, identity } = execute(
       detail.snapshot,
       detail.configuration ?? store.settings(),
     );
@@ -40,6 +41,7 @@ try {
       JSON.stringify(
         {
           id: argument,
+          identity,
           findings,
           issues: detail.snapshot.issues,
           configuration,

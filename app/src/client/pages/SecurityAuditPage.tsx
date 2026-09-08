@@ -8,6 +8,7 @@ import {
 } from '../lib/api';
 export default function SecurityAuditPage() {
   const [selected, setSelected] = useState('');
+  const [identityFilter, setIdentityFilter] = useState('');
   const [severity, setSeverity] = useState('all');
   const queryClient = useQueryClient();
   const runs = useQuery({
@@ -39,6 +40,8 @@ export default function SecurityAuditPage() {
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
+  const identityAssignments = detail.data?.snapshot?.identity?.assignments.filter(a =>
+    [a.subjectPath, a.policy, a.sourcePath].some(v => v.toLowerCase().includes(identityFilter.toLowerCase()))) ?? [];
   const error = runs.error || detail.error || start.error;
   return (
     <div className="space-y-6">
@@ -177,6 +180,26 @@ export default function SecurityAuditPage() {
                   <option value="info">Info</option>
                 </select>
               </div>
+              {detail.data.snapshot?.identity && (
+                <details className="rounded border p-3 text-sm">
+                  <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>
+                  <input aria-label="Filter Identity assignments" placeholder="Filter entity, group or policy"
+                    className="my-3 w-full rounded border p-2" value={identityFilter}
+                    onChange={event => setIdentityFilter(event.target.value)} />
+                  <p className="mb-2 text-xs text-gray-500">Showing {Math.min(100, identityAssignments.length)} of {identityAssignments.length} matches. Group inheritance does not prove access through an auth role.</p>
+                  <div className="overflow-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead><tr><th>Subject</th><th>Policy</th><th>Assignment</th><th>Source</th></tr></thead>
+                      <tbody>{identityAssignments.slice(0, 100).map((assignment, index) => (
+                        <tr key={index} className="border-t">
+                          <td className="p-2">{assignment.subjectPath}</td><td>{assignment.policy}</td>
+                          <td>{assignment.relationship}</td><td>{assignment.sourcePath}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
               {detail.data.configuration && (
                 <details className="rounded border p-3 text-sm">
                   <summary>
