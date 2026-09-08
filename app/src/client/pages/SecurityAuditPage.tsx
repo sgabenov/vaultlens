@@ -8,6 +8,7 @@ import {
 } from '../lib/api';
 export default function SecurityAuditPage() {
   const [selected, setSelected] = useState('');
+  const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
   const [severity, setSeverity] = useState('all');
   const queryClient = useQueryClient();
@@ -185,18 +186,21 @@ export default function SecurityAuditPage() {
                   <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>
                   <input aria-label="Filter Identity assignments" placeholder="Filter entity, group or policy"
                     className="my-3 w-full rounded border p-2" value={identityFilter}
-                    onChange={event => setIdentityFilter(event.target.value)} />
-                  <p className="mb-2 text-xs text-gray-500">Showing {Math.min(100, identityAssignments.length)} of {identityAssignments.length} matches. Group inheritance does not prove access through an auth role.</p>
+                    onChange={event => { setIdentityFilter(event.target.value); setIdentityLimit(100); }} />
+                  <p className="mb-2 text-xs text-gray-500">Showing {Math.min(identityLimit, identityAssignments.length)} of {identityAssignments.length} matches. Group inheritance does not prove access through an auth role.</p>
                   <div className="overflow-auto">
                     <table className="w-full text-left text-xs">
                       <thead><tr><th>Subject</th><th>Policy</th><th>Assignment</th><th>Source</th></tr></thead>
-                      <tbody>{identityAssignments.slice(0, 100).map((assignment, index) => (
+                      <tbody>{identityAssignments.slice(0, identityLimit).map((assignment, index) => (
                         <tr key={index} className="border-t">
                           <td className="p-2">{assignment.subjectPath}</td><td>{assignment.policy}</td>
                           <td>{assignment.relationship}</td><td>{assignment.sourcePath}</td>
                         </tr>
                       ))}</tbody>
                     </table>
+                    {identityAssignments.length > identityLimit && (
+                      <button className="mt-3 rounded border px-3 py-2" onClick={() => setIdentityLimit(limit => limit + 100)}>Show 100 more assignments</button>
+                    )}
                   </div>
                 </details>
               )}

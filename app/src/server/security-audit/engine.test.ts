@@ -497,3 +497,13 @@ test('nested Identity groups retain provenance without duplicate diamond assignm
   assert.ok(broken.configuration.issues.some(i=>i.path==='identity/entity/id/absent'));
   assert.ok(!broken.identity.assignments.some(a=>a.relationship==='inherited' && a.subjectPath===a.sourcePath));
 });
+
+import identityFixtures from './fixtures/identity-parity.json' with {type:'json'};
+test('Identity inheritance matches Python for parent/child edges and diamond provenance', () => {
+  const sorted = (items: unknown[]) => items.map(item => JSON.stringify(item)).sort();
+  for (const fixture of identityFixtures) {
+    const result=analyzeIdentity(fixture.resources);
+    assert.deepEqual(sorted(result.assignments), sorted(fixture.expected), fixture.name);
+    assert.equal(result.issues.length > 0, fixture.partial, fixture.name);
+  }
+});
