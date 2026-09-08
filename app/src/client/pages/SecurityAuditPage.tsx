@@ -14,6 +14,7 @@ import {
   reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
+  const [recursiveNamespaces,setRecursiveNamespaces]=useState(false);
   const [namespace,setNamespace]=useState('');
   const [scopeText,setScopeText]=useState({policyFilters:'',authMountFilters:'',authTypeFilters:''});
   const [redactPolicySource,setRedactPolicySource]=useState(false);
@@ -40,7 +41,7 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource},controlDocuments),
+    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource,recursiveNamespaces},controlDocuments),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -108,6 +109,7 @@ export default function SecurityAuditPage() {
               value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
           </label>)}
         </div>
+        <label className="mt-3 block"><input type="checkbox" checked={recursiveNamespaces} disabled={!!running||start.isPending} onChange={event=>setRecursiveNamespaces(event.target.checked)} /> Include child namespaces recursively</label>
         <label className="mt-3 block"><input type="checkbox" checked={redactPolicySource} disabled={!!running||start.isPending} onChange={event=>setRedactPolicySource(event.target.checked)} /> Do not store full policy source</label>
         <p className="text-xs text-gray-500">Initial analysis uses the source in memory. Matched ACL blocks remain in findings; later offline analysis will have coverage gaps.</p>
         <label className="mt-3 block"><input type="checkbox" checked={skipIdentity} disabled={!!running||start.isPending} onChange={event=>setSkipIdentity(event.target.checked)} /> Skip Identity collection (reported as a coverage gap)</label>

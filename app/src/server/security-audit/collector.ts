@@ -1,3 +1,4 @@
+import { normalizeNamespace } from './namespaces.js';
 import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
 import { forEachConcurrent } from './concurrency.js';
@@ -66,7 +67,8 @@ export async function collect(
   const limitAbort=new AbortController();
   const signal=AbortSignal.any([AbortSignal.timeout(maxDurationMs),limitAbort.signal]);
   const policy=createRequestPolicy(policyOptions,undefined,signal);
-  const client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal,namespace:policyOptions.namespace});
+  let namespace=policyOptions.namespace;
+  let client = new VaultClient(target, skipTlsVerify,{timeoutMs,signal,namespace:policyOptions.namespace});
   const snapshot: AuditSnapshot = {
     version: 1,
     analysisPerformed: false,
@@ -90,7 +92,7 @@ export async function collect(
       limitAbort.abort();return;
     }
     if(counted) countedObjects++;
-    snapshot.resources.push(policyOptions.namespace ? {...resource,namespace:policyOptions.namespace} : resource);
+    snapshot.resources.push(namespace ? {...resource,namespace} : resource);
   }
   async function read(
     path: string,
@@ -138,6 +140,8 @@ export async function collect(
     Object.fromEntries(
       COLLECTED_FIELDS.filter((k) => k in data).map((k) => [k, data[k]]),
     );
+  async function collectNamespace() {
+    aliasesComplete=false;
   // Discovery stages are ordered; independent reads share one rate limiter.
   const policyList = await read('sys/policies/acl', true);
   snapshot.policiesComplete = policyList !== null && !policyOptions.policyFilters.length;
@@ -238,11 +242,47 @@ export async function collect(
       }
     });
   }
-  snapshot.resources.sort((a,b)=>a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
+  }
+  function selectNamespace(value:string) {
+    namespace=value;
+    client=new VaultClient(target,skipTlsVerify,{timeoutMs,signal,namespace});
+  }
+  const discovered=[policyOptions.namespace];
+  if(policyOptions.recursiveNamespaces) {
+    for(let index=0;index<discovered.length && !signal.aborted;index++) {
+      selectNamespace(discovered[index]);
+      const issueStart=snapshot.issues.length;
+      const children=keys(await read('sys/namespaces',true));
+      for(const rawChild of children) {
+        const child=rawChild.replace(/\/$/,'');
+        if(!child || child.includes('/') || child==='.' || child==='..') {
+          snapshot.issues.push({path:'sys/namespaces',reason:'Invalid child namespace path'});continue;
+        }
+        let full:string;
+        try {full=normalizeNamespace([namespace,child].filter(Boolean).join('/'));}
+        catch {snapshot.issues.push({path:'sys/namespaces',reason:'Invalid child namespace path'});continue;}
+        if(discovered.includes(full)) continue;
+        if(discovered.length>=10000) {snapshot.issues.push({path:'sys/namespaces',reason:'Namespace discovery limit reached'});break;}
+        discovered.push(full);
+      }
+      for(const issue of snapshot.issues.slice(issueStart)) if(namespace) issue.namespace=namespace;
+    }
+  }
+  snapshot.namespaces=discovered;
+  snapshot.namespacePolicyCompleteness=Object.fromEntries(discovered.map(value=>[value,false]));
+  snapshot.namespaceAliasCompleteness=Object.fromEntries(discovered.map(value=>[value,false]));
+  for(const current of discovered) {
+    if(signal.aborted) break;
+    selectNamespace(current);
+    const issueStart=snapshot.issues.length;
+    await collectNamespace();
+    snapshot.namespacePolicyCompleteness[current]=snapshot.policiesComplete && !signal.aborted;
+    snapshot.namespaceAliasCompleteness[current]=aliasesComplete && !signal.aborted;
+    for(const issue of snapshot.issues.slice(issueStart)) if(current) issue.namespace=current;
+  }
+  snapshot.policiesComplete=discovered.every(value=>snapshot.namespacePolicyCompleteness![value]);
+  snapshot.resources.sort((a,b)=>(a.namespace??'').localeCompare(b.namespace??'')||a.path.localeCompare(b.path)||a.kind.localeCompare(b.kind));
   snapshot.issues.sort((a,b)=>a.path.localeCompare(b.path)||a.reason.localeCompare(b.reason));
-  snapshot.namespaceAliasCompleteness={[policyOptions.namespace]:aliasesComplete && !signal.aborted};
-  snapshot.namespacePolicyCompleteness={[policyOptions.namespace]:snapshot.policiesComplete};
-  if(policyOptions.namespace) snapshot.issues=snapshot.issues.map(issue=>({...issue,namespace:policyOptions.namespace}));
   snapshot.finishedAt = new Date().toISOString();
   return snapshot;
 }

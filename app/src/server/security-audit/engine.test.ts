@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,namespace:''});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false,redactPolicySource:false,recursiveNamespaces:false,namespace:''});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);
@@ -1021,4 +1021,43 @@ test('worker failures retain safe reasons without leaking raw exception values o
     assert.equal(store.get(success,'http://example.invalid')!.run.failureReason,null);
     assert.equal(store.get(success,'http://example.invalid')!.run.status,'completed');
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('recursive collection scopes headers and shares object limits across namespaces', async () => {
+  const seen:string[]=[];
+  const server=createRawServer(socket=>{
+    let request='';socket.on('data',chunk=>{
+      request+=chunk.toString();if(!request.includes('\r\n\r\n')) return;
+      const [method,path]=request.split('\r\n')[0].split(' ');
+      const namespace=request.match(/x-vault-namespace:\s*([^\r\n]+)/i)?.[1]??'';
+      seen.push(`${namespace}:${path}`);
+      let status=200;let data:Record<string,unknown>=method==='LIST'?{keys:[]}:{};
+      if(path==='/v1/sys/namespaces') {
+        if(namespace==='') data={keys:['team/']};
+        else if(namespace==='team') data={keys:['child/','../']};
+        else status=403;
+      }
+      if(path==='/v1/sys/policies/acl') data={keys:['default']};
+      if(path==='/v1/sys/policies/acl/default') data={policy:'# namespace '+namespace};
+      const payload=JSON.stringify({data});
+      socket.end(`HTTP/1.1 ${status} ${status===200?'OK':'Forbidden'}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`);
+    });
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try {
+    const target=`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+    const options={recursiveNamespaces:true,retries:0,requestsPerSecond:1000,maxDurationMs:5000};
+    const s=await collect(target,'fixture-token',false,options);
+    assert.deepEqual(s.namespaces,['','team','team/child']);
+    assert.deepEqual(s.resources.map(resource=>resource.namespace??''),['','team','team/child']);
+    assert.ok(s.issues.some(issue=>issue.namespace==='team/child' && issue.reason==='Vault HTTP 403'));
+    assert.ok(s.issues.some(issue=>issue.namespace==='team' && issue.reason==='Invalid child namespace path'));
+    assert.deepEqual(s.namespacePolicyCompleteness,{'':true,team:true,'team/child':true});
+    assert.ok(seen.includes('team/child:/v1/sys/policies/acl/default'));
+    const limited=await collect(target,'fixture-token',false,{...options,maxObjects:1});
+    assert.equal(limited.resources.length,1);
+    assert.equal(limited.policiesComplete,false);
+    assert.equal(limited.issues.filter(issue=>issue.path==='collection/object-limit').length,1);
+    assert.equal(parseAuditArguments(['collect','--recursive-namespaces']).requestPolicy.recursiveNamespaces,true);
+  } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
