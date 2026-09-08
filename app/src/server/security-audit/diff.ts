@@ -42,6 +42,9 @@ export function compareRuns(old:AuditDetail, next:AuditDetail) {
     throw new Error('Snapshot targets or schemas are incomparable');
   if((old.snapshot.collection?.requestPolicy.maxObjects??0)!==(next.snapshot.collection?.requestPolicy.maxObjects??0))
     throw new Error('Snapshot object limits are incomparable');
+  const defaultScope={policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false};
+  if(canonical(old.snapshot.collection?.scope??defaultScope)!==canonical(next.snapshot.collection?.scope??defaultScope))
+    throw new Error('Snapshot collection scopes are incomparable');
   if(!old.configuration || !next.configuration ||
     old.configuration.fingerprint!==next.configuration.fingerprint ||
     old.configuration.engineVersion!==next.configuration.engineVersion)

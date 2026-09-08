@@ -653,7 +653,7 @@ test('collector pool bounds concurrency and drains active work after an error', 
 import { parseCollectionOptions } from './requestPolicy.js';
 test('web collection options validate types and reject unsupported settings before starting', () => {
   assert.equal(parseCollectionOptions(undefined).workers,10);
-  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
+  assert.deepEqual(parseCollectionOptions({workers:2,retries:0}),{workers:2,retries:0,requestsPerSecond:10,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0,policyFilters:[],authMountFilters:[],authTypeFilters:[],skipIdentity:false});
   assert.throws(()=>parseCollectionOptions({workers:'2'}),/numeric/);
   assert.throws(()=>parseCollectionOptions({workers:33}),/workers/);
   assert.throws(()=>parseCollectionOptions({requestsPerSecond:0}),/requestsPerSecond/);

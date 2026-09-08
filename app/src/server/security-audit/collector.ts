@@ -1,5 +1,6 @@
+import { globMatch } from './authDetectors.js';
 import { forEachConcurrent } from './concurrency.js';
-import { createRequestPolicy, parseCollectionOptions, type RequestPolicyOptions } from './requestPolicy.js';
+import { createRequestPolicy, parseCollectionOptions, type CollectionOptions } from './requestPolicy.js';
 import { createHash } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
@@ -49,10 +50,11 @@ export async function collect(
   target: string,
   token: string,
   skipTlsVerify = false,
-  requestOptions: Partial<RequestPolicyOptions> & {workers?:number;timeoutMs?:number;maxDurationMs?:number;maxObjects?:number} = {},
+  requestOptions: Partial<CollectionOptions> = {},
 ): Promise<AuditSnapshot> {
   const policyOptions=parseCollectionOptions(requestOptions);
   const {workers,timeoutMs,maxDurationMs}=policyOptions;
+  const matches=(value:string,patterns:string[])=>!patterns.length||patterns.some(pattern=>globMatch(pattern,value));
   const limitAbort=new AbortController();
   const signal=AbortSignal.any([AbortSignal.timeout(maxDurationMs),limitAbort.signal]);
   const policy=createRequestPolicy(policyOptions,undefined,signal);
@@ -66,7 +68,7 @@ export async function collect(
     resources: [],
     issues: [],
     policiesComplete: false,
-    collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics},
+    collection: {workers,requestPolicy:policyOptions,metrics:policy.metrics,scope:{policyFilters:policyOptions.policyFilters,authMountFilters:policyOptions.authMountFilters,authTypeFilters:policyOptions.authTypeFilters,skipIdentity:policyOptions.skipIdentity}},
   };
   let countedObjects=0;
   function addResource(resource: import('../../shared/securityAudit.js').AuditResource) {
@@ -119,8 +121,8 @@ export async function collect(
     );
   // Discovery stages are ordered; independent reads share one rate limiter.
   const policyList = await read('sys/policies/acl', true);
-  snapshot.policiesComplete = policyList !== null;
-  await forEachConcurrent(keys(policyList).filter(name=>name!=='root'),workers,async name=>{
+  snapshot.policiesComplete = policyList !== null && !policyOptions.policyFilters.length;
+  await forEachConcurrent(keys(policyList).filter(name=>name!=='root' && matches(name,policyOptions.policyFilters)),workers,async name=>{
     const path = `sys/policies/acl/${encodeURIComponent(name)}`;
     const data = await read(path);
     if (data)
@@ -131,6 +133,7 @@ export async function collect(
       });
     else snapshot.policiesComplete = false;
   });
+  if(!policyOptions.skipIdentity) {
   for (const kind of ['entity', 'group']) {
     const base = `identity/${kind}/id`;
     await forEachConcurrent(keys(await read(base,true)),workers,async id=>{
@@ -149,6 +152,7 @@ export async function collect(
         ? createHash('sha256').update(data.name).digest('hex') : undefined,
     } });
   });
+  } else snapshot.issues.push({path:'identity',reason:'Identity collection was explicitly skipped'});
   const secretMounts = await read('sys/mounts');
   for (const [mount, value] of Object.entries(secretMounts ?? {}))
     addResource({
@@ -174,6 +178,7 @@ export async function collect(
       path: `auth/${mount}`,
       data: { type, accessor: (value as Record<string, unknown>).accessor },
     });
+    if(!matches(mount.replace(/\/$/,''),policyOptions.authMountFilters)||!matches(type,policyOptions.authTypeFilters)) continue;
     if (!supported[type]) {
       snapshot.issues.push({
         path: `auth/${mount}`,
