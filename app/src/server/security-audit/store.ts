@@ -92,6 +92,18 @@ export class AuditStore {
       )
       .all(target) as unknown as AuditRun[];
   }
+  deleteRuns(target:string,ids:string[]):number {
+    if(!ids.length||ids.length>100||new Set(ids).size!==ids.length)throw new Error('Select between 1 and 100 distinct runs');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if(this.db.prepare("SELECT id FROM audit_runs WHERE target=? AND status='running'").get(target))throw new Error('Wait for the active audit to finish before deleting runs');
+      const lookup=this.db.prepare('SELECT id FROM audit_runs WHERE target=? AND id=?');
+      for(const id of ids)if(!lookup.get(target,id))throw new Error('A selected run is unavailable. Refresh the list and try again');
+      const remove=this.db.prepare('DELETE FROM audit_runs WHERE target=? AND id=?');
+      for(const id of ids)remove.run(target,id);
+      this.db.exec('COMMIT');return ids.length;
+    } catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
   get(id: string, target: string): AuditDetail | null {
     const row = this.db
       .prepare('SELECT * FROM audit_runs WHERE id=? AND target=?')

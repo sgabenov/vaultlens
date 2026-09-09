@@ -153,3 +153,20 @@ IDs outside the recent-run list retain a selectable fallback entry.
 Client build passed. Browser opening without a run pinned the latest ID; selecting
 f3627d33 updated the URL, selected label, navigation links and displayed four
 findings instead of five.
+
+## Run selection and deletion
+
+The history selection column is named Select. Its header checkbox selects all
+listed non-running runs (up to 100, across pagination), with an indeterminate
+state for partial selection. Compare requires exactly two analyzed runs; Delete
+accepts any selected finished/failed runs and confirms the count before removal.
+Deletion removes their local snapshots, findings and report data, not Vault
+configuration or other runs. References in surviving runs remain historical IDs.
+
+Bulk deletion validates target ownership and the complete selection inside one
+SQLite transaction. Active audit work blocks deletion to protect reused snapshots.
+The UI clears deleted selections, comparison caches and selected-run URL state.
+Production build and all 56 tests passed, including atomicity, target isolation
+and active-work protection. Browser Select all selected 13 listed runs; selection
+was cleared without deleting them. API deletion removed two temporary fixtures,
+with all existing runs retained.

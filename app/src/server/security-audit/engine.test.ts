@@ -1299,3 +1299,23 @@ test('saved exact object exceptions survive reopen and never expand wildcard sco
     assert.deepEqual(store.exceptions('vault-a'),[]);
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('bulk run deletion is atomic, target scoped and protects active work',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'audit-delete-'));
+  const store=new AuditStore(join(directory,'audit.sqlite'));
+  try {
+    const a=store.create('vault-a');store.fail(a);
+    const b=store.create('vault-a');store.fail(b);
+    const foreign=store.create('vault-b');store.fail(foreign);
+    assert.throws(()=>store.deleteRuns('vault-a',[a,foreign]),/unavailable/);
+    assert.ok(store.get(a,'vault-a'));
+    const active=store.create('vault-a');
+    assert.throws(()=>store.deleteRuns('vault-a',[a,b]),/active audit/);
+    store.fail(active);
+    assert.equal(store.deleteRuns('vault-a',[a,b]),2);
+    assert.equal(store.get(a,'vault-a'),null);
+    assert.ok(store.get(active,'vault-a'));
+    assert.ok(store.get(foreign,'vault-b'));
+    assert.throws(()=>store.deleteRuns('vault-a',[active,active]),/distinct/);
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});

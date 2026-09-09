@@ -1235,3 +1235,7 @@ export async function saveAuditObjectException(input:AuditExceptionInput,id?:str
   const url='/security-audit/exceptions'+(id?`/${encodeURIComponent(id)}`:'');
   const {data}=id?await api.put(url,input):await api.post(url,input);return data;
 }
+
+export async function deleteSecurityAuditRuns(ids:string[]) {
+  const {data}=await api.delete<{deleted:number}>('/security-audit/runs',{data:{ids}});return data;
+}

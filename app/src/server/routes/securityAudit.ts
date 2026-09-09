@@ -116,6 +116,14 @@ router.put('/rules', (req, res) => {
 router.get('/runs', (_req, res) =>
   res.json({ runs: storage().list(config.vaultAddr) }),
 );
+router.delete('/runs',(req,res)=>{
+  const ids=req.body?.ids;
+  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!id||id.length>128)){
+    res.status(400).json({error:'Provide 1 to 100 run IDs'});return;
+  }
+  try {res.json({deleted:storage().deleteRuns(config.vaultAddr,ids)});}
+  catch(error){res.status(409).json({error:error instanceof Error?error.message:'Could not delete runs'});}
+});
 router.get('/diff', (req, res) => {
   if (typeof req.query['old'] !== 'string' || typeof req.query['new'] !== 'string') {
     res.status(400).json({error:'Expected old and new run IDs'}); return;
