@@ -1,10 +1,11 @@
+import { AuditDraftProvider } from './AuditDraftContext';
 import { NavLink, Outlet, useSearchParams } from 'react-router-dom';
 
 export default function AuditWorkspace() {
   const [params] = useSearchParams();
   const run = params.get('run');
   const search = run ? `?${new URLSearchParams({ run })}` : '';
-  return <div className="space-y-5">
+  return <AuditDraftProvider><div className="space-y-5">
     <header>
       <h1 className="text-xl font-semibold text-gray-900">Security Audit</h1>
       <p className="mt-1 text-sm text-gray-500">Configuration risks, policy assignments and authentication checks.</p>
@@ -17,5 +18,5 @@ export default function AuditWorkspace() {
         </NavLink>)}
     </nav>
     <Outlet />
-  </div>;
+  </div></AuditDraftProvider>;
 }

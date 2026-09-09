@@ -135,3 +135,19 @@ both values. Reanalysis cfc95d38-8bc9-4f6e-826b-25a102ac45b8 completed with that
 revision pinned. The temporary mount was removed through the UI and saved in
 revision 4; API verification confirmed cleanup and the unchanged revision 3
 historical run. No actual Vault configuration was modified.
+
+## Drafts across audit navigation
+
+The audit workspace now owns the Checks draft, selected category and selected
+check. Internal tab navigation preserves these values without writing them to
+server storage. Discard changes restores saved settings, including list editor
+contents. A newer server revision is reported as a conflict; the existing
+revision-checked save endpoint remains authoritative. Save-in-progress state is
+shared so returning to Checks cannot edit or discard an in-flight save.
+Drafts last while the Security Audit workspace remains mounted; the UI explicitly
+asks users to save before leaving the workspace or reloading.
+
+Production build passed. Browser verification disabled POL-001 in a draft,
+switched to Runs, returned to Checks and confirmed the disabled check and unsaved
+indicator were retained. Discard restored 13 enabled checks and revision 4
+without saving a new configuration revision.
