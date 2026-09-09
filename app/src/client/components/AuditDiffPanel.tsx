@@ -1,28 +1,19 @@
+import { isAxiosError } from 'axios';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSecurityAuditDiff } from '../lib/api';
-import type { AuditRun } from '../../shared/securityAudit';
 
-export default function AuditDiffPanel({currentId,runs}:{currentId:string;runs:AuditRun[]}) {
-  const [oldId,setOldId]=useState('');
+export default function AuditDiffPanel({oldId,currentId}:{oldId:string;currentId:string}) {
   const [category,setCategory]=useState('findings');
   const [changeType,setChangeType]=useState('all');
   const [limit,setLimit]=useState(50);
   const query=useQuery({queryKey:['security-audit-diff',oldId,currentId],
     queryFn:()=>getSecurityAuditDiff(oldId,currentId),enabled:!!oldId,retry:false});
   const changes=(query.data?.changes[category]??[]).filter(c=>changeType==='all' ? c.change!=='unchanged' : c.change===changeType);
-  return <details className="rounded border p-3 text-sm">
-    <summary>Compare with another run</summary>
-    <label className="mt-3 block">Previous snapshot
-      <select aria-label="Previous audit snapshot" className="ml-2 rounded border p-2" value={oldId}
-        onChange={event=>{setOldId(event.target.value);setLimit(50);}}>
-        <option value="">Select a run</option>
-        {runs.filter(r=>r.id!==currentId && ['completed','partial'].includes(r.status)).map(r=>
-          <option key={r.id} value={r.id}>{new Date(r.startedAt).toLocaleString()} · {r.status} · {r.id.slice(0,8)}</option>)}
-      </select>
-    </label>
+  return <section aria-label="Run comparison" className="rounded border p-4 text-sm">
+    <h3 className="font-medium">Run comparison</h3>
     {query.isFetching && <p className="mt-3">Comparing saved snapshots…</p>}
-    {query.error && <p role="alert" className="mt-3 text-red-700">{query.error.message}</p>}
+    {query.error && <p role="alert" className="mt-3 text-red-700">{isAxiosError(query.error)&&typeof query.error.response?.data?.error==='string'?query.error.response.data.error:query.error.message}</p>}
     {query.data && <>
       {query.data.warnings.map(w=><p key={w} role="alert" className="mt-3 text-amber-800">{w}</p>)}
       <p className="my-3 text-xs text-gray-500">Old: {oldId} → New: {currentId}. Removed means absent from this result, not verified remediation.</p>
@@ -50,5 +41,5 @@ export default function AuditDiffPanel({currentId,runs}:{currentId:string;runs:A
       </details>)}
       {changes.length>limit && <button className="mt-3 rounded border px-3 py-2" onClick={()=>setLimit(n=>n+50)}>Show 50 more changes</button>}
     </>}
-  </details>;
+  </section>;
 }

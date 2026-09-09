@@ -104,3 +104,16 @@ Client build passed. Browser refresh from Sources requested only policies for
 run 0c72eaca-53f6-4468-b6ec-028551f0ed78. API readback confirmed new run
 0024bdbb-a296-43a5-b5f0-d84206d04ba8 completed with four requests, nine retained
 resources, twelve total resources, five findings and zero coverage issues.
+
+## Comparison placement
+
+Run comparison now lives in Runs. Select two completed/partial runs in the table
+and press Compare; the older run is Before and the newer run is After. Selection
+persists across list pages, caps at two, and can be cleared. Changing selection
+clears the previous comparison. Findings no longer embeds comparison controls.
+Backend compatibility checks remain enforced, with their explanatory errors shown
+instead of a generic HTTP status. Removed findings do not imply remediation.
+
+Client build passed. Browser comparison of runs 9149261c and 0024bdbb displayed
+12 unchanged resources and five unchanged findings. Comparing different rule
+configurations was rejected by the existing backend compatibility check.
