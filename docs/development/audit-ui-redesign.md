@@ -117,3 +117,21 @@ Production and client builds passed. Browser acceptance started collection with
 unchanged defaults against the local development Vault and navigated to the new
 result. API readback confirmed run 0c72eaca-53f6-4468-b6ec-028551f0ed78 completed
 with 12 resources, 5 findings and no collection issues. No external Vault was used.
+
+## Remaining built-in list parameters
+
+Checks now exposes JWT broad claim values, review-only glob claim names, required
+bound claims per exact auth mount, Kubernetes namespaces permitting wildcard
+service accounts, and shared privileged-policy exact names/patterns. Lists use
+one value per line; blank lines and duplicates are normalized without disrupting
+text entry. Required-claim mount entries can be added and removed. Auth prefixes
+and trailing slashes are normalized for new entries to match the detector's
+mount lookup. Privileged selectors classify policy assignments; they are not
+exceptions. Existing unsupported custom/plugin creation remains out of scope.
+
+Production and final client builds passed. Browser form acceptance saved two
+required claims under a temporary mount in revision 3; API readback confirmed
+both values. Reanalysis cfc95d38-8bc9-4f6e-826b-25a102ac45b8 completed with that
+revision pinned. The temporary mount was removed through the UI and saved in
+revision 4; API verification confirmed cleanup and the unchanged revision 3
+historical run. No actual Vault configuration was modified.
