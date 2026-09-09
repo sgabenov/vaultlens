@@ -1,3 +1,4 @@
+import AuditDisclosureIcon from './AuditDisclosureIcon';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { PolicyUsage } from '../../shared/policyUsage';
@@ -20,7 +21,7 @@ export default function AuditPolicyAssignments({usage}:{usage:PolicyUsage}) {
   const rows=usage.references.filter(reference=>[reference.path,reference.kind,reference.relationship,reference.sourcePath].some(value=>value.toLowerCase().includes(query.toLowerCase())));
   const current=Math.min(page,Math.max(1,Math.ceil(rows.length/25)));
   return <details>
-    <summary className="cursor-pointer">Policy assignments · {usage.references.length}</summary>
+    <summary className="audit-disclosure-summary"><AuditDisclosureIcon level="detail"/><span>Policy assignments · {usage.references.length}</span></summary>
     <p className="mt-2 text-xs text-gray-500">{usage.namespace||'root'} · {usage.name}. Observed assignments and allowed policy references; existing tokens, allowed globs and collection gaps may not be covered.</p>
     {!usage.references.length?<p className="mt-2 text-sm">No assignments found in the available data. This does not prove the policy is unused.</p>:<>
       <label className="mt-3 block text-xs">Filter assignments<input className="mt-1 block w-full rounded border p-2" value={query} placeholder="Object path, relationship or source" onChange={event=>{setQuery(event.target.value);setPage(1);}}/></label>
