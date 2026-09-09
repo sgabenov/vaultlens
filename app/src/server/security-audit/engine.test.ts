@@ -1286,6 +1286,14 @@ test('saved exact object exceptions survive reopen and never expand wildcard sco
     assert.equal(exceptionMatches(entry,finding),true);
     assert.equal(exceptionMatches(entry,{...finding,path:'sys/policies/acl/team-admin'}),false);
     assert.equal(exceptionMatches(entry,{...finding,namespace:'root'}),false);
+    assert.equal(store.updateException('vault-b',{...entry,reason:'Wrong target'}),false);
+    assert.equal(store.updateException('vault-a',{...entry,reason:'Updated'}),true);
+    store.addException('vault-a',{...entry,id:'second',object_path:'sys/policies/acl/second'});
+    assert.throws(()=>store.updateException('vault-a',{...entry,object_path:'sys/policies/acl/second'}),/UNIQUE/);
+    store.close();store=new AuditStore(path);
+    assert.equal(store.exceptions('vault-a').find(item=>item.id===entry.id)?.reason,'Updated');
+    assert.equal(store.exceptions('vault-a').find(item=>item.id===entry.id)?.object_path,entry.object_path);
+    store.removeException('vault-a','second');
     assert.equal(store.removeException('vault-b',entry.id),false);
     assert.equal(store.removeException('vault-a',entry.id),true);
     assert.deepEqual(store.exceptions('vault-a'),[]);

@@ -1229,3 +1229,9 @@ export async function createAuditObjectException(input:{runId:string;findingInde
 export async function removeAuditObjectException(id:string) {
   await api.delete(`/security-audit/exceptions/${encodeURIComponent(id)}`);
 }
+
+export type AuditExceptionInput = Pick<import('../../shared/securityAudit').AuditException,'rule_id'|'namespace'|'object_path'|'owner'|'reason'|'expires'>;
+export async function saveAuditObjectException(input:AuditExceptionInput,id?:string) {
+  const url='/security-audit/exceptions'+(id?`/${encodeURIComponent(id)}`:'');
+  const {data}=id?await api.put(url,input):await api.post(url,input);return data;
+}

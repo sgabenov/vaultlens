@@ -152,20 +152,31 @@ router.get('/runs/:id/export', (req, res) => {
   } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Export failed'});}
 });
 router.get('/exceptions', (_req,res)=>res.json(storage().exceptions(config.vaultAddr)));
-router.post('/exceptions', (req,res)=>{
+router.post('/exceptions',(req,res)=>saveObjectException(req,res,false));
+router.put('/exceptions/:id',(req,res)=>saveObjectException(req,res,true));
+function saveObjectException(req: import('express').Request,res: import('express').Response,editing:boolean) {
   const {runId,findingIndex,owner,reason,expires}=req.body??{};
-  if(typeof runId!=='string'||!Number.isSafeInteger(findingIndex)||findingIndex<0||typeof owner!=='string'||typeof reason!=='string'||owner.length>200||reason.length>2000) {
-    res.status(400).json({error:'Provide a run, finding index, owner, reason and expiry date'});return;
+  if(typeof owner!=='string'||typeof reason!=='string'||owner.length>200||reason.length>2000){res.status(400).json({error:'Provide owner, reason and expiry date'});return;}
+  const db=storage();
+  const existing=editing?db.exceptions(config.vaultAddr).find(entry=>entry.id===req.params.id):undefined;
+  if(editing&&!existing){res.status(404).json({error:'Exception not found'});return;}
+  let scope={rule_id:req.body?.rule_id,namespace:req.body?.namespace,object_path:req.body?.object_path};
+  if(runId!==undefined){
+    if(typeof runId!=='string'||!Number.isSafeInteger(findingIndex)||findingIndex<0){res.status(400).json({error:'Invalid finding reference'});return;}
+    const detail=db.get(runId,config.vaultAddr),finding=detail?.findings[findingIndex];
+    if(!finding||!detail||!['completed','partial'].includes(detail.run.status)){res.status(404).json({error:'Analyzed finding not found'});return;}
+    scope={rule_id:finding.ruleId,namespace:finding.namespace??'',object_path:finding.path};
   }
-  const db=storage(),detail=db.get(runId,config.vaultAddr),finding=detail?.findings[findingIndex];
-  if(!finding||!detail||!['completed','partial'].includes(detail.run.status)){res.status(404).json({error:'Analyzed finding not found'});return;}
   try {
-    const entry=parseExceptions(JSON.stringify({version:1,exceptions:[{id:randomUUID(),match:'exact',rule_id:finding.ruleId,namespace:finding.namespace??'',object_path:finding.path,owner,reason,expires}]}),new Set(catalog(db.settings()).filter(rule=>rule.source==='builtin').map(rule=>rule.id)))[0];
+    const entry=parseExceptions(JSON.stringify({version:1,exceptions:[{id:existing?.id??randomUUID(),match:'exact',...scope,owner,reason,expires}]}),new Set(catalog(db.settings()).filter(rule=>rule.source==='builtin').map(rule=>rule.id)))[0];
+    if(entry.object_path.length>2048||entry.namespace.length>1024)throw new Error('Exception scope is too long');
     const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     if(entry.expires<today)throw new Error('Expiry must be today or later');
-    db.addException(config.vaultAddr,entry);res.status(201).json(entry);
-  } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid exception'});}
-});
+    if(editing){if(!db.updateException(config.vaultAddr,entry)){res.status(404).json({error:'Exception not found'});return;}}
+    else db.addException(config.vaultAddr,entry);
+    res.status(editing?200:201).json(entry);
+  } catch(error) {res.status(400).json({error:error instanceof Error&&error.message.includes('UNIQUE')?'An exception already exists for this check and object':error instanceof Error?error.message:'Invalid exception'});}
+}
 router.delete('/exceptions/:id',(req,res)=>{
   if(!storage().removeException(config.vaultAddr,String(req.params.id))){res.status(404).json({error:'Exception not found'});return;}
   res.status(204).end();

@@ -2,8 +2,8 @@
 
 ## Scope
 
-Security Audit uses the existing VaultLens shell with four internal routes:
-Findings, Runs, Checks and Sources. This stage manages built-in checks through the
+Security Audit uses the existing VaultLens shell with five internal routes:
+Findings, Runs, Checks, Exceptions and Sources. This stage manages built-in checks through the
 web interface. CLI/CI integrations, plugin authoring and automatic remediation
 are outside the agreed scope. Collection and analysis remain shared native
 TypeScript services. SQLite and a local worker thread require no PostgreSQL or
@@ -43,8 +43,7 @@ Redis service.
 - Exact object exceptions are created from a finding with owner, reason and
   expiry. Scope is derived server-side from the selected stored finding. Literal
   wildcards stay literal, and the empty root namespace differs from a namespace
-  named root. No root/default-policy exception is added implicitly. Checks lists,
-  searches and removes saved exceptions. New analyses apply the current list;
+  named root. No root/default-policy exception is added implicitly. Exceptions creates, edits, lists, searches and removes saved exceptions. New analyses apply the current list;
   historical exception states remain unchanged and can be filtered as Excluded.
 
 ## Acceptance evidence
@@ -77,7 +76,18 @@ scale. Runs currently lists the most recent 100 entries; older IDs remain
 addressable. Historical catalogs without rule metadata cannot classify categories.
 Token and Identity currently have no dedicated checks; assignment checks still
 use collected relationship data. Adding new detector logic requires code changes.
-Existing exceptions can be removed and recreated; in-place editing is not part of
-this stage. Drafts do not survive reload or leaving Security Audit. Enterprise
+Exceptions supports in-place editing of exact scope, owner, reason and expiry. Drafts do not survive reload or leaving Security Audit. Enterprise
 namespace behavior and production-scale collection require environment-specific
 validation beyond the local development Vault used here.
+
+## Dedicated Exceptions tab
+
+Exceptions now has its own navigation entry, with direct creation, editing, search,
+Active/Expired filters and pagination. Creation from Findings still prefills scope.
+The technical Baseline and exceptions panel was removed from Findings; applied
+exception reasons remain in individual finding evidence. Updates preserve the
+entry ID and use an atomic target-scoped SQLite update with unique scope checks.
+
+Production build passed. Browser create/edit/delete and API duplicate rejection,
+invalid-edit preservation and stable IDs were verified on temporary exact objects.
+The persistence test additionally covers target isolation and conflicting updates.

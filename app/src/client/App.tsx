@@ -10,6 +10,7 @@ import * as api from './lib/api';
 import Layout from './components/layout/Layout';
 import LoginPage from './components/auth/LoginPage';
 import OidcCallbackPage from './pages/OidcCallbackPage';
+import AuditObjectExceptions from './components/AuditObjectExceptions';
 import AuditRulesPage from './pages/AuditRulesPage';
 import SecurityAuditPage from './pages/SecurityAuditPage';
 import DashboardPage from './pages/DashboardPage';
@@ -249,6 +250,7 @@ function AppRoutes() {
           <Route path="findings" element={<SecurityAuditPage />} />
           <Route path="runs" element={<AuditRunsPage />} />
           <Route path="checks" element={<AuditRulesPage />} />
+          <Route path="exceptions" element={<AuditObjectExceptions />} />
           <Route path="sources" element={<AuditSourcesPage />} />
           <Route path="rules" element={<Navigate to="../checks" replace />} />
         </Route>

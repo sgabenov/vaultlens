@@ -193,12 +193,6 @@ export default function SecurityAuditPage() {
                 </details>
               )}
               {detail.data.snapshot?.analysisPerformed !== false && <AuditFindings key={id} detail={detail.data} />}
-              {detail.data.snapshot?.controls && <details className="rounded border p-3 text-sm">
-                <summary>Baseline and exceptions · applied {detail.data.snapshot.controls.appliedOn}</summary>
-                <p className="my-2">{detail.data.snapshot.controls.states.filter(s=>s.gate).length} findings count toward the severity gate; {detail.data.snapshot.controls.states.filter(s=>s.suppressed).length} have active exceptions.</p>
-                <p>Historical evaluation: expiration is assessed on the application date. Apply controls explicitly during a new analysis to assess them today.</p>
-                <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.controls,null,2)}</pre>
-              </details>}
               {detail.data.snapshot && <AuditImportDetails key={`import:${id}`} snapshot={detail.data.snapshot} />}
               {detail.data.snapshot?.collection && <details className="rounded border p-3 text-sm">
                 <summary>Collection parameters and metrics</summary>

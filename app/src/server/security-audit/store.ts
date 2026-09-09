@@ -51,6 +51,10 @@ export class AuditStore {
       this.db.exec('COMMIT');
     } catch(error) {this.db.exec('ROLLBACK');throw error;}
   }
+  updateException(target:string,entry:AuditException):boolean {
+    const scope=JSON.stringify([entry.rule_id,entry.namespace,entry.object_path,entry.policy_path??null]);
+    return this.db.prepare('UPDATE audit_object_exceptions SET scope=?,entry=? WHERE target=? AND id=?').run(scope,JSON.stringify(entry),target,entry.id).changes>0;
+  }
   removeException(target:string,id:string):boolean {
     return this.db.prepare('DELETE FROM audit_object_exceptions WHERE target=? AND id=?').run(target,id).changes>0;
   }
