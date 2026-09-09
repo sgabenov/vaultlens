@@ -117,3 +117,14 @@ instead of a generic HTTP status. Removed findings do not imply remediation.
 Client build passed. Browser comparison of runs 9149261c and 0024bdbb displayed
 12 unchanged resources and five unchanged findings. Comparing different rule
 configurations was rejected by the existing backend compatibility check.
+
+## Reports workspace
+
+Reports has a dedicated audit navigation tab. Select a finished run to inspect
+its target, date, configuration revision, coverage and severity summary, open its
+findings, or download JSON/JSONL/YAML/CSV/ZIP with the existing source-redaction
+option. Export controls were removed from Findings. Report selection is retained
+in tab navigation. Downloads are generated from the saved run, not a new scan.
+
+Client build passed. Browser inspection confirmed the selected run summary and
+export controls; JSON export returned the expected saved run successfully.

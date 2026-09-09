@@ -1,4 +1,5 @@
 import AuditWorkspace from './components/AuditWorkspace';
+import AuditReportsPage from './pages/AuditReportsPage';
 import AuditRunsPage from './pages/AuditRunsPage';
 import AuditSourcesPage from './pages/AuditSourcesPage';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
@@ -249,6 +250,7 @@ function AppRoutes() {
           <Route index element={<Navigate to="findings" replace />} />
           <Route path="findings" element={<SecurityAuditPage />} />
           <Route path="runs" element={<AuditRunsPage />} />
+          <Route path="reports" element={<AuditReportsPage />} />
           <Route path="checks" element={<AuditRulesPage />} />
           <Route path="exceptions" element={<AuditObjectExceptions />} />
           <Route path="sources" element={<AuditSourcesPage />} />

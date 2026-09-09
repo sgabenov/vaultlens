@@ -4,7 +4,6 @@ import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditRunDialog from '../components/AuditRunDialog';
-import AuditExportButton from '../components/AuditExportButton';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -203,7 +202,6 @@ export default function SecurityAuditPage() {
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
               {detail.data.snapshot?.refresh && <AuditRefreshDetails key={`freshness:${id}`} snapshot={detail.data.snapshot} />}
-              <AuditExportButton key={`export:${id}`} runId={id} />
               {detail.data.snapshot && <AuditPolicyUsage key={`usage:${id}`} snapshot={detail.data.snapshot} />}
               {detail.data.snapshot?.identity && (
                 <details className="rounded border p-3 text-sm">

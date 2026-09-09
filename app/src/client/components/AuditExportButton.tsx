@@ -17,7 +17,7 @@ export default function AuditExportButton({runId}:{runId:string}) {
     finally {setBusy(false);}
   }
   return <div className="rounded border p-3 text-sm">
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <label>Report format <select aria-label="Audit export format" className="ml-2 rounded border p-2" value={format} disabled={busy} onChange={event=>setFormat(event.target.value)}>
         {['json','jsonl','yaml','csv','zip'].map(value=><option key={value} value={value}>{value.toUpperCase()}{value==='csv'?' · findings only':value==='zip'?' · complete report':''}</option>)}
       </select></label>
