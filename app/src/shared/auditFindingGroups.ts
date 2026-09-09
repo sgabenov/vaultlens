@@ -11,5 +11,6 @@ export function groupAuditFindings(findings:AuditFinding[], mode:FindingGrouping
     if(!group)groups.set(key,{key,title,severity:finding.severity,findings:[finding]});
     else {group.findings.push(finding);if(SEVERITIES.indexOf(finding.severity)<SEVERITIES.indexOf(group.severity))group.severity=finding.severity;}
   });
+  for(const group of groups.values())group.findings.sort((a,b)=>SEVERITIES.indexOf(a.severity)-SEVERITIES.indexOf(b.severity));
   return [...groups.values()].sort((a,b)=>SEVERITIES.indexOf(a.severity)-SEVERITIES.indexOf(b.severity)||b.findings.length-a.findings.length||a.key.localeCompare(b.key));
 }
