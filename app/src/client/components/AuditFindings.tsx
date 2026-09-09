@@ -37,7 +37,7 @@ function FindingRows({findings,size,controls,statusOf,detail,usages}:{usages:Map
   const [requested,setPage]=useState(1),page=Math.min(requested,Math.max(1,Math.ceil(findings.length/size)));
   return <div className="px-4">
     {findings.slice((page-1)*size,page*size).map((finding,index)=><details key={`${page}:${index}`} className="border-t py-3">
-      <summary className="audit-disclosure-summary text-sm"><AuditDisclosureIcon level="finding"/><span className="min-w-0"><span className="mr-2 text-xs font-medium">{finding.severity}</span><span className="break-all font-mono text-xs">{finding.namespace||'root'} · {finding.path}</span><span className="ml-2 text-xs text-gray-500">{finding.ruleId} · {statusOf(finding)}</span></span></summary>
+      <summary className="audit-disclosure-summary text-sm"><AuditDisclosureIcon level="finding"/><span className="min-w-0"><span className="mr-2 inline-block w-16 text-center text-xs font-medium">{finding.severity}</span><span className="break-all font-mono text-xs">{finding.namespace||'root'} · {finding.path}</span><span className="ml-2 text-xs text-gray-500">{finding.ruleId} · {statusOf(finding)}</span></span></summary>
       <Evidence finding={finding} control={controls.get(finding)??null} usage={usages.get(JSON.stringify([finding.namespace??'',finding.path]))}/>
       {['completed','partial'].includes(detail.run.status)&&<AuditExceptionForm runId={detail.run.id} index={detail.findings.indexOf(finding)} finding={finding}/>}
     </details>)}
@@ -79,7 +79,7 @@ export default function AuditFindings({detail}:{detail:AuditDetail}) {
     {!matched.length&&<p className="rounded border p-4 text-sm text-gray-500">No findings match these filters. Review collection and analysis gaps before drawing conclusions.</p>}
     <div className="divide-y rounded border">{groups.slice((page-1)*size,page*size).map(group=><div key={group.key}>
       <button className="flex w-full items-center gap-3 p-4 text-left" aria-expanded={expanded===group.key} onClick={()=>setExpanded(expanded===group.key?null:group.key)}>
-        <AuditDisclosureIcon level="group"/><span className={`rounded px-2 py-1 text-xs ${['critical','high'].includes(group.severity)?'bg-red-50 text-red-800':'bg-amber-50 text-amber-900'}`}>{group.severity}</span>
+        <AuditDisclosureIcon level="group"/><span className={`w-16 shrink-0 rounded px-2 py-1 text-center text-xs ${['critical','high'].includes(group.severity)?'bg-red-50 text-red-800':'bg-amber-50 text-amber-900'}`}>{group.severity}</span>
         <span className="min-w-0 flex-1 break-words text-sm font-medium">{group.title}<span className="mt-1 block text-xs font-normal text-gray-500">{grouping==='check'?group.key:''}</span></span><span className="text-sm">{group.findings.length}</span>
       </button>
       {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf} detail={detail} usages={usages}/>}
