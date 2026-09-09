@@ -151,3 +151,20 @@ Production build passed. Browser verification disabled POL-001 in a draft,
 switched to Runs, returned to Checks and confirmed the disabled check and unsaved
 indicator were retained. Discard restored 13 enabled checks and revision 4
 without saving a new configuration revision.
+
+## Object exception browser acceptance
+
+The complete exception workflow was verified against the local development run:
+open POL-003, expand its policy finding, enter owner/reason/expiry and save the
+exact object exception. The UI confirmed that the historical result was unchanged.
+Reanalysis started from the UI completed as 2e0fe1b8-78ba-4dc6-8812-10f5dbcf98af.
+The Excluded filter displayed exactly one of five findings, and its object row
+showed Excluded. API readback independently confirmed one suppressed finding and
+zero suppressed findings in the source run.
+
+The saved entry was then removed through Checks. A new API-triggered reanalysis
+9149261c-3ca0-4445-95ab-758b57326c39 completed with no excluded findings. The prior
+analysis still retained its one historical exclusion, and the saved exception
+list was restored to empty. This verifies create, apply, filter and remove; it
+does not claim editing an existing exception or browser acceptance of large-list
+pagination. No Vault configuration was changed.
