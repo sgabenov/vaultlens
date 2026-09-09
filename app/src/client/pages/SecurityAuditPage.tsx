@@ -1,3 +1,4 @@
+import AuditFindings from '../components/AuditFindings';
 import AuditRefreshDetails from '../components/AuditRefreshDetails';
 import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
@@ -29,7 +30,6 @@ export default function SecurityAuditPage() {
   const setSelected = (run: string) => setParams({ run });
   const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
-  const [severity, setSeverity] = useState('all');
   const queryClient = useQueryClient();
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
@@ -55,10 +55,6 @@ export default function SecurityAuditPage() {
     setSelected(result.id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});
   }});
   const running = runs.data?.some((r) => r.status === 'running');
-  const findings =
-    detail.data?.findings.filter(
-      (f) => severity === 'all' || f.severity === severity,
-    ) ?? [];
   const issues = [
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
@@ -195,22 +191,7 @@ export default function SecurityAuditPage() {
                   </ul>
                 </details>
               )}
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold">Findings</h2>
-                <select
-                  aria-label="Filter severity"
-                  value={severity}
-                  onChange={(e) => setSeverity(e.target.value)}
-                  className="rounded border border-gray-300 p-2 text-sm"
-                >
-                  <option value="all">All severities</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                  <option value="info">Info</option>
-                </select>
-              </div>
+              {detail.data.snapshot?.analysisPerformed !== false && <AuditFindings key={id} detail={detail.data} />}
               {detail.data.snapshot?.controls && <details className="rounded border p-3 text-sm">
                 <summary>Baseline and exceptions · applied {detail.data.snapshot.controls.appliedOn}</summary>
                 <p className="my-2">{detail.data.snapshot.controls.states.filter(s=>s.gate).length} findings count toward the severity gate; {detail.data.snapshot.controls.states.filter(s=>s.suppressed).length} have active exceptions.</p>
@@ -270,57 +251,6 @@ export default function SecurityAuditPage() {
               {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
                 Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
               </p>}
-              {detail.data.snapshot && detail.data.snapshot.analysisPerformed !== false && findings.length === 0 && (
-                <p className="text-sm text-gray-500">
-                  No findings match this filter within the implemented checks.
-                  This is not a clean bill of health for the cluster.
-                </p>
-              )}
-              {findings.map((finding, i) => (
-                <article
-                  key={i}
-                  className="rounded-lg border border-gray-200 bg-white p-4"
-                >
-                  <div className="flex gap-2">
-                    <span
-                      className={`rounded px-2 py-1 text-xs font-semibold ${['critical', 'high'].includes(finding.severity) ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}
-                    >
-                      {finding.severity}
-                    </span>
-                    <h3 className="font-medium">{finding.title}</h3>
-                  </div>
-                  <p className="mt-2 break-all font-mono text-xs text-gray-600">
-                    {finding.namespace ? `${finding.namespace}: ` : ''}{finding.path}
-                  </p>
-                  <p className="mt-3 text-sm">{finding.evidence}</p>
-                  {!!finding.relatedObjects?.length && (
-                    <details className="mt-3 rounded border p-3 text-sm">
-                      <summary>Related resources</summary>
-                      <ul className="mt-2 space-y-1">
-                        {finding.relatedObjects.map(object => (
-                          <li key={`${object.kind}:${object.path}`} className="break-all font-mono text-xs">
-                            {object.path}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                  {finding.matchedBlock && (
-                    <details className="mt-3 rounded border p-3 text-sm">
-                      <summary>
-                        Matched policy block · line {finding.line}
-                      </summary>
-                      <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">
-                        {finding.matchedBlock}
-                      </pre>
-                    </details>
-                  )}
-                  <p className="mt-2 text-sm text-gray-600">
-                    {finding.recommendation}
-                  </p>
-                  <p className="mt-3 text-xs text-gray-400">{finding.ruleId}</p>
-                </article>
-              ))}
             </>
           )}
         </section>

@@ -49,3 +49,21 @@ changes while preserving unrelated policy checks. Saving through this new form
 still requires end-to-end acceptance. JWT/Kubernetes list settings, privileged
 policy selectors, object exceptions and unsaved-navigation handling remain to be
 completed. This supersedes the earlier note that the old Checks editor remains.
+
+## Findings grouping
+
+Findings now default to groups by check, with object grouping and an ungrouped
+mode. Search covers check title/ID, object path and namespace; filters cover
+severity, namespace and category from the run's pinned catalog. Both groups and
+objects inside an expanded group are paginated (10/25/50). Group severity is the
+highest matching finding severity. Object grouping includes namespace in its key.
+Evidence, matched ACL blocks, recommendations and related objects remain available
+through disclosure panels. Filtering resets page/expanded group state.
+
+Production build passed. A 1,200-finding fixture verified group counts, highest
+severity ordering, namespace isolation and input immutability. Browser acceptance
+of pagination is pending. Pagination bounds rendering, not network payloads:
+the current run detail API still returns the full snapshot/findings. Historical
+catalogs missing rule metadata cannot support category classification. Exception
+status filtering and creation are still pending; existing historical controls
+remain accessible outside the findings panel.
