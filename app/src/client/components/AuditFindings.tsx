@@ -1,4 +1,5 @@
 import AuditDisclosureIcon from './AuditDisclosureIcon';
+import AuditFindingReason from './AuditFindingReason';
 import AuditPolicyAssignments from './AuditPolicyAssignments';
 import { policyUsage, type PolicyUsage } from '../../shared/policyUsage';
 import AuditExceptionForm from './AuditExceptionForm';
@@ -17,11 +18,8 @@ function Pager({page,total,size,onChange}:{page:number;total:number;size:number;
 }
 type FindingControl = AuditControls['states'][number] | null;
 function Evidence({finding,control,usage}:{finding:AuditFinding;control:FindingControl;usage?:PolicyUsage}) {
-  let evidence=finding.evidence;
-  try {evidence=JSON.stringify(JSON.parse(evidence),null,2);} catch { /* Historical plain text. */ }
   return <div className="space-y-3 py-3 text-sm">
-    <p className="text-gray-500">{finding.ruleId} · {finding.namespace||'root'} · {finding.severity}</p>
-    <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs">{evidence}</pre>
+    <AuditFindingReason finding={finding}/>
     {finding.matchedBlock&&<details><summary className="audit-disclosure-summary"><AuditDisclosureIcon level="detail"/><span>Matched policy block{finding.line?` · line ${finding.line}`:''}</span></summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-words text-xs">{finding.matchedBlock}</pre></details>}
     {usage&&<AuditPolicyAssignments usage={usage}/>}
     {!!finding.relatedObjects?.length&&<details><summary className="audit-disclosure-summary"><AuditDisclosureIcon level="detail"/><span>Related resources · {finding.relatedObjects.length}</span></summary><ul>{finding.relatedObjects.map((object,index)=><li key={index} className="mt-1 break-all font-mono text-xs">{object.kind} · {object.path}</li>)}</ul></details>}
