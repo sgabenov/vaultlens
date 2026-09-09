@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { findingControls } from '../security-audit/findingControls.js';
 import { reportArchive } from '../security-audit/reportArchive.js';
 import { COLLECTION_SOURCES } from '../security-audit/collectionStages.js';
@@ -150,6 +151,25 @@ router.get('/runs/:id/export', (req, res) => {
     res.send(body);
   } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Export failed'});}
 });
+router.get('/exceptions', (_req,res)=>res.json(storage().exceptions(config.vaultAddr)));
+router.post('/exceptions', (req,res)=>{
+  const {runId,findingIndex,owner,reason,expires}=req.body??{};
+  if(typeof runId!=='string'||!Number.isSafeInteger(findingIndex)||findingIndex<0||typeof owner!=='string'||typeof reason!=='string'||owner.length>200||reason.length>2000) {
+    res.status(400).json({error:'Provide a run, finding index, owner, reason and expiry date'});return;
+  }
+  const db=storage(),detail=db.get(runId,config.vaultAddr),finding=detail?.findings[findingIndex];
+  if(!finding||!detail||!['completed','partial'].includes(detail.run.status)){res.status(404).json({error:'Analyzed finding not found'});return;}
+  try {
+    const entry=parseExceptions(JSON.stringify({version:1,exceptions:[{id:randomUUID(),match:'exact',rule_id:finding.ruleId,namespace:finding.namespace??'',object_path:finding.path,owner,reason,expires}]}),new Set(catalog(db.settings()).filter(rule=>rule.source==='builtin').map(rule=>rule.id)))[0];
+    const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    if(entry.expires<today)throw new Error('Expiry must be today or later');
+    db.addException(config.vaultAddr,entry);res.status(201).json(entry);
+  } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid exception'});}
+});
+router.delete('/exceptions/:id',(req,res)=>{
+  if(!storage().removeException(config.vaultAddr,String(req.params.id))){res.status(404).json({error:'Exception not found'});return;}
+  res.status(204).end();
+});
 router.get('/runs/:id', (req, res) => {
   const detail = storage().get(String(req.params['id']), config.vaultAddr);
   if (!detail) {
@@ -213,6 +233,7 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       if(req.body?.[key]!==undefined && typeof req.body[key]!=='string') throw new Error(`${key} must be text`);
     baseline=req.body?.baselineYaml?.trim() ? parseBaseline(req.body.baselineYaml) : undefined;
     exceptions=req.body?.exceptionsYaml?.trim() ? parseExceptions(req.body.exceptionsYaml,new Set(definitions.map(rule=>rule.id))) : [];
+    exceptions=parseExceptions(JSON.stringify({version:1,exceptions:[...db.exceptions(config.vaultAddr),...exceptions]}),new Set(definitions.map(rule=>rule.id)));
     applyBaseline([],{...settings,catalog:definitions,fingerprint:settingsFingerprint(settings,definitions),engineVersion:ENGINE_VERSION,issues:[]},config.vaultAddr,baseline,exceptions,undefined,sourceRunId?snapshotNamespaces(db.get(sourceRunId,config.vaultAddr)!.snapshot!):collectionOptions.recursiveNamespaces && baseline ? baseline.namespaces??[''] :[collectionOptions.namespace]);
   } catch(error) {res.status(400).json({error:error instanceof Error?error.message:'Invalid audit controls'});return;}
   let id: string;

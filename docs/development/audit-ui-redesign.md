@@ -83,3 +83,22 @@ isolation, retained historical expiry and ambiguous states. The running backend
 must be restarted to serve the new derived field; until then affected historical
 runs show Unknown. This does not yet provide exception creation or persistence
 through a form.
+
+## Persistent object exceptions
+
+An individual finding now offers an owner/reason/expiry form. The backend derives
+rule/namespace/object from a target-scoped finished run, validates it against the
+built-in catalog and stores an exact-match exception in SQLite for that Vault.
+Literal wildcard characters do not broaden its scope; root namespace and a
+namespace named root remain distinct. New web analyses merge saved exceptions
+with any legacy explicitly supplied controls. Historical results stay immutable.
+Checks includes a searchable, paginated list with expiry and removal actions.
+There is no implicit exception for root/default policies.
+
+All 55 native tests passed, including persisted exact scope, duplicate rejection,
+target isolation, reopening the store and scoped removal. Production build and
+subsequent client/server builds passed. The demo backend was restarted after
+verifying no active runs. API create/list/delete was exercised on a temporary
+exception derived from a stored finding, then the original exception list was
+restored. Derived historical controls now reach the running API. Full browser
+form submission/reanalysis and editable existing exceptions remain pending.

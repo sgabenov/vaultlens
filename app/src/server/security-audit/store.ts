@@ -9,6 +9,7 @@ import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
+  AuditException,
   AuditRun,
   AuditSnapshot,
   AuditFinding,
@@ -28,6 +29,7 @@ export class AuditStore {
     this.db.exec(
       'CREATE TABLE IF NOT EXISTS audit_settings (revision INTEGER PRIMARY KEY, configYaml TEXT NOT NULL, customRulesYaml TEXT NOT NULL)',
     );
+    this.db.exec('CREATE TABLE IF NOT EXISTS audit_object_exceptions (target TEXT NOT NULL, id TEXT NOT NULL, scope TEXT NOT NULL, entry TEXT NOT NULL, PRIMARY KEY(target,id), UNIQUE(target,scope))');
     const columns = this.db.prepare('PRAGMA table_info(audit_runs)').all();
     if (!columns.some((c) => c.name === 'configuration'))
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN configuration TEXT');
@@ -35,6 +37,22 @@ export class AuditStore {
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN failureReason TEXT');
     if (!columns.some(c => c.name === 'progress'))
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN progress TEXT');
+  }
+  exceptions(target:string):AuditException[] {
+    return this.db.prepare('SELECT entry FROM audit_object_exceptions WHERE target=? ORDER BY id').all(target).map(row=>JSON.parse(String(row.entry)));
+  }
+  addException(target:string,entry:AuditException):void {
+    const scope=JSON.stringify([entry.rule_id,entry.namespace,entry.object_path,entry.policy_path??null]);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if(this.exceptions(target).length>=1000)throw new Error('At most 1000 object exceptions are supported');
+      if(this.db.prepare('SELECT id FROM audit_object_exceptions WHERE target=? AND scope=?').get(target,scope))throw new Error('An exception already exists for this check and object');
+      this.db.prepare('INSERT INTO audit_object_exceptions(target,id,scope,entry) VALUES(?,?,?,?)').run(target,entry.id,scope,JSON.stringify(entry));
+      this.db.exec('COMMIT');
+    } catch(error) {this.db.exec('ROLLBACK');throw error;}
+  }
+  removeException(target:string,id:string):boolean {
+    return this.db.prepare('DELETE FROM audit_object_exceptions WHERE target=? AND id=?').run(target,id).changes>0;
   }
   settings(): RuleSettings {
     const row = this.db

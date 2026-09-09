@@ -1,3 +1,4 @@
+import AuditObjectExceptions from '../components/AuditObjectExceptions';
 import { useState } from 'react';
 import { parseDocument } from 'yaml';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -81,6 +82,7 @@ export default function AuditRulesPage() {
       </>}
       {!!parameters.filter(p=>p.group===group).length&&<details className="rounded border p-4"><summary className="cursor-pointer text-sm font-medium">{group} parameters</summary><div className="mt-3 space-y-3">{parameters.filter(p=>p.group===group).map(p=><label key={p.key} className="block text-sm">{p.label}{typeof p.fallback==='boolean'?<input className="ml-2" type="checkbox" disabled={save.isPending} checked={Boolean(value([p.section,p.key],p.fallback))} onChange={event=>update([{path:[p.section,p.key],value:event.target.checked}])}/>:<input className="ml-2 rounded border p-2" disabled={save.isPending} type={typeof p.fallback==='number'?'number':'text'} min={0} value={String(value([p.section,p.key],p.fallback))} onChange={event=>update([{path:[p.section,p.key],value:typeof p.fallback==='number'?Number(event.target.value):event.target.value}])}/>}</label>)}</div></details>}
       <details className="rounded border p-4"><summary className="cursor-pointer text-sm font-medium">Shared token lifetime thresholds</summary><p className="mt-2 text-xs text-gray-500">These thresholds apply to every detector that uses token lifetime limits. Durations accept seconds or values such as 8h and 1d.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{ttlParameters.map(([key,label,fallback])=><label key={key} className="text-sm">{label}<input className="mt-1 block w-full rounded border p-2" disabled={save.isPending} value={String(value(['thresholds',key],fallback))} onChange={event=>update([{path:['thresholds',key],value:event.target.value}])}/></label>)}</div></details>
+      <AuditObjectExceptions />
     </>}
   </section>;
 }

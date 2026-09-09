@@ -1,3 +1,4 @@
+import AuditExceptionForm from './AuditExceptionForm';
 import { useMemo, useState } from 'react';
 import { SEVERITIES } from '../../shared/auditRules';
 import { CHECK_GROUPS, checkGroup } from '../../shared/auditCheckGroups';
@@ -28,12 +29,13 @@ function Evidence({finding,control}:{finding:AuditFinding;control:FindingControl
     </div>}
   </div>;
 }
-function FindingRows({findings,size,controls,statusOf}:{findings:AuditFinding[];size:number;controls:Map<AuditFinding,FindingControl>;statusOf:(finding:AuditFinding)=>string}) {
+function FindingRows({findings,size,controls,statusOf,detail}:{detail:AuditDetail;findings:AuditFinding[];size:number;controls:Map<AuditFinding,FindingControl>;statusOf:(finding:AuditFinding)=>string}) {
   const [requested,setPage]=useState(1),page=Math.min(requested,Math.max(1,Math.ceil(findings.length/size)));
   return <div className="px-4">
     {findings.slice((page-1)*size,page*size).map((finding,index)=><details key={`${page}:${index}`} className="border-t py-3">
       <summary className="cursor-pointer text-sm"><span className="mr-2 text-xs font-medium">{finding.severity}</span><span className="break-all font-mono text-xs">{finding.namespace||'root'} · {finding.path}</span><span className="ml-2 text-xs text-gray-500">{finding.ruleId} · {statusOf(finding)}</span></summary>
       <Evidence finding={finding} control={controls.get(finding)??null}/>
+      {['completed','partial'].includes(detail.run.status)&&<AuditExceptionForm runId={detail.run.id} index={detail.findings.indexOf(finding)} finding={finding}/>}
     </details>)}
     <Pager page={page} total={findings.length} size={size} onChange={setPage}/>
   </div>;
@@ -65,7 +67,7 @@ export default function AuditFindings({detail}:{detail:AuditDetail}) {
         <span aria-hidden="true">{expanded===group.key?'▾':'▸'}</span><span className={`rounded px-2 py-1 text-xs ${['critical','high'].includes(group.severity)?'bg-red-50 text-red-800':'bg-amber-50 text-amber-900'}`}>{group.severity}</span>
         <span className="min-w-0 flex-1 break-words text-sm font-medium">{group.title}<span className="mt-1 block text-xs font-normal text-gray-500">{grouping==='check'?group.key:''}</span></span><span className="text-sm">{group.findings.length}</span>
       </button>
-      {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf}/>}
+      {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf} detail={detail}/>}
     </div>)}</div>
     <Pager page={page} total={groups.length} size={size} onChange={next=>{setPage(next);setExpanded(null);}}/>
   </section>;

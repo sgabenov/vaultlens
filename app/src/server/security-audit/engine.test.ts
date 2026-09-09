@@ -1,3 +1,4 @@
+import { exceptionMatches } from './exceptions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -1267,4 +1268,26 @@ test('Python coverage contradictions never establish policy or alias absence', (
     assert.equal(imported.namespaceAliasCompleteness?.team,false);
     assert.equal(imported.importedCoverage!.find(row=>row.source==='identity_alias')!.status,'complete');
   } finally {db.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+
+test('saved exact object exceptions survive reopen and never expand wildcard scope', () => {
+  const directory=mkdtempSync(join(tmpdir(),'audit-object-exceptions-'));
+  const path=join(directory,'audit.sqlite');
+  const entry=parseExceptions(JSON.stringify({version:1,exceptions:[{id:'saved',match:'exact',rule_id:'POL-001',namespace:'',object_path:'sys/policies/acl/team*',owner:'security',reason:'Reviewed',expires:'2027-01-01'}]}),new Set(['POL-001']))[0];
+  let store=new AuditStore(path);
+  try {
+    store.addException('vault-a',entry);
+    assert.throws(()=>store.addException('vault-a',{...entry,id:'another'}),/already exists/);
+    store.close();store=new AuditStore(path);
+    assert.deepEqual(store.exceptions('vault-a'),[entry]);
+    assert.deepEqual(store.exceptions('vault-b'),[]);
+    const finding={ruleId:'POL-001',namespace:'',path:entry.object_path,severity:'high' as const,title:'Example',evidence:'{}',recommendation:'Review'};
+    assert.equal(exceptionMatches(entry,finding),true);
+    assert.equal(exceptionMatches(entry,{...finding,path:'sys/policies/acl/team-admin'}),false);
+    assert.equal(exceptionMatches(entry,{...finding,namespace:'root'}),false);
+    assert.equal(store.removeException('vault-b',entry.id),false);
+    assert.equal(store.removeException('vault-a',entry.id),true);
+    assert.deepEqual(store.exceptions('vault-a'),[]);
+  } finally {store.close();rmSync(directory,{recursive:true,force:true});}
 });

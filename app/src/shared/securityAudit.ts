@@ -94,6 +94,7 @@ export interface AuditDiff {
 }
 
 export interface AuditException {
+  match?: 'exact' | 'glob';
   id:string;rule_id:string;namespace:string;object_path:string;policy_path?:string;
   owner:string;reason:string;expires:string;
 }

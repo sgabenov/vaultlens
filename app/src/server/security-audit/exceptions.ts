@@ -19,9 +19,11 @@ export function parseExceptions(source:string, ruleIds:Set<string>): FindingExce
   const seen=new Set<string>();
   return entries.map((entry,index)=>{
     if(!entry || typeof entry!=='object' || Array.isArray(entry) ||
-      Object.keys(entry).some(k=>!['id','rule_id','namespace','object_path','policy_path','owner','reason','expires'].includes(k)))
+      Object.keys(entry).some(k=>!['id','rule_id','namespace','object_path','policy_path','owner','reason','expires','match'].includes(k)))
       throw new Error(`Invalid exception ${index}`);
+    if(entry.match!==undefined && !['exact','glob'].includes(entry.match)) throw new Error('Invalid exception match mode');
     for(const field of ['id','rule_id','namespace','object_path','owner','reason']) {
+      if(field==='namespace' && entry.match==='exact' && entry[field]==='') continue;
       if(typeof entry[field]!=='string'||!entry[field].trim()) throw new Error(`Exception ${index} requires ${field}`);
       entry[field]=entry[field].trim();
     }
@@ -37,6 +39,7 @@ export function parseExceptions(source:string, ruleIds:Set<string>): FindingExce
   });
 }
 export function exceptionMatches(entry:FindingException,finding:AuditFinding):boolean {
+  if(entry.match==='exact') return entry.rule_id===finding.ruleId && entry.namespace===(finding.namespace??'') && entry.object_path===finding.path && (entry.policy_path===undefined || entry.policy_path===finding.policyPath);
   return entry.rule_id===finding.ruleId && globMatch(entry.namespace,finding.namespace||'root') &&
     globMatch(entry.object_path,finding.path) && (entry.policy_path===undefined ||
       (finding.policyPath!==undefined && globMatch(entry.policy_path,finding.policyPath)));

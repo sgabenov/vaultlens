@@ -1219,3 +1219,13 @@ export async function resumeSecurityAudit(resumeRunId:string,checkpointMaxAgeMs:
 export async function refreshSecurityAudit(refreshRunId:string,refreshSources:string[],controls:{baselineYaml:string;exceptionsYaml:string}) {
   const {data}=await api.post<{id:string}>('/security-audit/runs',{refreshRunId,refreshSources,...controls});return data;
 }
+
+export async function getAuditObjectExceptions() {
+  const {data}=await api.get<import('../../shared/securityAudit').AuditException[]>('/security-audit/exceptions');return data;
+}
+export async function createAuditObjectException(input:{runId:string;findingIndex:number;owner:string;reason:string;expires:string}) {
+  const {data}=await api.post<import('../../shared/securityAudit').AuditException>('/security-audit/exceptions',input);return data;
+}
+export async function removeAuditObjectException(id:string) {
+  await api.delete(`/security-audit/exceptions/${encodeURIComponent(id)}`);
+}
