@@ -77,6 +77,7 @@ export interface AuditRun {
   findingCount: number;
 }
 export interface AuditDetail {
+  findingControls?: (AuditControls['states'][number] | null)[];
   run: AuditRun;
   snapshot: AuditSnapshot | null;
   findings: AuditFinding[];

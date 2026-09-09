@@ -67,3 +67,19 @@ the current run detail API still returns the full snapshot/findings. Historical
 catalogs missing rule metadata cannot support category classification. Exception
 status filtering and creation are still pending; existing historical controls
 remain accessible outside the findings panel.
+
+## Historical exception visibility
+
+Run detail responses now include finding controls matched by fingerprint, rather
+than assuming the stored control and finding arrays share an order. Conflicting
+states for the same fingerprint yield an unknown status. Findings adds
+Open/Excluded/Unknown filtering, per-object status, exception reason/owner/expiry
+and the historical evaluation date. Missing controls in a run that declares
+controls are shown as unknown, not silently open or excluded. Old runs without
+controls remain open. No exception is inferred from the policy name.
+
+Production build and focused checks passed for reordered findings, namespace
+isolation, retained historical expiry and ambiguous states. The running backend
+must be restarted to serve the new derived field; until then affected historical
+runs show Unknown. This does not yet provide exception creation or persistence
+through a form.

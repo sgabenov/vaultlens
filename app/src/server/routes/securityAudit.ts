@@ -1,3 +1,4 @@
+import { findingControls } from '../security-audit/findingControls.js';
 import { reportArchive } from '../security-audit/reportArchive.js';
 import { COLLECTION_SOURCES } from '../security-audit/collectionStages.js';
 import { prepareResume } from '../security-audit/resume.js';
@@ -155,7 +156,7 @@ router.get('/runs/:id', (req, res) => {
     res.status(404).json({ error: 'Audit run not found' });
     return;
   }
-  res.json(detail);
+  res.json({...detail, findingControls: findingControls(detail)});
 });
 router.post('/runs', (req: AuthenticatedRequest, res, next) => {
   if (active) {
