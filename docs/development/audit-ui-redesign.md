@@ -91,3 +91,16 @@ entry ID and use an atomic target-scoped SQLite update with unique scope checks.
 Production build passed. Browser create/edit/delete and API duplicate rejection,
 invalid-edit preservation and stable IDs were verified on temporary exact objects.
 The persistence test additionally covers target isolation and conflicting updates.
+
+## Refresh placement
+
+Selective refresh now lives in Sources, beside collection and import. The panel
+uses the selected run query (or latest run when none is selected), shows its date
+and links to run history for choosing another snapshot. Ineligible snapshots and
+loading/error states are explicit. Successful refresh opens the newly created
+result in Findings. The former Findings refresh panel has been removed.
+
+Client build passed. Browser refresh from Sources requested only policies for
+run 0c72eaca-53f6-4468-b6ec-028551f0ed78. API readback confirmed new run
+0024bdbb-a296-43a5-b5f0-d84206d04ba8 completed with four requests, nine retained
+resources, twelve total resources, five findings and zero coverage issues.

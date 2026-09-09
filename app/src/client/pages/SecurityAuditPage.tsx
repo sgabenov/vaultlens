@@ -1,6 +1,5 @@
 import AuditFindings from '../components/AuditFindings';
 import AuditRefreshDetails from '../components/AuditRefreshDetails';
-import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
@@ -204,7 +203,6 @@ export default function SecurityAuditPage() {
                 <p className="mt-2 text-xs text-gray-500">Creates a new result with saved checks and object exceptions. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
-              {detail.data.snapshot?.collection && ['collected','completed','partial'].includes(detail.data.run.status) && <AuditRefreshPanel key={`refresh:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onRefreshed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
               {detail.data.snapshot?.refresh && <AuditRefreshDetails key={`freshness:${id}`} snapshot={detail.data.snapshot} />}
               <AuditExportButton key={`export:${id}`} runId={id} />
               <AuditDiffPanel key={id} currentId={id} runs={runs.data ?? []} />
