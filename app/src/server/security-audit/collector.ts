@@ -229,6 +229,7 @@ export async function collect(
       data: {
         mount_path: mount,
         type: (value as Record<string, unknown>).type,
+        options: {version: ((value as Record<string, unknown>).options as Record<string,unknown>|undefined)?.version},
       },
     });
   });

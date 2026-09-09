@@ -60,3 +60,24 @@ The run produced APPROLE-001, APPROLE-008, JWT-006, K8S-004, POL-001 through
 POL-005, and REF-001 findings. A fixture without a finding is not evidence that
 all possible checks passed. Use Checks to enable additional rules, then
 Runs → Info → Reanalyze snapshot to evaluate them on the collected data.
+
+## Management checks added on 2026-09-10
+
+POL-016 through POL-020 review Identity administration, Transit key management,
+Database role/configuration changes, PKI administration/signing, and KV v2
+metadata deletion/version destruction. They are review rules, enabled explicitly
+on this local instance alongside POL-008/009. Existing settings are preserved.
+Engine version is 13; historical runs retain their original configuration.
+
+The lab now also creates four `audit-lab-` secret mounts and an
+`audit-lab-engine-management` policy assigned to the operator entity. They hold
+no real keys, database connections, certificates or secret values.
+
+The detectors use observed mount types and namespaces, not conventional mount
+names. Read-only access, deny blocks, ordinary Transit encryption, Identity
+lookup and KV metadata update alone are not flagged by these new rules. Global
+wildcards remain covered by POL-001. Findings indicate sensitive permissions to
+review, not proven exploitable escalation. Missing mount inventory cannot prove
+absence of management permissions. PKI signing is intentionally a review rule;
+role constraints still need human inspection. New rules were independently
+implemented from the reviewed concepts, without copying upstream Python code.

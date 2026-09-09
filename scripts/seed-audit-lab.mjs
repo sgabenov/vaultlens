@@ -112,5 +112,17 @@ async function alias(kind, name, canonicalId) {
 }
 await alias('entity', prefix + 'operator-subject', admin);
 await alias('group', prefix + 'external-team', external);
+// Custom mount names exercise type-aware management checks.
+const secretMounts=await api('sys/mounts');
+for(const type of ['transit','database','pki','kv']) {
+  const name=prefix+type;
+  if(!secretMounts[name+'/'])await put('sys/mounts/'+name,{type,description:'VaultLens audit lab management fixtures',...(type==='kv'?{options:{version:'2'}}:{})});
+  else if(secretMounts[name+'/'].type!==type)throw new Error(`Unexpected mount type at ${name}`);
+}
+const managementPolicy=[['audit-lab-transit/keys/demo','update'],['audit-lab-database/roles/demo','update'],['audit-lab-pki/sign/demo','update'],['audit-lab-kv/destroy/demo','update'],['identity/group/id/demo','update']]
+  .map(([path,cap])=>`path "${path}" { capabilities = ["${cap}"] }`).join('\n');
+await put('sys/policies/acl/'+prefix+'engine-management',{policy:managementPolicy});
+const operator=await api('identity/entity/id/'+admin);
+await put('identity/entity/id/'+admin,{policies:[...new Set([...operator.policies,prefix+'engine-management'])]});
 await writeFile('/tmp/vaultlens-audit-lab-manifest.json', JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ policies: report.policies.length, adaptedPolicies: report.rejected.length, objectsWritten: report.objects.length, manifest: '/tmp/vaultlens-audit-lab-manifest.json' }));

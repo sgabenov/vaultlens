@@ -113,7 +113,7 @@ test('catalog validates YAML, profiles, overrides and duplicate IDs without exec
     definitions.filter(
       (r) => r.source === 'builtin' && !r.id.startsWith('LOCAL-'),
     ).length,
-    35,
+    40,
   );
   assert.equal(definitions.find((r) => r.id === 'POL-008')?.active, false);
   const extended = catalog({
@@ -1318,4 +1318,31 @@ test('bulk run deletion is atomic, target scoped and protects active work',()=>{
     assert.ok(store.get(foreign,'vault-b'));
     assert.throws(()=>store.deleteRuns('vault-a',[active,active]),/distinct/);
   } finally {store.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('management checks use mount types, namespace and operation context', async () => {
+  const { catalog, DEFAULT_SETTINGS } = await import('./catalog.js');
+  const { evaluatePolicy } = await import('./policyDetectors.js');
+  const { parsePolicy } = await import('./policyParser.js');
+  const rules=catalog({...DEFAULT_SETTINGS,configYaml:'version: 1\nprofile: extended\n'});
+  const resource={kind:'policy',path:'sys/policies/acl/example',data:{name:'example'}};
+  const mounts=[{kind:'secret-mount',path:'sys/mounts/crypto',data:{type:'transit',mount_path:'crypto/'}},
+    {kind:'secret-mount',path:'sys/mounts/store',data:{type:'kv',mount_path:'store/',options:{version:'2'}}}];
+  const check=(id:string,path:string,caps:string[],inventory=mounts)=>evaluatePolicy(rules.find(r=>r.id===id)!,resource,parsePolicy(`path "${path}" { capabilities = ${JSON.stringify(caps)} }`),inventory);
+  assert.equal(check('POL-017','crypto/keys/app',['update']).length,1);
+  assert.equal(check('POL-017','crypto/encrypt/app',['update']).length,0);
+  assert.equal(check('POL-017','transit/keys/app',['update']).length,0);
+  assert.equal(check('POL-017','crypto/keys/app',['read']).length,0);
+  assert.equal(check('POL-017','crypto/keys/app',['deny','update']).length,0);
+  assert.equal(check('POL-017','crypto/*',['update']).length,1);
+  assert.equal(check('POL-017','crypto/keys/app',['update'],mounts.map(m=>({...m,namespace:'other'}))).length,0);
+  assert.equal(check('POL-016','identity/group/id/example',['update']).length,1);
+  assert.equal(check('POL-016','identity/lookup/entity',['update']).length,0);
+  assert.equal(check('POL-020','store/metadata/app',['update']).length,0);
+  assert.equal(check('POL-020','store/metadata/app',['delete']).length,1);
+  assert.equal(check('POL-020','store/destroy/app',['update']).length,1);
+  assert.equal(check('POL-020','store/destroy/app',['update'],mounts.map(m=>({...m,data:{...m.data,options:{version:'1'}}}))).length,0);
+  for(const [id,type,path] of [['POL-018','database','custom/roles/app'],['POL-019','pki','custom/sign/app']]) {
+    assert.equal(check(id,path,['update'],[{kind:'secret-mount',path:'sys/mounts/custom',data:{type,mount_path:'custom/'}}]).length,1);
+  }
 });

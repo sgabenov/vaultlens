@@ -6,6 +6,7 @@ import type { RuleView, Severity } from '../../shared/auditRules.js';
 import type { PolicyBlock } from './policyParser.js';
 import { globMatch } from './authDetectors.js';
 export const POLICY_DETECTORS = [
+  'sensitive_management',
   'root_wildcard',
   'sudo_capability',
   'acl_policy_administration',
@@ -90,6 +91,29 @@ export function evaluatePolicy(
       });
     const base = { path, capabilities: caps };
     switch (rule.detector) {
+      case 'sensitive_management': {
+        // Global grants already have a dedicated finding (POL-001).
+        if(roots.includes(normalized))break;
+        const type=String(params.mount_type);
+        const operations=type==='kv'?['delete','update']:mutating;
+        if(!caps.some(c=>operations.includes(c)))break;
+        const targets=type==='identity'?[{mount:'identity',type:'identity'}]:mounts
+          .filter(m=>m.kind==='secret-mount'&&m.data.type===type&&
+            (m.namespace??'')===(resource.namespace??'')&&
+            (type!=='kv'||String((m.data.options as Record<string,unknown>|undefined)?.version)==='2'))
+          .map(m=>({mount:trim(String(m.data.mount_path)),type}));
+        for(const target of targets){
+          const prefixes=list('prefixes',[]).filter(prefix=>{
+            if(type==='kv'&&prefix==='metadata'&&!caps.includes('delete'))return false;
+            if(type==='kv'&&prefix==='destroy'&&!caps.includes('update'))return false;
+            const endpoint=target.mount+'/'+prefix;
+            return normalized===endpoint||normalized.startsWith(endpoint+'/')||
+              vaultPatternMatches(path,endpoint)||vaultPatternMatches(path,endpoint+'/__audit_probe__');
+          });
+          if(prefixes.length)emit({...base,mount:target.mount,mount_type:type,management_scopes:prefixes});
+        }
+        break;
+      }
       case 'root_wildcard':
         if (list('root_paths', roots).includes(path) && grants)
           emit(base, writes || caps.includes('sudo') ? 'critical' : 'high');
