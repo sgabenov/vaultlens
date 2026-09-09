@@ -30,3 +30,22 @@ add grouped/paginated findings and object-exception forms; move collection setup
 and start actions into a coherent run dialog; add run pagination and preserve
 unsaved input when navigating. The first slice does not claim mockup parity.
 The mockup remains a design reference with synthetic data, not engine evidence.
+
+## Built-in Checks editor
+
+The YAML/custom-rule editor has been replaced by built-in categories, category
+and individual enable controls, severity overrides, AppRole parameters and shared
+token lifetime thresholds. Existing configuration fields are retained through
+YAML document edits and the existing revision-checked API. If legacy custom rules
+exist, the UI explains that saving disables them for future analyses while
+retaining their definitions for compatibility. No custom rule creation/import UI
+remains. Categories without dedicated checks show an explicit empty state.
+
+Production build passed. Browser inspection verified the catalog and AppRole
+category toggle (3/9 to 9/9 with an unsaved-change indicator); the test draft was
+closed without changing the user's saved settings. A configuration round-trip
+against the native catalog verified category enablement, severity and duration
+changes while preserving unrelated policy checks. Saving through this new form
+still requires end-to-end acceptance. JWT/Kubernetes list settings, privileged
+policy selectors, object exceptions and unsaved-navigation handling remain to be
+completed. This supersedes the earlier note that the old Checks editor remains.

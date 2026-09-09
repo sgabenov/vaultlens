@@ -1,250 +1,86 @@
 import { useState } from 'react';
+import { parseDocument } from 'yaml';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuditRules, saveAuditRules } from '../lib/api';
-import type { RuleSettings } from '../../shared/auditRules';
-const example = `version: 1
-rule:
-  id: CUSTOM-TOKEN-TTL
-  status: stable
-  severity: medium
-  finding_kind: risky_configuration
-  title: Token TTL exceeds team threshold
-  description: Review roles with an explicitly configured token lifetime above one hour.
-  remediation: Reduce token_ttl to the reviewed team limit.
-  object_types: [role]
-  detector: field_compare
-  parameters:
-    field: token_ttl
-    operator: greater_than
-    value: 3600
-`;
+import { SEVERITIES, type RuleSettings, type RuleView } from '../../shared/auditRules';
+import { CHECK_GROUPS, checkGroup, type CheckGroup } from '../../shared/auditCheckGroups';
+
+const parameters: {group:CheckGroup; section:string; key:string; label:string; fallback:string|number|boolean}[] = [
+  {group:'AppRole',section:'approle',key:'secret_id_ttl_warning',label:'SecretID TTL warning',fallback:'24h'},
+  {group:'AppRole',section:'approle',key:'secret_id_num_uses_warning',label:'SecretID use-count warning',fallback:100},
+  {group:'AppRole',section:'approle',key:'require_cidr_for_privileged_roles',label:'Require CIDR restrictions for privileged roles',fallback:true},
+];
+const ttlParameters = [
+  ['token_ttl_warning','Token TTL warning','8h'],['token_ttl_high','Token TTL high-risk threshold','24h'],
+  ['token_max_ttl_warning','Token maximum TTL warning','24h'],['token_max_ttl_high','Token maximum TTL high-risk threshold','72h'],
+] as const;
+
 export default function AuditRulesPage() {
-  const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ['audit-rules'], queryFn: getAuditRules });
-  const [draft, setDraft] = useState<RuleSettings | null>(null);
-  const [selected, setSelected] = useState('');
-  const [filter, setFilter] = useState('');
-  const [importError, setImportError] = useState('');
-  const save = useMutation({
-    mutationFn: saveAuditRules,
-    onSuccess: (data) => {
-      queryClient.setQueryData(['audit-rules'], data);
-      setDraft(null);
-    },
-  });
-  const settings = draft ?? query.data?.settings;
-  const chosen = query.data?.catalog.find((r) => r.id === selected);
-  const update = (field: 'configYaml' | 'customRulesYaml', value: string) => {
-    if (settings) setDraft({ ...settings, [field]: value });
-  };
-  const error = save.error as {
-    response?: { data?: { error?: string } };
-    message?: string;
-  } | null;
-  async function importFile(file: File | undefined) {
-    if (!file) return;
-    if (file.size > 256000) {
-      setImportError('Maximum YAML file size is 256 KB');
-      return;
-    }
-    try {
-      update('customRulesYaml', await file.text());
-      setImportError('');
-    } catch {
-      setImportError('Could not read the selected file');
-    }
+  const client=useQueryClient();
+  const query=useQuery({queryKey:['audit-rules'],queryFn:getAuditRules});
+  const [draft,setDraft]=useState<RuleSettings|null>(null);
+  const [group,setGroup]=useState<CheckGroup>('Policies');
+  const [selected,setSelected]=useState('');
+  const [message,setMessage]=useState('');
+  const save=useMutation({mutationFn:saveAuditRules,onSuccess:data=>{
+    client.setQueryData(['audit-rules'],data);setDraft(null);setMessage(`Settings revision ${data.settings.revision} saved. Existing runs are unchanged.`);
+  }});
+  const settings=draft??query.data?.settings;
+  const document=settings?parseDocument(settings.configYaml):null;
+  const value=(path:string[],fallback:unknown)=>document?.getIn(path)??fallback;
+  const rules=query.data?.catalog.filter(rule=>rule.source==='builtin')??[];
+  const inGroup=rules.filter(rule=>checkGroup(rule)===group);
+  const chosen=inGroup.find(rule=>rule.id===selected)??inGroup[0];
+  const active=(rule:RuleView)=>Boolean(value(['rules',rule.id,'enabled'],rule.active));
+  const severity=(rule:RuleView)=>String(value(['rules',rule.id,'severity'],rule.effectiveSeverity));
+  function update(changes:{path:string[];value:unknown}[]) {
+    if(!settings||!document||save.isPending)return;
+    for(const change of changes)document.setIn(change.path,change.value);
+    setDraft({...settings,configYaml:document.toString()});setMessage('');
   }
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          Audit rules and configuration
-        </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Built-in definitions are immutable. Configure profiles and overrides,
-          or add YAML rules backed by registered detectors.
-        </p>
-      </div>
-      {query.error && (
-        <p role="alert">
-          Could not load rules. Administrator access is required.
-        </p>
-      )}
-      {settings && (
-        <>
-          <div className="flex items-center gap-4">
-            <span className="text-sm">
-              Saved revision {query.data?.settings.revision} ·{' '}
-              {query.data?.catalog.length} definitions
-            </span>
-            <button
-              disabled={!draft || save.isPending}
-              onClick={() => save.mutate(settings)}
-              className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-            >
-              {save.isPending ? 'Saving…' : 'Save configuration'}
-            </button>
-            {draft && (
-              <button
-                className="text-sm underline"
-                onClick={() => {
-                  setDraft(null);
-                  save.reset();
-                }}
-              >
-                Discard edits
-              </button>
-            )}
-          </div>
-          {(error || importError) && (
-            <p
-              role="alert"
-              className="rounded bg-red-50 p-3 text-sm text-red-800"
-            >
-              {importError || error?.response?.data?.error || error?.message}
-            </p>
-          )}
-          {save.isSuccess && !draft && (
-            <p role="status" className="text-sm text-green-700">
-              Saved. New runs use this revision; previous runs retain their
-              configuration.
-            </p>
-          )}
-          <div className="grid gap-5 lg:grid-cols-2">
-            <section>
-              <label htmlFor="audit-config" className="font-medium">
-                Environment configuration (YAML)
-              </label>
-              <textarea
-                id="audit-config"
-                spellCheck={false}
-                value={settings.configYaml}
-                onChange={(e) => update('configYaml', e.target.value)}
-                className="mt-2 h-80 w-full rounded border bg-white p-3 font-mono text-xs"
-              />
-              <p className="mt-1 text-xs text-gray-600">
-                Use rules.RULE-ID.enabled and rules.RULE-ID.severity for
-                overrides. Threshold keys follow the Python configuration
-                format.
-              </p>
-            </section>
-            <section>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label htmlFor="audit-custom-rules" className="font-medium">
-                  Custom rule definitions (YAML)
-                </label>
-                <button
-                  className="text-sm text-blue-700 underline"
-                  onClick={() =>
-                    update(
-                      'customRulesYaml',
-                      settings.customRulesYaml.trim()
-                        ? settings.customRulesYaml + '\n---\n' + example
-                        : example,
-                    )
-                  }
-                >
-                  Append example
-                </button>
-              </div>
-              <textarea
-                id="audit-custom-rules"
-                spellCheck={false}
-                value={settings.customRulesYaml}
-                onChange={(e) => update('customRulesYaml', e.target.value)}
-                className="mt-2 h-80 w-full rounded border bg-white p-3 font-mono text-xs"
-              />
-              <label className="text-xs">
-                Import YAML into editor{' '}
-                <input
-                  type="file"
-                  accept=".yaml,.yml"
-                  onChange={(e) => void importFile(e.target.files?.[0])}
-                />
-              </label>
-              <p className="mt-2 text-xs text-gray-600">
-                One version: 1 / rule: document per rule; separate documents
-                with ---. Imported text is validated on save. No JavaScript or
-                arbitrary expressions are executed.
-              </p>
-            </section>
-          </div>
-          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">
-            The catalog includes the Python reference definitions. Pending
-            detectors are visible and produce coverage gaps when enabled, until
-            their native implementation is verified.
-          </div>
-          <label className="block text-sm">
-            Filter catalog{' '}
-            <input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="ml-2 rounded border p-2"
-              placeholder="Rule ID, title or detector"
-            />
-          </label>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="max-h-96 overflow-auto rounded border bg-white">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-2">Rule</th>
-                    <th>Severity</th>
-                    <th>State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {query.data?.catalog
-                    .filter((r) =>
-                      (r.id + ' ' + r.title + ' ' + r.detector)
-                        .toLowerCase()
-                        .includes(filter.toLowerCase()),
-                    )
-                    .map((r) => (
-                      <tr key={r.id} className="border-t">
-                        <td className="p-2">
-                          <button
-                            onClick={() => setSelected(r.id)}
-                            className="text-blue-700 underline"
-                          >
-                            {r.id}
-                          </button>
-                          <div className="text-xs text-gray-500">{r.title}</div>
-                        </td>
-                        <td>{r.effectiveSeverity}</td>
-                        <td>
-                          {r.active ? 'Enabled' : 'Disabled'} ·{' '}
-                          {r.supported ? 'Available' : 'Pending'}
-                          <div className="text-xs">
-                            {r.source} · {r.status}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="min-w-0 rounded border bg-white p-3">
-              {chosen ? (
-                <>
-                  <h2 className="font-medium">
-                    {chosen.id}: {chosen.title}
-                  </h2>
-                  <p className="my-2 text-sm">{chosen.description}</p>
-                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">
-                    {chosen.yaml}
-                  </pre>
-                </>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  Select a rule to inspect its definition and detector
-                  parameters.
-                </p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+  const legacy=query.data?.catalog.filter(rule=>rule.source==='custom')??[];
+  function persist() {
+    if(!settings||!document)return;
+    // Keep historical definitions readable, but the managed UI only runs built-in checks.
+    for(const rule of legacy)document.setIn(['rules',rule.id,'enabled'],false);
+    save.mutate({...settings,configYaml:document.toString()});
+  }
+  const error=save.error as {response?:{data?:{error?:string}};message?:string}|null;
+  return <section className="space-y-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-lg font-semibold">Checks</h2><p className="mt-1 text-sm text-gray-500">Built-in checks for the current Vault. Changes apply to new analyses.</p></div>
+      <button className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={!settings||save.isPending||(!draft&&!legacy.some(rule=>rule.active))} onClick={persist}>{save.isPending?'Saving…':'Save changes'}</button>
     </div>
-  );
+    {query.isPending&&<p>Loading checks…</p>}
+    {query.error&&<p role="alert">Could not load check settings. Administrator access is required.</p>}
+    {error&&<p role="alert" className="text-sm text-red-700">{error.response?.data?.error??error.message}. Your unsaved changes are retained.</p>}
+    {message&&<p role="status" className="text-sm text-green-800">{message}</p>}
+    {settings&&<>
+      <p className="text-sm text-gray-500">Revision {settings.revision} {draft?'· Unsaved changes':''} · {rules.filter(active).length} of {rules.length} built-in checks enabled</p>
+      {!!legacy.length&&<p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">This workspace has {legacy.length} legacy custom definitions. Saving these settings disables them for future analyses; historical runs retain their original definitions.</p>}
+      <div className="flex flex-wrap gap-2" aria-label="Check categories">{CHECK_GROUPS.map(category=>{
+        const members=rules.filter(rule=>checkGroup(rule)===category);
+        return <button key={category} aria-pressed={category===group} onClick={()=>{setGroup(category);setSelected('');}} className={`rounded border px-3 py-2 text-sm ${category===group?'border-blue-600 bg-blue-50 text-blue-700':'border-gray-200'}`}>{category} <span className="ml-2 text-xs">{members.filter(active).length}/{members.length}</span></button>;
+      })}</div>
+      {!inGroup.length?<p className="rounded border p-4 text-sm text-gray-500">No dedicated built-in checks in this category yet. Collection of these objects does not imply they have passed a check.</p>:<>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inGroup.every(active)} disabled={save.isPending} onChange={event=>update(inGroup.map(rule=>({path:['rules',rule.id,'enabled'],value:event.target.checked})))} />Enable all {group} checks</label>
+        <div className="grid gap-5 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.4fr)]">
+          <div className="divide-y rounded border">{inGroup.map(rule=><button key={rule.id} onClick={()=>setSelected(rule.id)} aria-pressed={rule.id===chosen?.id} className={`block w-full p-4 text-left ${rule.id===chosen?.id?'bg-blue-50':''}`}>
+            <span className="text-xs text-gray-500">{rule.id} · {active(rule)?'Enabled':'Disabled'} · {severity(rule)}</span><strong className="mt-1 block text-sm font-medium">{rule.title}</strong>
+          </button>)}</div>
+          {chosen&&<div className="space-y-4 rounded border p-5">
+            <div><span className="text-xs text-gray-500">Built-in · {chosen.status}</span><h3 className="mt-1 font-semibold">{chosen.title}</h3></div>
+            <p className="text-sm text-gray-600">{chosen.description}</p>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={save.isPending} checked={active(chosen)} onChange={event=>update([{path:['rules',chosen.id,'enabled'],value:event.target.checked}])} />Enable this check</label>
+            <label className="block text-sm">Severity<select aria-label="Check severity" className="mt-2 block rounded border p-2" disabled={save.isPending} value={severity(chosen)} onChange={event=>update([{path:['rules',chosen.id,'severity'],value:event.target.value}])}>{SEVERITIES.map(level=><option key={level} value={level}>{level}</option>)}</select></label>
+            <p className="text-xs text-gray-500">Default: {chosen.severity}. Selecting a severity creates an explicit override for this check.</p>
+            <h4 className="text-sm font-medium">Recommendation</h4><p className="text-sm text-gray-600">{chosen.remediation}</p>
+            {!chosen.supported&&<p className="text-sm text-amber-800">This detector is unavailable. Enabling it produces a coverage gap.</p>}
+          </div>}
+        </div>
+      </>}
+      {!!parameters.filter(p=>p.group===group).length&&<details className="rounded border p-4"><summary className="cursor-pointer text-sm font-medium">{group} parameters</summary><div className="mt-3 space-y-3">{parameters.filter(p=>p.group===group).map(p=><label key={p.key} className="block text-sm">{p.label}{typeof p.fallback==='boolean'?<input className="ml-2" type="checkbox" disabled={save.isPending} checked={Boolean(value([p.section,p.key],p.fallback))} onChange={event=>update([{path:[p.section,p.key],value:event.target.checked}])}/>:<input className="ml-2 rounded border p-2" disabled={save.isPending} type={typeof p.fallback==='number'?'number':'text'} min={0} value={String(value([p.section,p.key],p.fallback))} onChange={event=>update([{path:[p.section,p.key],value:typeof p.fallback==='number'?Number(event.target.value):event.target.value}])}/>}</label>)}</div></details>}
+      <details className="rounded border p-4"><summary className="cursor-pointer text-sm font-medium">Shared token lifetime thresholds</summary><p className="mt-2 text-xs text-gray-500">These thresholds apply to every detector that uses token lifetime limits. Durations accept seconds or values such as 8h and 1d.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{ttlParameters.map(([key,label,fallback])=><label key={key} className="text-sm">{label}<input className="mt-1 block w-full rounded border p-2" disabled={save.isPending} value={String(value(['thresholds',key],fallback))} onChange={event=>update([{path:['thresholds',key],value:event.target.value}])}/></label>)}</div></details>
+    </>}
+  </section>;
 }
