@@ -128,3 +128,16 @@ in tab navigation. Downloads are generated from the saved run, not a new scan.
 
 Client build passed. Browser inspection confirmed the selected run summary and
 export controls; JSON export returned the expected saved run successfully.
+
+## Run Info
+
+Each Runs row has an Info action opening a native modal side panel. It presents
+status, timing, resource counts, scope filters, collection limits, request/retry
+metrics, coverage issues and source-run/retained-data details. Missing values are
+shown as unavailable, and raw data remains under Technical details. The old
+Collection parameters and metrics panel was removed from Findings; incomplete
+coverage warnings remain there.
+
+Client build passed. Browser inspection of run 0024bdbb confirmed the side panel,
+0.55-second duration, four requests, nine retained resources and its source-run
+link, with keyboard focus initially on Close.

@@ -191,10 +191,6 @@ export default function SecurityAuditPage() {
               )}
               {detail.data.snapshot?.analysisPerformed !== false && <AuditFindings key={id} detail={detail.data} />}
               {detail.data.snapshot && <AuditImportDetails key={`import:${id}`} snapshot={detail.data.snapshot} />}
-              {detail.data.snapshot?.collection && <details className="rounded border p-3 text-sm">
-                <summary>Collection parameters and metrics</summary>
-                <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(detail.data.snapshot.collection,null,2)}</pre>
-              </details>}
               <div className="rounded border p-3 text-sm">
                 <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending||!['collected','completed','partial'].includes(detail.data.run.status)}
                   onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
