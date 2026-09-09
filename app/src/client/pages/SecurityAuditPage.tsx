@@ -5,7 +5,8 @@ import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditRunDialog from '../components/AuditRunDialog';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { AuditRun } from '../../shared/securityAudit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSecurityAuditRuns,
@@ -35,7 +36,14 @@ export default function SecurityAuditPage() {
     queryFn: getSecurityAuditRuns,
     refetchInterval: 3000,
   });
-  const id = selected || runs.data?.[0]?.id || '';
+  const latestId = runs.data?.[0]?.id;
+  useEffect(()=>{
+    if(!selected&&latestId)setParams(current=>{
+      if(current.get('run'))return current;
+      const next=new URLSearchParams(current);next.set('run',latestId);return next;
+    },{replace:true});
+  },[selected,latestId,setParams]);
+  const id = selected || latestId || '';
   const detail = useQuery({
     queryKey: ['security-audit-run', id],
     queryFn: () => getSecurityAuditRun(id),
@@ -60,6 +68,7 @@ export default function SecurityAuditPage() {
   ];
   const identityAssignments = detail.data?.snapshot?.identity?.assignments.filter(a =>
     [a.subjectPath, a.policy, a.sourcePath].some(v => v.toLowerCase().includes(identityFilter.toLowerCase()))) ?? [];
+  const runLabel=(run:AuditRun)=>`${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0,8)}`;
   const error = runs.error || detail.error || start.error || reanalyze.error;
   return (
     <div className="space-y-6">
@@ -136,7 +145,13 @@ export default function SecurityAuditPage() {
       )}
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span>{detail.data ? `Selected run: ${new Date(detail.data.run.startedAt).toLocaleString()}` : 'Select a saved run or start an audit.'}</span>
+          <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2">Run
+            <select aria-label="Run" className="min-w-0 max-w-full flex-1 rounded border p-2" value={id} disabled={!id&&!runs.data?.length} onChange={event=>setSelected(event.target.value)}>
+              {!id&&<option value="">{runs.isPending?'Loading runs…':'No runs yet'}</option>}
+              {id&&!runs.data?.some(run=>run.id===id)&&<option value={id}>{detail.data?runLabel(detail.data.run):`Selected run · ${id}`}</option>}
+              {runs.data?.map(run=><option key={run.id} value={run.id}>{runLabel(run)}</option>)}
+            </select>
+          </label>
           <Link className="text-blue-700 underline" to={`/security-audit/runs${id ? `?${new URLSearchParams({run:id})}` : ''}`}>View run history</Link>
         </div>
         <section className="min-w-0 space-y-4">

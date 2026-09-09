@@ -141,3 +141,15 @@ coverage warnings remain there.
 Client build passed. Browser inspection of run 0024bdbb confirmed the side panel,
 0.55-second duration, four requests, nine retained resources and its source-run
 link, with keyboard focus initially on Close.
+
+## Findings run selector
+
+Findings now offers an explicit Run dropdown with date, status, finding count and
+short ID. Selection updates the URL and all audit navigation links. Opening the
+page without a run pins the initial latest run into the URL using history replace,
+so subsequent list refreshes cannot switch the displayed report. Explicit older
+IDs outside the recent-run list retain a selectable fallback entry.
+
+Client build passed. Browser opening without a run pinned the latest ID; selecting
+f3627d33 updated the URL, selected label, navigation links and displayed four
+findings instead of five.
