@@ -1,5 +1,19 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { PolicyUsage } from '../../shared/policyUsage';
+
+function objectLink(path:string,namespace:string):string|undefined {
+  // Existing object screens do not accept an audit namespace parameter.
+  if(namespace)return undefined;
+  const role=path.match(/^auth\/(.+)\/roles?\/([^/]+)$/);
+  if(role)return `/access/auth-methods/${encodeURIComponent(role[1])}/roles/${encodeURIComponent(role[2])}`;
+  const identity=path.match(/^identity\/(entity|group)\/id\/([^/]+)$/);
+  if(identity)return `/access/${identity[1]==='entity'?'entities':'groups'}/${encodeURIComponent(identity[2])}`;
+}
+function ObjectPath({path,namespace}:{path:string;namespace:string}) {
+  const href=objectLink(path,namespace);
+  return href?<Link to={href} target="_blank" rel="noopener noreferrer" className="break-all font-mono text-xs text-blue-700 underline" aria-label={`Open live object ${path} in a new tab`}>{path}</Link>:<span className="break-all font-mono text-xs">{path}</span>;
+}
 
 export default function AuditPolicyAssignments({usage}:{usage:PolicyUsage}) {
   const [query,setQuery]=useState(''),[page,setPage]=useState(1);
@@ -10,10 +24,17 @@ export default function AuditPolicyAssignments({usage}:{usage:PolicyUsage}) {
     <p className="mt-2 text-xs text-gray-500">{usage.namespace||'root'} · {usage.name}. Observed assignments and allowed policy references; existing tokens, allowed globs and collection gaps may not be covered.</p>
     {!usage.references.length?<p className="mt-2 text-sm">No assignments found in the available data. This does not prove the policy is unused.</p>:<>
       <label className="mt-3 block text-xs">Filter assignments<input className="mt-1 block w-full rounded border p-2" value={query} placeholder="Object path, relationship or source" onChange={event=>{setQuery(event.target.value);setPage(1);}}/></label>
-      <ul className="mt-2 space-y-2">{rows.slice((current-1)*25,current*25).map((reference,index)=><li key={index} className="break-all text-xs">
-        <span className="font-medium">{reference.relationship} · {reference.kind}</span> · {usage.namespace||'root'} · {reference.path}
-        {reference.relationship==='inherited'&&<span className="block text-gray-500">Via {reference.sourcePath}</span>}
-      </li>)}</ul>
+      <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm">
+        <thead className="text-xs text-gray-500"><tr><th scope="col" className="px-3 py-2">Relationship</th><th scope="col" className="px-3 py-2">Object type</th><th scope="col" className="px-3 py-2">Namespace</th><th scope="col" className="px-3 py-2">Object path</th>{usage.references.some(reference=>reference.relationship==='inherited')&&<th scope="col" className="px-3 py-2">Inherited from</th>}</tr></thead>
+        <tbody>{rows.slice((current-1)*25,current*25).map((reference,index)=><tr key={index} className="border-t align-top">
+          <td className="px-3 py-2">{{assigned:'Direct assignment',inherited:'Inherited',allowed:'Allowed for issuance'}[reference.relationship]}</td>
+          <td className="px-3 py-2">{({role:'Auth role',entity:'Entity',group:'Group'} as Record<string,string>)[reference.kind]??reference.kind}</td>
+          <td className="px-3 py-2">{usage.namespace||'root'}</td>
+          <td className="px-3 py-2"><ObjectPath path={reference.path} namespace={usage.namespace}/></td>
+          {usage.references.some(item=>item.relationship==='inherited')&&<td className="px-3 py-2">{reference.relationship==='inherited'?<ObjectPath path={reference.sourcePath} namespace={usage.namespace}/>: '—'}</td>}
+        </tr>)}</tbody>
+      </table></div>
+      <p className="mt-2 text-xs text-gray-500">Links open the current Vault object in a new tab, not its historical state.{usage.namespace?' Direct links are unavailable for this namespace.':''}</p>
       {!rows.length&&<p className="mt-2 text-xs">No matching assignments.</p>}
       {rows.length>25&&<div className="mt-3 flex items-center gap-3 text-xs"><span>{rows.length} matches · page {current}</span><button disabled={current<=1} className="rounded border px-2 py-1 disabled:opacity-40" onClick={()=>setPage(current-1)}>Previous</button><button disabled={current*25>=rows.length} className="rounded border px-2 py-1 disabled:opacity-40" onClick={()=>setPage(current+1)}>Next</button></div>}
     </>}
