@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { getSecurityAuditRun } from '../lib/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getSecurityAuditRun, getSecurityAuditRuns, reanalyzeSecurityAudit } from '../lib/api';
 
 const display=(value:unknown):string=>value===undefined||value===null?'Unavailable':Array.isArray(value)?value.length?value.join(', '):'All':typeof value==='boolean'?value?'Yes':'No':String(value);
 function Fields({values}:{values:[string,unknown][]}) {
@@ -9,6 +9,15 @@ function Fields({values}:{values:[string,unknown][]}) {
 }
 export default function AuditRunInfo({runId,onClose}:{runId:string;onClose:()=>void}) {
   const ref=useRef<HTMLDialogElement>(null);
+  const navigate=useNavigate(),client=useQueryClient();
+  const runs=useQuery({queryKey:['security-audit-runs'],queryFn:getSecurityAuditRuns,refetchInterval:3000});
+  const reanalyze=useMutation({mutationFn:()=>reanalyzeSecurityAudit(runId,{baselineYaml:'',exceptionsYaml:''}),onSuccess:result=>{
+    client.invalidateQueries({queryKey:['security-audit-runs']});
+    onClose();
+    navigate(`/security-audit/findings?${new URLSearchParams({run:result.id})}`);
+  }});
+  const reanalyzeError=reanalyze.error as {response?:{data?:{error?:string}};message?:string}|null;
+  const running=runs.data?.some(run=>run.status==='running');
   useEffect(()=>{ref.current?.showModal();},[]);
   const query=useQuery({queryKey:['security-audit-run',runId],queryFn:()=>getSecurityAuditRun(runId),refetchInterval:q=>q.state.data?.run.status==='running'?2000:false});
   const detail=query.data,run=detail?.run,collection=detail?.snapshot?.collection;
@@ -27,6 +36,13 @@ export default function AuditRunInfo({runId,onClose}:{runId:string;onClose:()=>v
         ['Finished',run.finishedAt?new Date(run.finishedAt).toLocaleString():'Not finished'],
         ['Run duration',duration===undefined?'Not finished':`${duration.toFixed(2)} s`],['Resources',run.resourceCount],['Findings',run.findingCount],['Coverage gaps',run.issueCount],
       ]}/>
+      {detail?.snapshot&&['collected','completed','partial'].includes(run.status)&&<div className="rounded border p-3 text-sm">
+        <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={reanalyze.isPending||!!running||runs.isPending||!!runs.error} onClick={()=>reanalyze.mutate()}>{reanalyze.isPending?'Starting…':'Reanalyze snapshot'}</button>
+        <p className="mt-2 text-xs text-gray-500">Creates a new run from this saved snapshot using current saved checks and exceptions. Does not collect fresh Vault data; collection timestamps remain unchanged.</p>
+        {running&&<p role="status" className="mt-2 text-xs">Another audit is running. Wait for it to finish.</p>}
+        {runs.error&&<p role="alert" className="mt-2 text-red-700">Could not check active runs. Try again once the run list is available.</p>}
+        {reanalyzeError&&<p role="alert" className="mt-2 text-red-700">{reanalyzeError.response?.data?.error??reanalyzeError.message}</p>}
+      </div>}
       {run.failureReason&&<p role="alert" className="text-sm text-red-700">{run.failureReason}</p>}
       {run.progress&&run.status==='running'&&<p role="status" className="text-sm">{run.progress.phase} · {run.progress.resources} resources · {run.progress.requests} requests</p>}
       {detail?.snapshot?.sourceRunId&&<p className="text-sm">Source run: <Link onClick={onClose} className="break-all text-blue-700 underline" to={`/security-audit/runs?${new URLSearchParams({run:detail.snapshot.sourceRunId})}`}>{detail.snapshot.sourceRunId}</Link></p>}

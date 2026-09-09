@@ -10,7 +10,6 @@ import {
   getSecurityAuditRuns,
   getSecurityAuditRun,
   startSecurityAudit,
-  reanalyzeSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
   const [recursiveNamespaces,setRecursiveNamespaces]=useState(false);
@@ -54,16 +53,13 @@ export default function SecurityAuditPage() {
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
     },
   });
-  const reanalyze=useMutation({mutationFn:()=>reanalyzeSecurityAudit(id,controlDocuments),onSuccess:result=>{
-    setSelected(result.id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});
-  }});
   const running = runs.data?.some((r) => r.status === 'running');
   const issues = [
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
   const runLabel=(run:AuditRun)=>`${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0,8)}`;
-  const error = runs.error || detail.error || start.error || reanalyze.error;
+  const error = runs.error || detail.error || start.error;
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -200,12 +196,7 @@ export default function SecurityAuditPage() {
               )}
               {detail.data.snapshot?.analysisPerformed !== false && <AuditFindings key={id} detail={detail.data} />}
               {detail.data.snapshot && <AuditImportDetails key={`import:${id}`} snapshot={detail.data.snapshot} />}
-              <div className="rounded border p-3 text-sm">
-                <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending||!['collected','completed','partial'].includes(detail.data.run.status)}
-                  onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
-                <p className="mt-2 text-xs text-gray-500">Creates a new result with saved checks and object exceptions. Collection timestamps remain unchanged.</p>
-                {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
-              </div>
+
 
               {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
                 Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
