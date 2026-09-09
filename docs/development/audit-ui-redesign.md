@@ -168,3 +168,19 @@ analysis still retained its one historical exclusion, and the saved exception
 list was restored to empty. This verifies create, apply, filter and remove; it
 does not claim editing an existing exception or browser acceptance of large-list
 pagination. No Vault configuration was changed.
+
+## Large-result browser acceptance
+
+A temporary synthetic result with 1,200 findings across two namespaces was opened
+in the production-built UI. Check grouping displayed four groups with counts
+240/480/240/240. Expanding the first group rendered ten object rows; Next showed
+rows 11–20 of 240 with distinct object paths. Object grouping displayed 1,200
+groups, with ten per page. Searching for the final synthetic object after moving
+to the next page reset pagination and returned exactly that object. Combining
+namespace test-team-b with critical severity returned the expected 120 findings.
+
+The test used a single explicitly generated SQLite row dated 2000-01-01, never a
+live Vault scan. Its browser tab was closed and that exact row was removed with
+ID/date/resource-count/finding-count guards; existing runs were retained. This
+confirms browser behavior at 1,200 findings, not arbitrary-scale performance.
+The API still returns a complete run detail; pagination limits rendered rows.
