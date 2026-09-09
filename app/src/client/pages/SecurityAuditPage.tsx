@@ -1,7 +1,6 @@
 import AuditFindings from '../components/AuditFindings';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
-import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditRunDialog from '../components/AuditRunDialog';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
@@ -211,7 +210,6 @@ export default function SecurityAuditPage() {
                 <p className="mt-2 text-xs text-gray-500">Creates a new result with saved checks and object exceptions. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
-              {detail.data.snapshot && <AuditPolicyUsage key={`usage:${id}`} snapshot={detail.data.snapshot} />}
               {detail.data.snapshot?.identity && (
                 <details className="rounded border p-3 text-sm">
                   <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>

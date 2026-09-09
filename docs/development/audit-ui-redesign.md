@@ -170,3 +170,16 @@ Production build and all 56 tests passed, including atomicity, target isolation
 and active-work protection. Browser Select all selected 13 listed runs; selection
 was cleared without deleting them. API deletion removed two temporary fixtures,
 with all existing runs retained.
+
+## Policy assignments within findings
+
+The page-wide Policy usage inventory was removed. Policy findings now show a
+Policy assignments disclosure beside Matched policy block. Lookup joins the
+finding to its collected policy by exact namespace and API path, then lists only
+that policy's observed assignments, inherited links and allowed references.
+The list has search and 25-row pagination; empty results do not claim non-use.
+Assignment indexes are built once per snapshot and reused by displayed findings.
+
+Client build passed. Browser verification of POL-003 showed Policy assignments
+beside the matched block and the observed AppRole assignment at
+auth/approle/role/vaultlens-system-token for vaultlens-system-policy.

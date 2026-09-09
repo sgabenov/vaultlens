@@ -1,3 +1,5 @@
+import AuditPolicyAssignments from './AuditPolicyAssignments';
+import { policyUsage, type PolicyUsage } from '../../shared/policyUsage';
 import AuditExceptionForm from './AuditExceptionForm';
 import { useMemo, useState } from 'react';
 import { SEVERITIES } from '../../shared/auditRules';
@@ -13,13 +15,14 @@ function Pager({page,total,size,onChange}:{page:number;total:number;size:number;
   </div>;
 }
 type FindingControl = AuditControls['states'][number] | null;
-function Evidence({finding,control}:{finding:AuditFinding;control:FindingControl}) {
+function Evidence({finding,control,usage}:{finding:AuditFinding;control:FindingControl;usage?:PolicyUsage}) {
   let evidence=finding.evidence;
   try {evidence=JSON.stringify(JSON.parse(evidence),null,2);} catch { /* Historical plain text. */ }
   return <div className="space-y-3 py-3 text-sm">
     <p className="text-gray-500">{finding.ruleId} · {finding.namespace||'root'} · {finding.severity}</p>
     <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-3 text-xs">{evidence}</pre>
     {finding.matchedBlock&&<details><summary className="cursor-pointer">Matched policy block{finding.line?` · line ${finding.line}`:''}</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-words text-xs">{finding.matchedBlock}</pre></details>}
+    {usage&&<AuditPolicyAssignments usage={usage}/>}
     {!!finding.relatedObjects?.length&&<details><summary className="cursor-pointer">Related resources · {finding.relatedObjects.length}</summary><ul>{finding.relatedObjects.map((object,index)=><li key={index} className="mt-1 break-all font-mono text-xs">{object.kind} · {object.path}</li>)}</ul></details>}
     <p>{finding.recommendation}</p>
     {control?.exception && <div className="rounded border border-blue-200 bg-blue-50 p-3">
@@ -29,18 +32,29 @@ function Evidence({finding,control}:{finding:AuditFinding;control:FindingControl
     </div>}
   </div>;
 }
-function FindingRows({findings,size,controls,statusOf,detail}:{detail:AuditDetail;findings:AuditFinding[];size:number;controls:Map<AuditFinding,FindingControl>;statusOf:(finding:AuditFinding)=>string}) {
+function FindingRows({findings,size,controls,statusOf,detail,usages}:{usages:Map<string,PolicyUsage>;detail:AuditDetail;findings:AuditFinding[];size:number;controls:Map<AuditFinding,FindingControl>;statusOf:(finding:AuditFinding)=>string}) {
   const [requested,setPage]=useState(1),page=Math.min(requested,Math.max(1,Math.ceil(findings.length/size)));
   return <div className="px-4">
     {findings.slice((page-1)*size,page*size).map((finding,index)=><details key={`${page}:${index}`} className="border-t py-3">
       <summary className="cursor-pointer text-sm"><span className="mr-2 text-xs font-medium">{finding.severity}</span><span className="break-all font-mono text-xs">{finding.namespace||'root'} · {finding.path}</span><span className="ml-2 text-xs text-gray-500">{finding.ruleId} · {statusOf(finding)}</span></summary>
-      <Evidence finding={finding} control={controls.get(finding)??null}/>
+      <Evidence finding={finding} control={controls.get(finding)??null} usage={usages.get(JSON.stringify([finding.namespace??'',finding.path]))}/>
       {['completed','partial'].includes(detail.run.status)&&<AuditExceptionForm runId={detail.run.id} index={detail.findings.indexOf(finding)} finding={finding}/>}
     </details>)}
     <Pager page={page} total={findings.length} size={size} onChange={setPage}/>
   </div>;
 }
 export default function AuditFindings({detail}:{detail:AuditDetail}) {
+  const usages=useMemo(()=>{
+    const result=new Map<string,PolicyUsage>();
+    if(!detail.snapshot)return result;
+    const byName=new Map(policyUsage(detail.snapshot).map(row=>[JSON.stringify([row.namespace,row.name]),row]));
+    for(const resource of detail.snapshot.resources){
+      if(resource.kind!=='policy'||typeof resource.data.name!=='string')continue;
+      const usage=byName.get(JSON.stringify([resource.namespace??'',resource.data.name]));
+      if(usage)result.set(JSON.stringify([resource.namespace??'',resource.path]),usage);
+    }
+    return result;
+  },[detail.snapshot]);
   const [status,setStatus]=useState('all');
   const controls=useMemo(()=>new Map(detail.findings.map((finding,index)=>[finding,detail.findingControls?.[index]??null])),[detail.findings,detail.findingControls]);
   const statusOf=(finding:AuditFinding)=>controls.get(finding)?.suppressed?'Excluded':detail.snapshot?.controls&&!controls.get(finding)?'Unknown':'Open';
@@ -67,7 +81,7 @@ export default function AuditFindings({detail}:{detail:AuditDetail}) {
         <span aria-hidden="true">{expanded===group.key?'▾':'▸'}</span><span className={`rounded px-2 py-1 text-xs ${['critical','high'].includes(group.severity)?'bg-red-50 text-red-800':'bg-amber-50 text-amber-900'}`}>{group.severity}</span>
         <span className="min-w-0 flex-1 break-words text-sm font-medium">{group.title}<span className="mt-1 block text-xs font-normal text-gray-500">{grouping==='check'?group.key:''}</span></span><span className="text-sm">{group.findings.length}</span>
       </button>
-      {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf} detail={detail}/>}
+      {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf} detail={detail} usages={usages}/>}
     </div>)}</div>
     <Pager page={page} total={groups.length} size={size} onChange={next=>{setPage(next);setExpanded(null);}}/>
   </section>;
