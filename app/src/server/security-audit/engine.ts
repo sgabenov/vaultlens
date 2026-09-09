@@ -1,3 +1,4 @@
+import { evaluateDomain } from './domainChecks.js';
 import { snapshotNamespaces } from './namespaces.js';
 import { evaluateReference } from './referenceDetector.js';
 import { analyzeIdentity, roleEntityIds } from './identity.js';
@@ -24,7 +25,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '13';
+export const ENGINE_VERSION = '14';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -185,6 +186,11 @@ function executeScoped(
     }
   }
 
+  for(const mount of mounts){
+    const prefix=mount.data.type==='pki'?'PKI-':mount.data.type==='transit'?'TRANSIT-':null;
+    if(prefix&&definitions.some(r=>r.active&&r.detector==='domain_configuration'&&r.id.startsWith(prefix))&&mount.data.audit_config_collected!==true)
+      issues.push({path:mount.path,reason:'Snapshot lacks engine configuration collection metadata. Collect a fresh snapshot to evaluate '+prefix+' configuration checks.'});
+  }
   const knownPolicies = new Set(['root', ...snapshot.resources.filter(r => r.kind === 'policy').map(r => String(r.data.name))]);
   const identity = analyzeIdentity(snapshot.resources, snapshot.namespaceAliasCompleteness?.[snapshot.namespaces?.[0] ?? ''] === true);
   issues.push(...identity.issues);
@@ -208,6 +214,7 @@ function executeScoped(
     let candidates: AuditFinding[] = [];
     if (POLICY_DETECTORS.includes(rule.detector))
       candidates = policyResults.get(rule.id) ?? [];
+    else if (rule.detector === 'domain_configuration') candidates=evaluateDomain(rule,snapshot,identity,{config:config.raw,privilegeReasons});
     else if (rule.detector === 'missing_policy_reference') {
       candidates = snapshot.resources.flatMap(resource => evaluateReference(rule, resource, knownPolicies, snapshot.policiesComplete, {config: config.raw}));
     } else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {

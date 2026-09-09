@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: RuleSettings = {
   customRulesYaml: '',
 };
 export const SUPPORTED_DETECTORS = [
+  'domain_configuration',
   'missing_policy_reference',
   ...AUTH_DETECTORS,
   ...POLICY_DETECTORS,
@@ -146,7 +147,7 @@ export function parseRule(yaml: string): RuleDefinition {
   const object_types = strings(raw.object_types, 'object_types');
   if (!object_types.length) throw new Error('object_types must not be empty');
   const supportedObjectTypes = [
-    'acl_policy', 'approle', 'jwt_role', 'kubernetes_role', 'token_role',
+    'pki-role', 'pki-issuer', 'transit-key', 'alias', 'acl_policy', 'approle', 'jwt_role', 'kubernetes_role', 'token_role',
     'role', 'auth_role', 'entity', 'group', 'auth-mount',
   ];
   if (object_types.some(type => !supportedObjectTypes.includes(type)))

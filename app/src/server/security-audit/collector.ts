@@ -5,7 +5,7 @@ import { sanitizeAlias } from './identity.js';
 import { globMatch } from './authDetectors.js';
 import { forEachConcurrent } from './concurrency.js';
 import { createRequestPolicy, parseCollectionOptions, type CollectionOptions } from './requestPolicy.js';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { VaultClient, VaultError } from '../lib/vaultClient.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
 export const COLLECTED_FIELDS = [
@@ -51,6 +51,7 @@ export const COLLECTED_FIELDS = [
   'token_ttl',
   'token_max_ttl',
   'token_explicit_max_ttl',
+  'explicit_max_ttl',
   'token_period',
   'token_num_uses',
   'secret_id_ttl',
@@ -222,16 +223,44 @@ export async function collect(
   } else snapshot.issues.push({path:'identity',reason:'Identity collection was explicitly skipped'});
   await runStage('Secret mounts',async()=>{
   const secretMounts = await read('sys/mounts');
-  for (const [mount, value] of Object.entries(secretMounts ?? {}))
+  for (const [mount, value] of Object.entries(secretMounts ?? {})) {
     addResource({
       kind: 'secret-mount',
       path: `sys/mounts/${mount}`,
       data: {
         mount_path: mount,
         type: (value as Record<string, unknown>).type,
+        audit_config_collected: ['pki','transit'].includes(String((value as Record<string,unknown>).type)),
         options: {version: ((value as Record<string, unknown>).options as Record<string,unknown>|undefined)?.version},
       },
     });
+    const type=(value as Record<string,unknown>).type;
+    if(type==='pki'){
+      for(const name of keys(await read(mount+'roles',true))){
+        const path=mount+'roles/'+encodeURIComponent(name),data=await read(path);
+        if(data)addResource({kind:'pki-role',path,data:Object.fromEntries(['allow_any_name','allowed_domains','allow_glob_domains','allow_subdomains','max_ttl','ttl','key_type','key_bits'].filter(k=>data[k]!==undefined).map(k=>[k,data[k]]))});
+      }
+      for(const name of keys(await read(mount+'issuers',true))){
+        const path=mount+'issuer/'+encodeURIComponent(name),data=await read(path);
+        if(data&&typeof data.certificate==='string'){
+          try{const cert=new X509Certificate(data.certificate);addResource({kind:'pki-issuer',path,data:{issuer_name:data.issuer_name,not_after:Date.parse(cert.validTo)}});}
+          catch{snapshot.issues.push({path,reason:'Issuer certificate could not be parsed'});}
+        }else if(data)snapshot.issues.push({path,reason:'Issuer response is missing a certificate'});
+      }
+    }
+    if(type==='transit')for(const name of keys(await read(mount+'keys',true))){
+      const path=mount+'keys/'+encodeURIComponent(name),data=await read(path);
+      if(data){
+        const selected=Object.fromEntries(['type','exportable','allow_plaintext_backup','deletion_allowed','auto_rotate_period','latest_version','min_decryption_version','min_encryption_version'].filter(k=>data[k]!==undefined).map(k=>[k,data[k]]));
+        const versions=data.keys as Record<string,unknown>|undefined;
+        const latest=versions?.[String(data.latest_version)];
+        const created=typeof latest==='number'?latest:latest&&typeof latest==='object'?(latest as Record<string,unknown>).creation_time:undefined;
+        if(typeof created==='number')selected.latest_version_created_at=created;
+        else snapshot.issues.push({path,reason:'Latest key version creation time is unavailable; rotation age cannot be evaluated'});
+        addResource({kind:'transit-key',path,data:selected});
+      }
+    }
+  }
   });
   await runStage('Auth mounts and roles',async()=>{
   const auth = await read('sys/auth');

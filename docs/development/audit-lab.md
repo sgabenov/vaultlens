@@ -81,3 +81,41 @@ review, not proven exploitable escalation. Missing mount inventory cannot prove
 absence of management permissions. PKI signing is intentionally a review rule;
 role constraints still need human inspection. New rules were independently
 implemented from the reviewed concepts, without copying upstream Python code.
+
+## Token, Identity, PKI and Transit configuration checks
+
+Engine 14 adds 18 review rules, explicitly enabled in the local lab:
+
+| IDs | Scope |
+| --- | --- |
+| TOKEN-001–004 | Issuance globs, observed privileged allowed policies after exclusions, periodic lifetime, privileged long-lived orphan roles |
+| IDENTITY-001–003 | Direct/inherited privileged assignments, potential mutation of a membership group, absent auth mount accessor with complete inventory |
+| PKI-001–006 | Any-name issuance, broad domains, max TTL, weak RSA/EC sizes, CA expiry, sign-verbatim permissions |
+| TRANSIT-001–005 | Exportability/plaintext backup, deletion, rotation age, export/backup permissions, key version configuration permissions |
+
+Default review thresholds are 24 hours for the privileged orphan role hard
+lifetime, 90 days for certificate role lifetime and Transit rotation age, and
+30 days for CA expiry. Rule parameters record these thresholds. These are review
+thresholds rather than universal compliance requirements. Missing explicit token
+TTL is not treated as unlimited because mount/system defaults may apply.
+
+PKI roles/issuer expiry and Transit key metadata are collected under the existing
+Secret mounts stage (Sources: mounts). This needs LIST roles/issuers/keys and READ
+of individual configuration objects. The collector reads neither private key
+export endpoints nor secret values. Only allowlisted configuration fields, public
+certificate expiry and the latest key version creation timestamp are retained.
+Older snapshots without configuration collection metadata produce coverage issues
+when these checks are enabled. Temporal checks use the snapshot finishedAt time.
+
+Run `scripts/seed-audit-domain-lab.mjs` with the same local environment after
+`seed-audit-lab.mjs` to populate configuration fixtures. It creates internal
+synthetic cryptographic material inside the development Vault and does not print
+or export it. Repeat seeding updates the named lab configurations.
+
+Verified run `c07ea6bf-7ccc-4147-9187-145d0de0dfc6`: 65 resources, 72 findings,
+zero coverage gaps. The bounded PKI role and bounded Transit key had no new domain
+findings. Fifteen new rules triggered live; weak key sizes, overdue rotation and
+missing alias mounts are covered by synthetic tests. The complete suite has 59
+passing tests. Findings about ACL mutation identify potential permissions, not
+proven effective access; authorization precedence and usable authentication need
+review. No existing tokens are enumerated or revoked.

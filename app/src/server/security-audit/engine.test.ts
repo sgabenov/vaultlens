@@ -113,7 +113,7 @@ test('catalog validates YAML, profiles, overrides and duplicate IDs without exec
     definitions.filter(
       (r) => r.source === 'builtin' && !r.id.startsWith('LOCAL-'),
     ).length,
-    40,
+    58,
   );
   assert.equal(definitions.find((r) => r.id === 'POL-008')?.active, false);
   const extended = catalog({
@@ -1345,4 +1345,35 @@ test('management checks use mount types, namespace and operation context', async
   for(const [id,type,path] of [['POL-018','database','custom/roles/app'],['POL-019','pki','custom/sign/app']]) {
     assert.equal(check(id,path,['update'],[{kind:'secret-mount',path:'sys/mounts/custom',data:{type,mount_path:'custom/'}}]).length,1);
   }
+});
+
+test('domain configuration checks distinguish risky and bounded fixtures', async () => {
+  const {evaluateDomain}=await import('./domainChecks.js');
+  const s=snapshot();s.finishedAt='2026-09-10T00:00:00Z';
+  const role=(name:string,data:Record<string,unknown>)=>({kind:'role',path:`auth/token/roles/${name}`,data:{auth_type:'token',...data}});
+  s.resources=[role('risky',{allowed_policies:['root'],allowed_policies_glob:['*'],orphan:true,token_period:86400,token_explicit_max_ttl:0}),role('safe',{allowed_policies:['reader'],token_period:3600,token_explicit_max_ttl:3600}),
+    {kind:'pki-role',path:'ca/roles/risky',data:{allow_any_name:true,allowed_domains:['*'],max_ttl:31536000,key_type:'rsa',key_bits:1024}},
+    {kind:'pki-role',path:'ca/roles/safe',data:{allow_any_name:false,allowed_domains:['app.example'],max_ttl:3600,key_type:'rsa',key_bits:2048}},
+    {kind:'pki-issuer',path:'ca/issuer/expiring',data:{not_after:Date.parse('2026-09-11T00:00:00Z')}},
+    {kind:'transit-key',path:'crypto/keys/risky',data:{exportable:true,allow_plaintext_backup:true,deletion_allowed:true,latest_version:1,latest_version_created_at:1}},
+    {kind:'transit-key',path:'crypto/keys/safe',data:{exportable:false,allow_plaintext_backup:false,deletion_allowed:false,latest_version_created_at:Date.parse(s.finishedAt)/1000}}];
+  const context={config:{privileged_policies:{exact:['root']}},privilegeReasons:new Map<string,string[]>()};
+  for(const id of ['TOKEN-001','TOKEN-002','TOKEN-003','TOKEN-004','PKI-001','PKI-002','PKI-003','PKI-004','PKI-005','TRANSIT-001','TRANSIT-002','TRANSIT-003']){
+    const rule=catalog({...DEFAULT_SETTINGS,configYaml:'version: 1\nprofile: extended\n'}).find(r=>r.id===id)!;
+    const findings=evaluateDomain(rule,s,{assignments:[],issues:[],groupCount:0,entityCount:0},context);
+    assert.equal(findings.length,1,id);assert.ok(!findings[0].path.endsWith('safe'),id);
+  }
+});
+
+test('Identity review uses assignments and requires complete mount inventory for stale aliases', async () => {
+  const {evaluateDomain}=await import('./domainChecks.js');
+  const s=snapshot();s.issues=[];
+  s.resources=[{kind:'entity',path:'identity/entity/id/member',data:{id:'member'}},{kind:'policy',path:'sys/policies/acl/admin',data:{name:'admin',hcl:'path "identity/group/id/team" { capabilities=["update"] }'}},{kind:'alias',path:'identity/entity-alias/id/old',data:{mount_accessor:'absent'}}];
+  const identity={assignments:[{subjectPath:'identity/entity/id/member',subjectKind:'entity',policy:'admin',relationship:'inherited' as const,sourcePath:'identity/group/id/team'}],issues:[],groupCount:1,entityCount:1};
+  const context={config:{privileged_policies:{exact:['admin']}},privilegeReasons:new Map<string,string[]>()};
+  const run=(id:string)=>evaluateDomain(catalog(DEFAULT_SETTINGS).find(r=>r.id===id)!,s,identity,context);
+  assert.equal(run('IDENTITY-001').length,1);assert.equal(run('IDENTITY-002').length,1);assert.equal(run('IDENTITY-003').length,0);
+  s.checkpoint={savedAt:s.finishedAt,completedNamespaces:[''],completedStages:[{namespace:'',stage:'Auth mounts and roles'}]};
+  assert.equal(run('IDENTITY-003').length,1);
+  s.issues=[{path:'sys/auth',reason:'denied'}];assert.equal(run('IDENTITY-003').length,0);
 });

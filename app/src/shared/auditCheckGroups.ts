@@ -2,6 +2,10 @@ import type { RuleView } from './auditRules.js';
 export const CHECK_GROUPS = ['Policies', 'AppRole', 'Kubernetes', 'JWT / OIDC', 'Token', 'Identity', 'PKI', 'Transit', 'Assignments'] as const;
 export type CheckGroup = typeof CHECK_GROUPS[number];
 export function checkGroup(rule: Pick<RuleView, 'id' | 'object_types'>): CheckGroup {
+  if (rule.id.startsWith('TOKEN-')) return 'Token';
+  if (rule.id.startsWith('IDENTITY-')) return 'Identity';
+  if (rule.id.startsWith('PKI-')) return 'PKI';
+  if (rule.id.startsWith('TRANSIT-')) return 'Transit';
   if (rule.id === 'REF-001' || rule.id === 'LOCAL-ROOT-001') return 'Assignments';
   if (['POL-005', 'POL-012'].includes(rule.id)) return 'Token';
   if (rule.id === 'POL-016') return 'Identity';

@@ -95,7 +95,7 @@ export function evaluatePolicy(
         // Global grants already have a dedicated finding (POL-001).
         if(roots.includes(normalized))break;
         const type=String(params.mount_type);
-        const operations=type==='kv'?['delete','update']:mutating;
+        const operations=list('operations',type==='kv'?['delete','update']:mutating);
         if(!caps.some(c=>operations.includes(c)))break;
         const targets=type==='identity'?[{mount:'identity',type:'identity'}]:mounts
           .filter(m=>m.kind==='secret-mount'&&m.data.type===type&&
@@ -103,6 +103,7 @@ export function evaluatePolicy(
             (type!=='kv'||String((m.data.options as Record<string,unknown>|undefined)?.version)==='2'))
           .map(m=>({mount:trim(String(m.data.mount_path)),type}));
         for(const target of targets){
+          if(rule.id==='TRANSIT-005'&&!normalized.endsWith('/config')&&!vaultPatternMatches(path,target.mount+'/keys/__audit_probe__/config'))continue;
           const prefixes=list('prefixes',[]).filter(prefix=>{
             if(type==='kv'&&prefix==='metadata'&&!caps.includes('delete'))return false;
             if(type==='kv'&&prefix==='destroy'&&!caps.includes('update'))return false;
