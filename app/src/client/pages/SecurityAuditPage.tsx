@@ -26,8 +26,6 @@ export default function SecurityAuditPage() {
   const closeCollection=()=>setParams(current=>{const next=new URLSearchParams(current);next.delete('collect');return next;},{replace:true});
   const selected = params.get('run') ?? '';
   const setSelected = (run: string) => setParams({ run });
-  const [identityLimit, setIdentityLimit] = useState(100);
-  const [identityFilter, setIdentityFilter] = useState('');
   const queryClient = useQueryClient();
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
@@ -64,8 +62,6 @@ export default function SecurityAuditPage() {
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
-  const identityAssignments = detail.data?.snapshot?.identity?.assignments.filter(a =>
-    [a.subjectPath, a.policy, a.sourcePath].some(v => v.toLowerCase().includes(identityFilter.toLowerCase()))) ?? [];
   const runLabel=(run:AuditRun)=>`${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0,8)}`;
   const error = runs.error || detail.error || start.error || reanalyze.error;
   return (
@@ -210,29 +206,7 @@ export default function SecurityAuditPage() {
                 <p className="mt-2 text-xs text-gray-500">Creates a new result with saved checks and object exceptions. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
-              {detail.data.snapshot?.identity && (
-                <details className="rounded border p-3 text-sm">
-                  <summary>Identity policy assignments · {detail.data.snapshot.identity.assignments.length}</summary>
-                  <input aria-label="Filter Identity assignments" placeholder="Filter entity, group or policy"
-                    className="my-3 w-full rounded border p-2" value={identityFilter}
-                    onChange={event => { setIdentityFilter(event.target.value); setIdentityLimit(100); }} />
-                  <p className="mb-2 text-xs text-gray-500">Showing {Math.min(identityLimit, identityAssignments.length)} of {identityAssignments.length} matches. Group inheritance does not prove access through an auth role.</p>
-                  <div className="overflow-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead><tr><th>Subject</th><th>Policy</th><th>Assignment</th><th>Source</th></tr></thead>
-                      <tbody>{identityAssignments.slice(0, identityLimit).map((assignment, index) => (
-                        <tr key={index} className="border-t">
-                          <td className="p-2">{assignment.namespace ? `${assignment.namespace}: ` : ''}{assignment.subjectPath}</td><td>{assignment.policy}</td>
-                          <td>{assignment.relationship}</td><td>{assignment.sourcePath}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                    {identityAssignments.length > identityLimit && (
-                      <button className="mt-3 rounded border px-3 py-2" onClick={() => setIdentityLimit(limit => limit + 100)}>Show 100 more assignments</button>
-                    )}
-                  </div>
-                </details>
-              )}
+
               {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
                 Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
               </p>}
