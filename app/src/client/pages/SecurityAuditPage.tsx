@@ -235,17 +235,6 @@ export default function SecurityAuditPage() {
                   </div>
                 </details>
               )}
-              {detail.data.configuration && (
-                <details className="rounded border p-3 text-sm">
-                  <summary>
-                    Configuration revision {detail.data.configuration.revision}{' '}
-                    · engine {detail.data.configuration.engineVersion}
-                  </summary>
-                  <pre className="mt-2 overflow-auto text-xs">
-                    {detail.data.configuration.configYaml}
-                  </pre>
-                </details>
-              )}
               {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
                 Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
               </p>}

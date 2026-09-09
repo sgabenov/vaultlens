@@ -45,7 +45,13 @@ export default function AuditRunInfo({runId,onClose}:{runId:string;onClose:()=>v
         ]}/></div>
       </>:<p className="text-sm text-gray-500">No collection parameters were recorded for this snapshot.</p>}
       <div><h3 className="mb-3 font-medium">Coverage and errors</h3>{issues.length?<ul className="space-y-2 text-sm">{issues.map((issue,index)=><li key={index} className="break-words text-amber-800">{issue.namespace||'root'} · {issue.path}: {issue.reason}</li>)}</ul>:<p className="text-sm text-gray-500">{run.issueCount?'Detailed coverage issues are unavailable.':run.status==='completed'?'No recorded coverage gaps.':'No coverage issues recorded so far; this does not establish a complete collection.'}</p>}</div>
-      <details className="rounded border p-3 text-sm"><summary>Technical details</summary><pre className="mt-3 whitespace-pre-wrap break-all text-xs">{JSON.stringify({run,collection,sourceRunId:detail?.snapshot?.sourceRunId,refresh:detail?.snapshot?.refresh},null,2)}</pre></details>
+      <details className="rounded border p-3 text-sm"><summary>Technical details</summary>
+        {detail?.configuration&&<div className="mt-3 space-y-3">
+          <Fields values={[['Configuration revision',detail.configuration.revision],['Engine version',detail.configuration.engineVersion]]}/>
+          <h4 className="font-medium">Saved check configuration</h4>
+          <pre className="whitespace-pre-wrap break-all text-xs">{detail.configuration.configYaml}</pre>
+        </div>}
+        <pre className="mt-3 whitespace-pre-wrap break-all text-xs">{JSON.stringify({run,collection,sourceRunId:detail?.snapshot?.sourceRunId,refresh:detail?.snapshot?.refresh},null,2)}</pre></details>
     </div>}
   </dialog>;
 }
