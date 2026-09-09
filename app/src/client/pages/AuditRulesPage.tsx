@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuditRules, saveAuditRules } from '../lib/api';
 import type { RuleSettings } from '../../shared/auditRules';
@@ -57,9 +56,6 @@ export default function AuditRulesPage() {
   }
   return (
     <div className="space-y-5">
-      <Link className="text-sm text-blue-700 underline" to="/security-audit">
-        Back to audit
-      </Link>
       <div>
         <h1 className="text-2xl font-semibold">
           Audit rules and configuration

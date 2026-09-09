@@ -1,3 +1,6 @@
+import AuditWorkspace from './components/AuditWorkspace';
+import AuditRunsPage from './pages/AuditRunsPage';
+import AuditSourcesPage from './pages/AuditSourcesPage';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -241,8 +244,14 @@ function AppRoutes() {
       </Route>
       {/* Read-only audit does not need background-service provisioning. */}
       <Route path="/security-audit" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<SecurityAuditPage />} />
-        <Route path="rules" element={<AuditRulesPage />} />
+        <Route element={<AuditWorkspace />}>
+          <Route index element={<Navigate to="findings" replace />} />
+          <Route path="findings" element={<SecurityAuditPage />} />
+          <Route path="runs" element={<AuditRunsPage />} />
+          <Route path="checks" element={<AuditRulesPage />} />
+          <Route path="sources" element={<AuditSourcesPage />} />
+          <Route path="rules" element={<Navigate to="../checks" replace />} />
+        </Route>
       </Route>
         <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

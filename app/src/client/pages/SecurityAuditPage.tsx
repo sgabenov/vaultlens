@@ -1,13 +1,12 @@
 import AuditRefreshDetails from '../components/AuditRefreshDetails';
 import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
-import AuditImportUpload from '../components/AuditImportUpload';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
 import AuditControlsEditor from '../components/AuditControlsEditor';
 import AuditExportButton from '../components/AuditExportButton';
 import AuditDiffPanel from '../components/AuditDiffPanel';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,7 +24,9 @@ export default function SecurityAuditPage() {
   const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
   const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
   const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
-  const [selected, setSelected] = useState('');
+  const [params, setParams] = useSearchParams();
+  const selected = params.get('run') ?? '';
+  const setSelected = (run: string) => setParams({ run });
   const [identityLimit, setIdentityLimit] = useState(100);
   const [identityFilter, setIdentityFilter] = useState('');
   const [severity, setSeverity] = useState('all');
@@ -67,17 +68,11 @@ export default function SecurityAuditPage() {
   const error = runs.error || detail.error || start.error || reanalyze.error;
   return (
     <div className="space-y-6">
-      <Link
-        to="/security-audit/rules"
-        className="text-sm text-blue-700 underline"
-      >
-        Rules and configuration
-      </Link>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Security Audit
-          </h1>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Findings
+          </h2>
           <p className="mt-2 text-sm text-gray-500">
             Collect a configuration snapshot and review policy assignments and
             authentication risks.
@@ -97,7 +92,6 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
-      <AuditImportUpload disabled={!!running||start.isPending||reanalyze.isPending} onImported={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />
       <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
       <details className="rounded border p-3 text-sm">
         <summary>Collection settings</summary>
@@ -146,33 +140,11 @@ export default function SecurityAuditPage() {
           {error.message}. Audit access requires root or vaultlens-admin.
         </p>
       )}
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <section className="space-y-3">
-          <h2 className="font-semibold">Run history</h2>
-          {runs.isPending && <p>Loading runs…</p>}
-          {runs.data?.length === 0 && (
-            <p className="text-sm text-gray-500">
-              No snapshots yet. Run an audit to create the first one.
-            </p>
-          )}
-          {runs.data?.map((run) => (
-            <button
-              key={run.id}
-              onClick={() => setSelected(run.id)}
-              className={`block w-full rounded-lg border p-3 text-left ${id === run.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}
-            >
-              <div className="text-sm font-medium">
-                {new Date(run.startedAt).toLocaleString()}
-              </div>
-              <div className="mt-1 text-sm">
-                {run.status} · {run.findingCount} findings
-              </div>
-              <div className="mt-1 truncate text-xs text-gray-500">
-                {run.target}
-              </div>
-            </button>
-          ))}
-        </section>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span>{detail.data ? `Selected run: ${new Date(detail.data.run.startedAt).toLocaleString()}` : 'Select a saved run or start an audit.'}</span>
+          <Link className="text-blue-700 underline" to={`/security-audit/runs${id ? `?${new URLSearchParams({run:id})}` : ''}`}>View run history</Link>
+        </div>
         <section className="min-w-0 space-y-4">
           {detail.data && (
             <>
