@@ -92,7 +92,10 @@ export interface AuthContext {
   config: Record<string, unknown>;
   privilegeReasons?: Map<string, string[]>;
 }
-export function policyPrivilegeReasons(names: string[], context: AuthContext): Record<string, string[]> {
+export function policyPrivilegeReasons(
+  names: string[],
+  context: AuthContext,
+): Record<string, string[]> {
   const priv = record(context.config.privileged_policies);
   const privileged: Record<string, string[]> = {};
   for (const name of values(names)) {
@@ -124,8 +127,11 @@ export function evaluateAuth(
     jwt = record(c.jwt),
     kube = record(c.kubernetes),
     threshold = record(c.thresholds);
-  const assigned = values([...values(m.token_policies), ...values(m.policies),
-    ...(m.token_no_default_policy ? [] : ['default'])]);
+  const assigned = values([
+    ...values(m.token_policies),
+    ...values(m.policies),
+    ...(m.token_no_default_policy ? [] : ['default']),
+  ]);
   const privileged = policyPrivilegeReasons(assigned, context);
   const hasPrivilege = Object.keys(privileged).length > 0;
   const output: AuditFinding[] = [];

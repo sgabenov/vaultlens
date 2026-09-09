@@ -8,14 +8,34 @@ function useDraftState() {
   const [selected, setSelected] = useState('');
   const [saving, setSaving] = useState(false);
   const [editorVersion, setEditorVersion] = useState(0);
-  const discard = () => { setDraft(null); setEditorVersion(value => value + 1); };
-  return { draft, setDraft, group, setGroup, selected, setSelected, saving, setSaving, editorVersion, discard };
+  const discard = () => {
+    setDraft(null);
+    setEditorVersion((value) => value + 1);
+  };
+  return {
+    draft,
+    setDraft,
+    group,
+    setGroup,
+    selected,
+    setSelected,
+    saving,
+    setSaving,
+    editorVersion,
+    discard,
+  };
 }
-const AuditDraftContext = createContext<ReturnType<typeof useDraftState> | null>(null);
+const AuditDraftContext = createContext<ReturnType<
+  typeof useDraftState
+> | null>(null);
 
-export function AuditDraftProvider({children}: {children: ReactNode}) {
+export function AuditDraftProvider({ children }: { children: ReactNode }) {
   const state = useDraftState();
-  return <AuditDraftContext.Provider value={state}>{children}</AuditDraftContext.Provider>;
+  return (
+    <AuditDraftContext.Provider value={state}>
+      {children}
+    </AuditDraftContext.Provider>
+  );
 }
 export function useAuditDraft() {
   const value = useContext(AuditDraftContext);

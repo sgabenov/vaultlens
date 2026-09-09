@@ -2,7 +2,10 @@ import { evaluateDomain } from './domainChecks.js';
 import { snapshotNamespaces } from './namespaces.js';
 import { evaluateReference } from './referenceDetector.js';
 import { analyzeIdentity, roleEntityIds } from './identity.js';
-import { RELATIONSHIP_DETECTORS, evaluateRelationship } from './relationshipDetectors.js';
+import {
+  RELATIONSHIP_DETECTORS,
+  evaluateRelationship,
+} from './relationshipDetectors.js';
 import type { PolicyBlock } from './policyParser.js';
 import { parsePolicy } from './policyParser.js';
 import {
@@ -25,7 +28,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '14';
+export const ENGINE_VERSION = '15';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },
@@ -124,7 +127,11 @@ export function analyze(snapshot: AuditSnapshot): AuditFinding[] {
 function executeScoped(
   snapshot: AuditSnapshot,
   settings: RuleSettings,
-): { findings: AuditFinding[]; configuration: RunConfiguration; identity: import('../../shared/securityAudit.js').IdentityAnalysis } {
+): {
+  findings: AuditFinding[];
+  configuration: RunConfiguration;
+  identity: import('../../shared/securityAudit.js').IdentityAnalysis;
+} {
   const pinned = (settings as RunConfiguration).catalog;
   const definitions = (pinned ?? catalog(settings)).map((rule) => ({
     ...rule,
@@ -186,13 +193,42 @@ function executeScoped(
     }
   }
 
-  for(const mount of mounts){
-    const prefix=mount.data.type==='pki'?'PKI-':mount.data.type==='transit'?'TRANSIT-':null;
-    if(prefix&&definitions.some(r=>r.active&&r.detector==='domain_configuration'&&r.id.startsWith(prefix))&&mount.data.audit_config_collected!==true)
-      issues.push({path:mount.path,reason:'Snapshot lacks engine configuration collection metadata. Collect a fresh snapshot to evaluate '+prefix+' configuration checks.'});
+  for (const mount of mounts) {
+    const prefix =
+      mount.data.type === 'pki'
+        ? 'PKI-'
+        : mount.data.type === 'transit'
+          ? 'TRANSIT-'
+          : null;
+    if (
+      prefix &&
+      definitions.some(
+        (r) =>
+          r.active &&
+          r.detector === 'domain_configuration' &&
+          r.object_types.some(type => type.startsWith(prefix === 'PKI-' ? 'pki-' : 'transit-')),
+      ) &&
+      mount.data.audit_config_collected !== true
+    )
+      issues.push({
+        path: mount.path,
+        reason:
+          'Snapshot lacks engine configuration collection metadata. Collect a fresh snapshot to evaluate ' +
+          prefix +
+          ' configuration checks.',
+      });
   }
-  const knownPolicies = new Set(['root', ...snapshot.resources.filter(r => r.kind === 'policy').map(r => String(r.data.name))]);
-  const identity = analyzeIdentity(snapshot.resources, snapshot.namespaceAliasCompleteness?.[snapshot.namespaces?.[0] ?? ''] === true);
+  const knownPolicies = new Set([
+    'root',
+    ...snapshot.resources
+      .filter((r) => r.kind === 'policy')
+      .map((r) => String(r.data.name)),
+  ]);
+  const identity = analyzeIdentity(
+    snapshot.resources,
+    snapshot.namespaceAliasCompleteness?.[snapshot.namespaces?.[0] ?? ''] ===
+      true,
+  );
   issues.push(...identity.issues);
   const entityIds = roleEntityIds(snapshot.resources);
   const resourcesByPath = new Map(snapshot.resources.map((r) => [r.path, r]));
@@ -214,11 +250,32 @@ function executeScoped(
     let candidates: AuditFinding[] = [];
     if (POLICY_DETECTORS.includes(rule.detector))
       candidates = policyResults.get(rule.id) ?? [];
-    else if (rule.detector === 'domain_configuration') candidates=evaluateDomain(rule,snapshot,identity,{config:config.raw,privilegeReasons});
+    else if (rule.detector === 'domain_configuration')
+      candidates = evaluateDomain(rule, snapshot, identity, {
+        config: config.raw,
+        privilegeReasons,
+      });
     else if (rule.detector === 'missing_policy_reference') {
-      candidates = snapshot.resources.flatMap(resource => evaluateReference(rule, resource, knownPolicies, snapshot.policiesComplete, {config: config.raw}));
+      candidates = snapshot.resources.flatMap((resource) =>
+        evaluateReference(
+          rule,
+          resource,
+          knownPolicies,
+          snapshot.policiesComplete,
+          { config: config.raw },
+        ),
+      );
     } else if (RELATIONSHIP_DETECTORS.includes(rule.detector)) {
-      candidates = snapshot.resources.flatMap(resource => evaluateRelationship(rule, resource, documents, snapshot.resources, { config: config.raw, privilegeReasons }, entityIds));
+      candidates = snapshot.resources.flatMap((resource) =>
+        evaluateRelationship(
+          rule,
+          resource,
+          documents,
+          snapshot.resources,
+          { config: config.raw, privilegeReasons },
+          entityIds,
+        ),
+      );
     } else if (AUTH_DETECTORS.includes(rule.detector)) {
       for (const resource of snapshot.resources)
         candidates.push(
@@ -323,22 +380,67 @@ function executeScoped(
   };
 }
 
-export function execute(snapshot:AuditSnapshot,settings:RuleSettings):ReturnType<typeof executeScoped> {
-  const namespaces=snapshotNamespaces(snapshot);
-  if(namespaces.length===1 && namespaces[0]==='') return executeScoped(snapshot,settings);
-  const results=namespaces.map(namespace=>{
-    const result=executeScoped({...snapshot,namespaces:[namespace],
-      resources:snapshot.resources.filter(resource=>(resource.namespace??'')===namespace),
-      policiesComplete:snapshot.namespacePolicyCompleteness?.[namespace]??snapshot.policiesComplete,
-    },settings);
-    const qualify=(issue:{path:string;reason:string})=>({...issue,namespace,path:namespace?`${namespace}:${issue.path}`:issue.path});
-    return {...result,findings:result.findings.map(finding=>({...finding,namespace})),
-      configuration:{...result.configuration,issues:result.configuration.issues.map(qualify)},
-      identity:{...result.identity,assignments:result.identity.assignments.map(assignment=>({...assignment,namespace})),issues:result.identity.issues.map(qualify)}};
+export function execute(
+  snapshot: AuditSnapshot,
+  settings: RuleSettings,
+): ReturnType<typeof executeScoped> {
+  const namespaces = snapshotNamespaces(snapshot);
+  if (namespaces.length === 1 && namespaces[0] === '')
+    return executeScoped(snapshot, settings);
+  const results = namespaces.map((namespace) => {
+    const result = executeScoped(
+      {
+        ...snapshot,
+        namespaces: [namespace],
+        resources: snapshot.resources.filter(
+          (resource) => (resource.namespace ?? '') === namespace,
+        ),
+        policiesComplete:
+          snapshot.namespacePolicyCompleteness?.[namespace] ??
+          snapshot.policiesComplete,
+      },
+      settings,
+    );
+    const qualify = (issue: { path: string; reason: string }) => ({
+      ...issue,
+      namespace,
+      path: namespace ? `${namespace}:${issue.path}` : issue.path,
+    });
+    return {
+      ...result,
+      findings: result.findings.map((finding) => ({ ...finding, namespace })),
+      configuration: {
+        ...result.configuration,
+        issues: result.configuration.issues.map(qualify),
+      },
+      identity: {
+        ...result.identity,
+        assignments: result.identity.assignments.map((assignment) => ({
+          ...assignment,
+          namespace,
+        })),
+        issues: result.identity.issues.map(qualify),
+      },
+    };
   });
-  const first=results[0];
-  return {findings:results.flatMap(result=>result.findings),
-    configuration:{...first.configuration,issues:results.flatMap(result=>result.configuration.issues)},
-    identity:{assignments:results.flatMap(result=>result.identity.assignments),issues:results.flatMap(result=>result.identity.issues),
-      groupCount:results.reduce((n,result)=>n+result.identity.groupCount,0),entityCount:results.reduce((n,result)=>n+result.identity.entityCount,0)}};
+  const first = results[0];
+  return {
+    findings: results.flatMap((result) => result.findings),
+    configuration: {
+      ...first.configuration,
+      issues: results.flatMap((result) => result.configuration.issues),
+    },
+    identity: {
+      assignments: results.flatMap((result) => result.identity.assignments),
+      issues: results.flatMap((result) => result.identity.issues),
+      groupCount: results.reduce(
+        (n, result) => n + result.identity.groupCount,
+        0,
+      ),
+      entityCount: results.reduce(
+        (n, result) => n + result.identity.entityCount,
+        0,
+      ),
+    },
+  };
 }

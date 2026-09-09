@@ -12,17 +12,42 @@ import {
   startSecurityAudit,
 } from '../lib/api';
 export default function SecurityAuditPage() {
-  const [recursiveNamespaces,setRecursiveNamespaces]=useState(false);
-  const [namespace,setNamespace]=useState('');
-  const [scopeText,setScopeText]=useState({namespaceFilters:'',policyFilters:'',authMountFilters:'',authTypeFilters:''});
-  const [redactPolicySource,setRedactPolicySource]=useState(false);
-  const [skipIdentity,setSkipIdentity]=useState(false);
-  const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
-  const controlDocuments={baselineYaml:'',exceptionsYaml:''};
-  const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
+  const [recursiveNamespaces, setRecursiveNamespaces] = useState(false);
+  const [namespace, setNamespace] = useState('');
+  const [scopeText, setScopeText] = useState({
+    namespaceFilters: '',
+    policyFilters: '',
+    authMountFilters: '',
+    authTypeFilters: '',
+  });
+  const [redactPolicySource, setRedactPolicySource] = useState(false);
+  const [skipIdentity, setSkipIdentity] = useState(false);
+  const patterns = (text: string) =>
+    text
+      .split('\n')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const controlDocuments = { baselineYaml: '', exceptionsYaml: '' };
+  const [collectionOptions, setCollectionOptions] = useState({
+    workers: 10,
+    requestsPerSecond: 10,
+    retries: 3,
+    retryBackoffMs: 500,
+    timeoutMs: 30000,
+    maxDurationMs: 7200000,
+    maxObjects: 0,
+  });
   const [params, setParams] = useSearchParams();
-  const collecting=params.get('collect')==='1';
-  const closeCollection=()=>setParams(current=>{const next=new URLSearchParams(current);next.delete('collect');return next;},{replace:true});
+  const collecting = params.get('collect') === '1';
+  const closeCollection = () =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('collect');
+        return next;
+      },
+      { replace: true },
+    );
   const selected = params.get('run') ?? '';
   const setSelected = (run: string) => setParams({ run });
   const queryClient = useQueryClient();
@@ -32,12 +57,18 @@ export default function SecurityAuditPage() {
     refetchInterval: 3000,
   });
   const latestId = runs.data?.[0]?.id;
-  useEffect(()=>{
-    if(!selected&&latestId)setParams(current=>{
-      if(current.get('run'))return current;
-      const next=new URLSearchParams(current);next.set('run',latestId);return next;
-    },{replace:true});
-  },[selected,latestId,setParams]);
+  useEffect(() => {
+    if (!selected && latestId)
+      setParams(
+        (current) => {
+          if (current.get('run')) return current;
+          const next = new URLSearchParams(current);
+          next.set('run', latestId);
+          return next;
+        },
+        { replace: true },
+      );
+  }, [selected, latestId, setParams]);
   const id = selected || latestId || '';
   const detail = useQuery({
     queryKey: ['security-audit-run', id],
@@ -47,7 +78,21 @@ export default function SecurityAuditPage() {
       q.state.data?.run.status === 'running' ? 2000 : false,
   });
   const start = useMutation({
-    mutationFn: () => startSecurityAudit({...collectionOptions,namespace,namespaceFilters:patterns(scopeText.namespaceFilters),policyFilters:patterns(scopeText.policyFilters),authMountFilters:patterns(scopeText.authMountFilters),authTypeFilters:patterns(scopeText.authTypeFilters),skipIdentity,redactPolicySource,recursiveNamespaces},controlDocuments),
+    mutationFn: () =>
+      startSecurityAudit(
+        {
+          ...collectionOptions,
+          namespace,
+          namespaceFilters: patterns(scopeText.namespaceFilters),
+          policyFilters: patterns(scopeText.policyFilters),
+          authMountFilters: patterns(scopeText.authMountFilters),
+          authTypeFilters: patterns(scopeText.authTypeFilters),
+          skipIdentity,
+          redactPolicySource,
+          recursiveNamespaces,
+        },
+        controlDocuments,
+      ),
     onSuccess: (result) => {
       setSelected(result.id);
       queryClient.invalidateQueries({ queryKey: ['security-audit-runs'] });
@@ -58,15 +103,14 @@ export default function SecurityAuditPage() {
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
-  const runLabel=(run:AuditRun)=>`${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0,8)}`;
+  const runLabel = (run: AuditRun) =>
+    `${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0, 8)}`;
   const error = runs.error || detail.error || start.error;
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            Findings
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900">Findings</h2>
           <p className="mt-2 text-sm text-gray-500">
             Collect a configuration snapshot and review policy assignments and
             authentication risks.
@@ -77,7 +121,14 @@ export default function SecurityAuditPage() {
           disabled={
             !!running || start.isPending || runs.isPending || !!runs.error
           }
-          onClick={() => {start.reset();setParams(current=>{const next=new URLSearchParams(current);next.set('collect','1');return next;});}}
+          onClick={() => {
+            start.reset();
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.set('collect', '1');
+              return next;
+            });
+          }}
         >
           {running
             ? 'Audit running…'
@@ -86,44 +137,158 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
-      <AuditRunDialog open={collecting} onClose={closeCollection} onStart={()=>start.mutate()}
-        busy={start.isPending} disabled={!!running||start.isPending||runs.isPending||!!runs.error}
-        error={start.error?.message||runs.error?.message|| (running?'Another audit is running. Wait for it to finish.':undefined)}>
-        <p className="rounded border bg-gray-50 p-3 text-sm">Source: current Vault connection. The latest saved checks and object exceptions will be applied.</p>
-        <label className="mt-3 block">Vault namespace (empty = root)
-          <input aria-label="Vault namespace" className="ml-2 rounded border p-2" disabled={!!running||start.isPending} value={namespace} onChange={event=>setNamespace(event.target.value)} />
+      <AuditRunDialog
+        open={collecting}
+        onClose={closeCollection}
+        onStart={() => start.mutate()}
+        busy={start.isPending}
+        disabled={
+          !!running || start.isPending || runs.isPending || !!runs.error
+        }
+        error={
+          start.error?.message ||
+          runs.error?.message ||
+          (running
+            ? 'Another audit is running. Wait for it to finish.'
+            : undefined)
+        }
+      >
+        <p className="rounded border bg-gray-50 p-3 text-sm">
+          Source: current Vault connection. The latest saved checks and object
+          exceptions will be applied.
+        </p>
+        <label className="mt-3 block">
+          Vault namespace (empty = root)
+          <input
+            aria-label="Vault namespace"
+            className="ml-2 rounded border p-2"
+            disabled={!!running || start.isPending}
+            value={namespace}
+            onChange={(event) => setNamespace(event.target.value)}
+          />
         </label>
-        <label className="mt-3 block"><input type="checkbox" checked={recursiveNamespaces} disabled={!!running||start.isPending} onChange={event=>setRecursiveNamespaces(event.target.checked)} /> Include child namespaces recursively</label>
-      <details className="rounded border p-3 text-sm">
-        <summary>Advanced collection settings</summary>
-        <p className="mt-3 text-xs text-gray-500">Optional glob filters, one per line. Empty means all. Auth mount names omit the trailing slash.</p>
-        <div className="mt-3 grid gap-3 lg:grid-cols-3">
-          {(['namespaceFilters','policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>
-            {{namespaceFilters:'Namespace filters (root for root namespace)',policyFilters:'Policy filters',authMountFilters:'Auth mount filters',authTypeFilters:'Auth type filters'}[key]}
-            <textarea aria-label={key} rows={3} className="mt-2 w-full rounded border p-2 font-mono text-xs" disabled={!!running||start.isPending}
-              value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
-          </label>)}
-        </div>
-        <label className="mt-3 block"><input type="checkbox" checked={redactPolicySource} disabled={!!running||start.isPending} onChange={event=>setRedactPolicySource(event.target.checked)} /> Do not store full policy source</label>
-        <p className="text-xs text-gray-500">Initial analysis uses the source in memory. Matched ACL blocks remain in findings; later offline analysis will have coverage gaps.</p>
-        <label className="mt-3 block"><input type="checkbox" checked={skipIdentity} disabled={!!running||start.isPending} onChange={event=>setSkipIdentity(event.target.checked)} /> Skip Identity collection (reported as a coverage gap)</label>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {([
-            ['maxObjects','Maximum objects (0 = unlimited)',0,10000000,1],
-            ['timeoutMs','Request timeout (ms)',1,86400000,1],
-            ['maxDurationMs','Collection duration limit (ms)',1,86400000,1],
-            ['workers','Concurrent workers',1,32,1],
-            ['requestsPerSecond','Requests per second',0.1,1000,0.1],
-            ['retries','Retries per request',0,10,1],
-            ['retryBackoffMs','Initial retry delay (ms)',0,10000,100],
-          ] as const).map(([key,label,min,max,step])=><label key={key}>{label}
-            <input type="number" aria-label={label} min={min} max={max} step={step}
-              className="ml-2 rounded border p-2" disabled={!!running||start.isPending}
-              value={collectionOptions[key]} onChange={event=>setCollectionOptions(current=>({...current,[key]:Number(event.target.value)}))} />
-          </label>)}
-        </div>
-      </details>
-        <p className="text-xs text-gray-500">No secret values are collected. Missing permissions and unavailable data are reported as coverage gaps.</p>
+        <label className="mt-3 block">
+          <input
+            type="checkbox"
+            checked={recursiveNamespaces}
+            disabled={!!running || start.isPending}
+            onChange={(event) => setRecursiveNamespaces(event.target.checked)}
+          />{' '}
+          Include child namespaces recursively
+        </label>
+        <details className="rounded border p-3 text-sm">
+          <summary>Advanced collection settings</summary>
+          <p className="mt-3 text-xs text-gray-500">
+            Optional glob filters, one per line. Empty means all. Auth mount
+            names omit the trailing slash.
+          </p>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            {(
+              [
+                'namespaceFilters',
+                'policyFilters',
+                'authMountFilters',
+                'authTypeFilters',
+              ] as const
+            ).map((key) => (
+              <label key={key}>
+                {
+                  {
+                    namespaceFilters:
+                      'Namespace filters (root for root namespace)',
+                    policyFilters: 'Policy filters',
+                    authMountFilters: 'Auth mount filters',
+                    authTypeFilters: 'Auth type filters',
+                  }[key]
+                }
+                <textarea
+                  aria-label={key}
+                  rows={3}
+                  className="mt-2 w-full rounded border p-2 font-mono text-xs"
+                  disabled={!!running || start.isPending}
+                  value={scopeText[key]}
+                  onChange={(event) =>
+                    setScopeText((current) => ({
+                      ...current,
+                      [key]: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <label className="mt-3 block">
+            <input
+              type="checkbox"
+              checked={redactPolicySource}
+              disabled={!!running || start.isPending}
+              onChange={(event) => setRedactPolicySource(event.target.checked)}
+            />{' '}
+            Do not store full policy source
+          </label>
+          <p className="text-xs text-gray-500">
+            Initial analysis uses the source in memory. Matched ACL blocks
+            remain in findings; later offline analysis will have coverage gaps.
+          </p>
+          <label className="mt-3 block">
+            <input
+              type="checkbox"
+              checked={skipIdentity}
+              disabled={!!running || start.isPending}
+              onChange={(event) => setSkipIdentity(event.target.checked)}
+            />{' '}
+            Skip Identity collection (reported as a coverage gap)
+          </label>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                [
+                  'maxObjects',
+                  'Maximum objects (0 = unlimited)',
+                  0,
+                  10000000,
+                  1,
+                ],
+                ['timeoutMs', 'Request timeout (ms)', 1, 86400000, 1],
+                [
+                  'maxDurationMs',
+                  'Collection duration limit (ms)',
+                  1,
+                  86400000,
+                  1,
+                ],
+                ['workers', 'Concurrent workers', 1, 32, 1],
+                ['requestsPerSecond', 'Requests per second', 0.1, 1000, 0.1],
+                ['retries', 'Retries per request', 0, 10, 1],
+                ['retryBackoffMs', 'Initial retry delay (ms)', 0, 10000, 100],
+              ] as const
+            ).map(([key, label, min, max, step]) => (
+              <label key={key}>
+                {label}
+                <input
+                  type="number"
+                  aria-label={label}
+                  min={min}
+                  max={max}
+                  step={step}
+                  className="ml-2 rounded border p-2"
+                  disabled={!!running || start.isPending}
+                  value={collectionOptions[key]}
+                  onChange={(event) =>
+                    setCollectionOptions((current) => ({
+                      ...current,
+                      [key]: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        </details>
+        <p className="text-xs text-gray-500">
+          No secret values are collected. Missing permissions and unavailable
+          data are reported as coverage gaps.
+        </p>
       </AuditRunDialog>
       {error && (
         <p
@@ -135,14 +300,40 @@ export default function SecurityAuditPage() {
       )}
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2">Run
-            <select aria-label="Run" className="min-w-0 max-w-full flex-1 rounded border p-2" value={id} disabled={!id&&!runs.data?.length} onChange={event=>setSelected(event.target.value)}>
-              {!id&&<option value="">{runs.isPending?'Loading runs…':'No runs yet'}</option>}
-              {id&&!runs.data?.some(run=>run.id===id)&&<option value={id}>{detail.data?runLabel(detail.data.run):`Selected run · ${id}`}</option>}
-              {runs.data?.map(run=><option key={run.id} value={run.id}>{runLabel(run)}</option>)}
+          <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            Run
+            <select
+              aria-label="Run"
+              className="min-w-0 max-w-full flex-1 rounded border p-2"
+              value={id}
+              disabled={!id && !runs.data?.length}
+              onChange={(event) => setSelected(event.target.value)}
+            >
+              {!id && (
+                <option value="">
+                  {runs.isPending ? 'Loading runs…' : 'No runs yet'}
+                </option>
+              )}
+              {id && !runs.data?.some((run) => run.id === id) && (
+                <option value={id}>
+                  {detail.data
+                    ? runLabel(detail.data.run)
+                    : `Selected run · ${id}`}
+                </option>
+              )}
+              {runs.data?.map((run) => (
+                <option key={run.id} value={run.id}>
+                  {runLabel(run)}
+                </option>
+              ))}
             </select>
           </label>
-          <Link className="text-blue-700 underline" to={`/security-audit/runs${id ? `?${new URLSearchParams({run:id})}` : ''}`}>View run history</Link>
+          <Link
+            className="text-blue-700 underline"
+            to={`/security-audit/runs${id ? `?${new URLSearchParams({ run: id })}` : ''}`}
+          >
+            View run history
+          </Link>
         </div>
         <section className="min-w-0 space-y-4">
           {detail.data && (
@@ -164,16 +355,39 @@ export default function SecurityAuditPage() {
               </div>
               {['failed', 'interrupted'].includes(detail.data.run.status) && (
                 <p role="alert" className="text-red-700">
-                  {detail.data.run.failureReason || 'This run did not finish and has no valid completed snapshot.'}
+                  {detail.data.run.failureReason ||
+                    'This run did not finish and has no valid completed snapshot.'}
                 </p>
               )}
-              {detail.data.snapshot?.checkpoint && ['failed','interrupted'].includes(detail.data.run.status) && <p className="text-sm">
-                Checkpoint retained from {detail.data.snapshot.checkpoint.savedAt}: {detail.data.snapshot.resources.length} resources. Collection did not finish.
-              </p>}
-              {detail.data.snapshot?.checkpoint && ['failed','interrupted'].includes(detail.data.run.status) && <AuditResumeButton key={`resume:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onResumed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
+              {detail.data.snapshot?.checkpoint &&
+                ['failed', 'interrupted'].includes(detail.data.run.status) && (
+                  <p className="text-sm">
+                    Checkpoint retained from{' '}
+                    {detail.data.snapshot.checkpoint.savedAt}:{' '}
+                    {detail.data.snapshot.resources.length} resources.
+                    Collection did not finish.
+                  </p>
+                )}
+              {detail.data.snapshot?.checkpoint &&
+                ['failed', 'interrupted'].includes(detail.data.run.status) && (
+                  <AuditResumeButton
+                    key={`resume:${id}`}
+                    runId={id}
+                    disabled={!!running}
+                    controls={controlDocuments}
+                    onResumed={(id) => {
+                      setSelected(id);
+                      queryClient.invalidateQueries({
+                        queryKey: ['security-audit-runs'],
+                      });
+                    }}
+                  />
+                )}
               {detail.data.run.status === 'running' && (
                 <p className="text-sm text-gray-600">
-                  {detail.data.run.progress ? `${detail.data.run.progress.phase} · namespace ${detail.data.run.progress.namespace || 'root'} · ${detail.data.run.progress.resources} resources · ${detail.data.run.progress.requests} requests` : 'Audit is running in the background. You can leave this page.'}
+                  {detail.data.run.progress
+                    ? `${detail.data.run.progress.phase} · namespace ${detail.data.run.progress.namespace || 'root'} · ${detail.data.run.progress.resources} resources · ${detail.data.run.progress.requests} requests`
+                    : 'Audit is running in the background. You can leave this page.'}
                 </p>
               )}
               {!!issues.length && (
@@ -194,13 +408,22 @@ export default function SecurityAuditPage() {
                   </ul>
                 </details>
               )}
-              {detail.data.snapshot?.analysisPerformed !== false && <AuditFindings key={id} detail={detail.data} />}
-              {detail.data.snapshot && <AuditImportDetails key={`import:${id}`} snapshot={detail.data.snapshot} />}
+              {detail.data.snapshot?.analysisPerformed !== false && (
+                <AuditFindings key={id} detail={detail.data} />
+              )}
+              {detail.data.snapshot && (
+                <AuditImportDetails
+                  key={`import:${id}`}
+                  snapshot={detail.data.snapshot}
+                />
+              )}
 
-
-              {detail.data.snapshot?.analysisPerformed === false && <p className="rounded border p-3 text-sm">
-                Configuration collected. Audit rules have not been run for this snapshot. Analyze this saved snapshot to evaluate it.
-              </p>}
+              {detail.data.snapshot?.analysisPerformed === false && (
+                <p className="rounded border p-3 text-sm">
+                  Configuration collected. Audit rules have not been run for
+                  this snapshot. Analyze this saved snapshot to evaluate it.
+                </p>
+              )}
             </>
           )}
         </section>

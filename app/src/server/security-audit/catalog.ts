@@ -147,16 +147,38 @@ export function parseRule(yaml: string): RuleDefinition {
   const object_types = strings(raw.object_types, 'object_types');
   if (!object_types.length) throw new Error('object_types must not be empty');
   const supportedObjectTypes = [
-    'pki-role', 'pki-issuer', 'transit-key', 'alias', 'acl_policy', 'approle', 'jwt_role', 'kubernetes_role', 'token_role',
-    'role', 'auth_role', 'entity', 'group', 'auth-mount',
+    'pki-role',
+    'pki-issuer',
+    'transit-key',
+    'alias',
+    'acl_policy',
+    'approle',
+    'jwt_role',
+    'kubernetes_role',
+    'token_role',
+    'role',
+    'auth_role',
+    'entity',
+    'group',
+    'auth-mount',
   ];
-  if (object_types.some(type => !supportedObjectTypes.includes(type)))
-    throw new Error(`Unknown object type. Supported values: ${supportedObjectTypes.join(', ')}`);
+  if (object_types.some((type) => !supportedObjectTypes.includes(type)))
+    throw new Error(
+      `Unknown object type. Supported values: ${supportedObjectTypes.join(', ')}`,
+    );
   const parameters = mapping(raw.parameters ?? {}, 'parameters');
   if (
     ['__proto__', 'prototype', 'constructor'].includes(String(parameters.field))
   )
     throw new Error('Forbidden field name');
+  if (detector === 'domain_configuration') {
+    const check = String(parameters.check ?? id);
+    const supported = ['TOKEN-001','TOKEN-002','TOKEN-003','TOKEN-004','IDENTITY-001','IDENTITY-002','IDENTITY-003','PKI-001','PKI-002','PKI-003','PKI-004','PKI-005','TRANSIT-001','TRANSIT-002','TRANSIT-003'];
+    if (!supported.includes(check)) throw new Error('Unknown domain configuration check');
+    const threshold = ['TOKEN-004','PKI-003'].includes(check) ? 'max_seconds' : ['PKI-005','TRANSIT-003'].includes(check) ? 'days' : null;
+    if (threshold && (typeof parameters[threshold] !== 'number' || !Number.isFinite(parameters[threshold]) || Number(parameters[threshold]) <= 0))
+      throw new Error(`${check} requires a positive ${threshold} threshold`);
+  }
   if (detector === 'field_compare') {
     if (
       ![...COLLECTED_FIELDS, 'hcl', 'auth_type'].includes(
