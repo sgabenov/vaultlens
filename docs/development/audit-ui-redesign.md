@@ -102,3 +102,18 @@ verifying no active runs. API create/list/delete was exercised on a temporary
 exception derived from a stored finding, then the original exception list was
 restored. Derived historical controls now reach the running API. Full browser
 form submission/reanalysis and editable existing exceptions remain pending.
+
+## Collection dialog
+
+Findings, Runs and Sources now open a shared collection dialog. Namespace and
+recursive collection are primary controls; scope filters and resource limits are
+under Advanced collection settings. Starting successfully closes the dialog and
+selects the new run. Failed run-list requests are shown inside the dialog, and
+invalid advanced inputs expand their section so browser validation is visible.
+Millisecond fields accept integer values, including the default request timeout
+and collection duration (their previous step bases rejected these defaults).
+
+Production and client builds passed. Browser acceptance started collection with
+unchanged defaults against the local development Vault and navigated to the new
+result. API readback confirmed run 0c72eaca-53f6-4468-b6ec-028551f0ed78 completed
+with 12 resources, 5 findings and no collection issues. No external Vault was used.

@@ -12,7 +12,7 @@ export default function AuditSourcesPage() {
     <div className="rounded border border-gray-200 p-4">
       <h3 className="font-medium">Current Vault session</h3>
       <p className="my-2 text-sm text-gray-500">Live collection uses the Vault connection and authentication configured in VaultLens.</p>
-      <Link className="text-sm text-blue-700 underline" to="/security-audit/findings">Collect and run audit</Link>
+      <Link className="text-sm text-blue-700 underline" to="/security-audit/findings?collect=1">Collect and run audit</Link>
     </div>
     {runs.error && <p role="alert">Could not check running audits. Retry before importing a snapshot.</p>}
     <AuditImportUpload disabled={runs.isPending || !!runs.error || !!runs.data?.some(run => run.status === 'running')}

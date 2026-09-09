@@ -4,7 +4,7 @@ import AuditRefreshPanel from '../components/AuditRefreshPanel';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditPolicyUsage from '../components/AuditPolicyUsage';
-import AuditControlsEditor from '../components/AuditControlsEditor';
+import AuditRunDialog from '../components/AuditRunDialog';
 import AuditExportButton from '../components/AuditExportButton';
 import AuditDiffPanel from '../components/AuditDiffPanel';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -23,9 +23,11 @@ export default function SecurityAuditPage() {
   const [redactPolicySource,setRedactPolicySource]=useState(false);
   const [skipIdentity,setSkipIdentity]=useState(false);
   const patterns=(text:string)=>text.split('\n').map(value=>value.trim()).filter(Boolean);
-  const [controlDocuments,setControlDocuments]=useState({baselineYaml:'',exceptionsYaml:''});
+  const controlDocuments={baselineYaml:'',exceptionsYaml:''};
   const [collectionOptions,setCollectionOptions]=useState({workers:10,requestsPerSecond:10,retries:3,retryBackoffMs:500,timeoutMs:30000,maxDurationMs:7200000,maxObjects:0});
   const [params, setParams] = useSearchParams();
+  const collecting=params.get('collect')==='1';
+  const closeCollection=()=>setParams(current=>{const next=new URLSearchParams(current);next.delete('collect');return next;},{replace:true});
   const selected = params.get('run') ?? '';
   const setSelected = (run: string) => setParams({ run });
   const [identityLimit, setIdentityLimit] = useState(100);
@@ -79,7 +81,7 @@ export default function SecurityAuditPage() {
           disabled={
             !!running || start.isPending || runs.isPending || !!runs.error
           }
-          onClick={() => start.mutate()}
+          onClick={() => {start.reset();setParams(current=>{const next=new URLSearchParams(current);next.set('collect','1');return next;});}}
         >
           {running
             ? 'Audit running…'
@@ -88,12 +90,16 @@ export default function SecurityAuditPage() {
               : 'Run audit'}
         </button>
       </div>
-      <AuditControlsEditor value={controlDocuments} onChange={setControlDocuments} runId={id} disabled={!!running||start.isPending||reanalyze.isPending} />
-      <details className="rounded border p-3 text-sm">
-        <summary>Collection settings</summary>
+      <AuditRunDialog open={collecting} onClose={closeCollection} onStart={()=>start.mutate()}
+        busy={start.isPending} disabled={!!running||start.isPending||runs.isPending||!!runs.error}
+        error={start.error?.message||runs.error?.message|| (running?'Another audit is running. Wait for it to finish.':undefined)}>
+        <p className="rounded border bg-gray-50 p-3 text-sm">Source: current Vault connection. The latest saved checks and object exceptions will be applied.</p>
         <label className="mt-3 block">Vault namespace (empty = root)
           <input aria-label="Vault namespace" className="ml-2 rounded border p-2" disabled={!!running||start.isPending} value={namespace} onChange={event=>setNamespace(event.target.value)} />
         </label>
+        <label className="mt-3 block"><input type="checkbox" checked={recursiveNamespaces} disabled={!!running||start.isPending} onChange={event=>setRecursiveNamespaces(event.target.checked)} /> Include child namespaces recursively</label>
+      <details className="rounded border p-3 text-sm">
+        <summary>Advanced collection settings</summary>
         <p className="mt-3 text-xs text-gray-500">Optional glob filters, one per line. Empty means all. Auth mount names omit the trailing slash.</p>
         <div className="mt-3 grid gap-3 lg:grid-cols-3">
           {(['namespaceFilters','policyFilters','authMountFilters','authTypeFilters'] as const).map(key=><label key={key}>
@@ -102,15 +108,14 @@ export default function SecurityAuditPage() {
               value={scopeText[key]} onChange={event=>setScopeText(current=>({...current,[key]:event.target.value}))} />
           </label>)}
         </div>
-        <label className="mt-3 block"><input type="checkbox" checked={recursiveNamespaces} disabled={!!running||start.isPending} onChange={event=>setRecursiveNamespaces(event.target.checked)} /> Include child namespaces recursively</label>
         <label className="mt-3 block"><input type="checkbox" checked={redactPolicySource} disabled={!!running||start.isPending} onChange={event=>setRedactPolicySource(event.target.checked)} /> Do not store full policy source</label>
         <p className="text-xs text-gray-500">Initial analysis uses the source in memory. Matched ACL blocks remain in findings; later offline analysis will have coverage gaps.</p>
         <label className="mt-3 block"><input type="checkbox" checked={skipIdentity} disabled={!!running||start.isPending} onChange={event=>setSkipIdentity(event.target.checked)} /> Skip Identity collection (reported as a coverage gap)</label>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {([
             ['maxObjects','Maximum objects (0 = unlimited)',0,10000000,1],
-            ['timeoutMs','Request timeout (ms)',1,86400000,1000],
-            ['maxDurationMs','Collection duration limit (ms)',1,86400000,1000],
+            ['timeoutMs','Request timeout (ms)',1,86400000,1],
+            ['maxDurationMs','Collection duration limit (ms)',1,86400000,1],
             ['workers','Concurrent workers',1,32,1],
             ['requestsPerSecond','Requests per second',0.1,1000,0.1],
             ['retries','Retries per request',0,10,1],
@@ -122,12 +127,8 @@ export default function SecurityAuditPage() {
           </label>)}
         </div>
       </details>
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        Read-only collection using your current Vault session. No secret values
-        are collected. Rules use a saved configuration revision. Pending
-        detectors are reported as coverage gaps; this assessment does not prove
-        effective access.
-      </div>
+        <p className="text-xs text-gray-500">No secret values are collected. Missing permissions and unavailable data are reported as coverage gaps.</p>
+      </AuditRunDialog>
       {error && (
         <p
           role="alert"
@@ -206,7 +207,7 @@ export default function SecurityAuditPage() {
               <div className="rounded border p-3 text-sm">
                 <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={!!running||reanalyze.isPending||!['collected','completed','partial'].includes(detail.data.run.status)}
                   onClick={()=>reanalyze.mutate()}>Analyze saved snapshot with current rules</button>
-                <p className="mt-2 text-xs text-gray-500">Creates a new result with current rules and the controls selected above. Collection timestamps remain unchanged.</p>
+                <p className="mt-2 text-xs text-gray-500">Creates a new result with saved checks and object exceptions. Collection timestamps remain unchanged.</p>
                 {detail.data.snapshot?.sourceRunId && <p className="mt-2 text-xs">Source run: {detail.data.snapshot.sourceRunId}</p>}
               </div>
               {detail.data.snapshot?.collection && ['collected','completed','partial'].includes(detail.data.run.status) && <AuditRefreshPanel key={`refresh:${id}`} runId={id} disabled={!!running} controls={controlDocuments} onRefreshed={id=>{setSelected(id);queryClient.invalidateQueries({queryKey:['security-audit-runs']});}} />}
