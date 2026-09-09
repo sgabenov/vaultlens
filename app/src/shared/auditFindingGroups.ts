@@ -5,7 +5,7 @@ export interface FindingGroup { key:string; title:string; severity:AuditFinding[
 export function groupAuditFindings(findings:AuditFinding[], mode:FindingGrouping):FindingGroup[] {
   const groups=new Map<string,FindingGroup>();
   findings.forEach((finding,index)=>{
-    const key=mode==='check'?finding.ruleId:mode==='object'?JSON.stringify([finding.namespace??'',finding.path]):String(index);
+    const key=mode==='check'?JSON.stringify([finding.ruleId,finding.severity]):mode==='object'?JSON.stringify([finding.namespace??'',finding.path]):String(index);
     const title=mode==='check'?finding.title:mode==='object'?`${finding.namespace||'root'} · ${finding.path}`:finding.title;
     const group=groups.get(key);
     if(!group)groups.set(key,{key,title,severity:finding.severity,findings:[finding]});

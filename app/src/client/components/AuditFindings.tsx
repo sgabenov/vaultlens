@@ -87,7 +87,7 @@ export default function AuditFindings({detail}:{detail:AuditDetail}) {
     <div className="divide-y rounded border">{groups.slice((page-1)*size,page*size).map(group=><div key={group.key}>
       <button className="flex w-full items-center gap-3 p-4 text-left" aria-expanded={expanded===group.key} onClick={()=>setExpanded(expanded===group.key?null:group.key)}>
         <AuditDisclosureIcon level="group"/><span className={`w-16 shrink-0 rounded px-2 py-1 text-center text-xs ${['critical','high'].includes(group.severity)?'bg-red-50 text-red-800':'bg-amber-50 text-amber-900'}`}>{group.severity}</span>
-        <span className="min-w-0 flex-1 break-words text-sm font-medium">{group.title}<span className="mt-1 block text-xs font-normal text-gray-500">{grouping==='check'?group.key:''}</span></span><span className="text-sm">{group.findings.length}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-medium">{group.title}<span className="mt-1 block text-xs font-normal text-gray-500">{grouping==='check'?group.findings[0].ruleId:''}</span></span><span className="text-sm">{group.findings.length}</span>
       </button>
       {expanded===group.key&&<FindingRows key={`${group.key}:${query}:${severity}:${namespace}:${category}:${status}:${size}`} findings={group.findings} size={size} controls={controls} statusOf={statusOf} detail={detail} usages={usages}/>}
     </div>)}</div>
