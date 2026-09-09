@@ -25,7 +25,15 @@ function Evidence({finding,control,usage}:{finding:AuditFinding;control:FindingC
     {finding.matchedBlock&&<details><summary className="audit-disclosure-summary"><AuditDisclosureIcon level="detail"/><span>Matched policy block{finding.line?` · line ${finding.line}`:''}</span></summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-words text-xs">{finding.matchedBlock}</pre></details>}
     {usage&&<AuditPolicyAssignments usage={usage}/>}
     {!!finding.relatedObjects?.length&&<details><summary className="audit-disclosure-summary"><AuditDisclosureIcon level="detail"/><span>Related resources · {finding.relatedObjects.length}</span></summary><ul>{finding.relatedObjects.map((object,index)=><li key={index} className="mt-1 break-all font-mono text-xs">{object.kind} · {object.path}</li>)}</ul></details>}
-    <p>{finding.recommendation}</p>
+    {finding.recommendation&&<section aria-label="Recommendation" className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+      <h4 className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 18h6m-5 3h4M8.1 14.5a6 6 0 1 1 7.8 0c-.6.5-.9 1.1-.9 1.5H9c0-.4-.3-1-.9-1.5Z"/>
+        </svg>
+        Recommendation
+      </h4>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-blue-950">{finding.recommendation}</p>
+    </section>}
     {control?.exception && <div className="rounded border border-blue-200 bg-blue-50 p-3">
       <h4 className="font-medium">Exception applied to this run</h4>
       <p>{control.exception.reason}</p><p className="mt-1 text-xs">Owner: {control.exception.owner} · Expires: {control.exception.expires}</p>
