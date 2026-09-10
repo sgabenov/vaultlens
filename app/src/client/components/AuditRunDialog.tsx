@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type CSSProperties,
 } from 'react';
 import { flushSync } from 'react-dom';
 
@@ -127,12 +128,13 @@ export default function AuditRunDialog({
           </div>
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-6 sm:px-6">
-          <fieldset disabled={busy} className="min-w-0">
+          <fieldset disabled={busy} className="grid min-w-0">
             {Children.map(children, (child) => {
               if (
                 !isValidElement<{
                   'data-collection-section': string;
-                  hidden?: boolean;
+                  style?: CSSProperties;
+                  'aria-hidden'?: boolean;
                   id?: string;
                   role?: string;
                   'aria-labelledby'?: string;
@@ -141,7 +143,15 @@ export default function AuditRunDialog({
                 return child;
               const section = child.props['data-collection-section'];
               return cloneElement(child, {
-                hidden: tab !== section,
+                // Overlap panels so the tallest sets the shared height.
+                // Invisible panels retain their size without exposing controls.
+                style: {
+                  ...child.props.style,
+                  gridArea: '1 / 1',
+                  minWidth: 0,
+                  visibility: tab === section ? 'visible' : 'hidden',
+                },
+                'aria-hidden': tab !== section,
                 id: `collection-panel-${section}`,
                 role: 'tabpanel',
                 'aria-labelledby': `collection-tab-${section}`,
