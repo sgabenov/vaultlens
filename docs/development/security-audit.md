@@ -61,12 +61,18 @@ administrator authorization. Mutations use the application's CSRF middleware.
 | GET `/runs/:id/export` | JSON, JSONL, YAML, CSV or ZIP |
 | GET `/runs/:id/baseline` | Native baseline definition |
 | GET `/diff?old=…&new=…` | Strictly compatible run comparison |
-| GET/POST `/exceptions` | List/create exact object exceptions |
+| GET/POST `/exceptions` | List/create typed exact/glob object exceptions |
 | PUT/DELETE `/exceptions/:id` | Edit/delete an exception |
+| PATCH `/exceptions/:id/enabled` | Enable/disable an exception; reject unsupported token presets or expired entries |
+| GET `/inventory` | Current inventory, storage location and recent snapshots |
+| GET `/snapshots/:id` | Immutable source snapshot |
+| GET/PUT `/retention` | Read/update per-target cleanup with boolean `enabled` |
 | POST `/imports/python` | Bounded SQLite import, schemas 2/3 |
 
 POST `/runs` accepts collectionOptions for a fresh collection, or exactly one of
-sourceRunId (reanalyze), resumeRunId, refreshRunId. Refresh reuses saved scope and
+sourceRunId or sourceSnapshotId (reanalyze), resumeRunId, refreshRunId.
+Set collectOnly to store a source snapshot without analysis. Refresh reuses saved scope and
 accepts refreshSources. The response is 202 with `{id}`. Concurrent runs receive
-409. Imported observations are analyzed with native rules; historical Python
+409. The web UI no longer exposes legacy Python import; the endpoint and CLI
+compatibility remain. Imported observations are analyzed with native rules; historical Python
 findings are not presented as native findings.

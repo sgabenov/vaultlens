@@ -55,9 +55,12 @@ new credentials; checkpoints do not contain credentials.
 
 ## Data model and persistence
 
-SQLite stores each snapshot and findings as JSON in `audit_runs`; this keeps the
-initial dependency footprint small. Settings are immutable revisions in
-`audit_settings`. Exact exceptions are target-scoped in `audit_object_exceptions`.
+SQLite stores immutable source payloads in `audit_snapshots`, the per-target
+current snapshot pointer in `audit_inventory`, and analysis results/configuration
+in `audit_runs`. Existing run payloads are migrated without rewriting history.
+Settings are immutable revisions in `audit_settings`; typed exceptions and their
+enabled states are target-scoped in `audit_object_exceptions`. `audit_retention`
+stores the per-connection opt-in cleanup setting.
 A run records its target, timestamps, state, counts, configuration, fingerprint,
 engine version and coverage. Snapshot resources carry namespace and observation
 time; refresh may add retained-from metadata.
@@ -65,8 +68,17 @@ time; refresh may add retained-from metadata.
 Configuration is captured at dispatch. The worker uses that revision rather than
 rereading mutable settings mid-run. Settings writes compare revisions in an
 immediate transaction. Run deletion validates every selected target-scoped ID
-before deleting any; source/child runs are independent snapshots and deletion
-does not cascade. The database is local storage, not a distributed job queue.
+before deleting any. Run deletion never cascades to snapshots or current inventory.
+Enabled retention keeps the latest 100 terminal runs, preserving running jobs;
+snapshot retention is unlimited. Snapshot publication and inventory advancement
+use an atomic transaction with a parent-pointer concurrency check. Partial reads
+retain previous observations; deletion is inferred only within completed selected
+stages and filters. The database is local storage, not a distributed job queue.
+
+Target isolation currently uses the configured Vault URL, not a cluster ID or
+credential profile. Deploy separate databases for distinct security boundaries.
+Manual workers can continue after a browser closes, but scheduled collection and
+persistent unattended credentials are not implemented.
 
 ## Coverage and evidence
 
@@ -86,7 +98,7 @@ issues instead of a clean result.
 
 Analysis produces findings first; exceptions annotate/suppress them for reporting
 without deleting the original evidence. A baseline is a CLI/API compatibility
-feature; the web workflow centers on exact object exceptions. Historical findings
+feature; the web workflow supports typed exact/glob object exceptions. Historical findings
 remain unchanged after editing settings or exceptions.
 
 ## Adding a check
@@ -117,3 +129,11 @@ before large-inventory deployments; server-side finding pagination and dedicated
 export jobs are natural follow-ups. One server owns each database. Report access
 is shared among existing VaultLens administrators, not scoped to the collecting
 user. Keep this boundary explicit when deploying across namespaces.
+
+## Temporary authentication failures
+
+The client preserves session state for throttling and temporary failures and
+respects Retry-After. Audit polling uses slower idle intervals and shares a
+cooldown rather than immediately repeating requests. Backend Vault authorization
+failures still invalidate the session; Vault throttling and outages retain their
+transient HTTP status. This does not extend an expired Vault token.

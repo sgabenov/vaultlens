@@ -33,12 +33,12 @@ services retain their existing behavior if you configure their credentials.
 
 | Tab | Workflow |
 | --- | --- |
-| Findings | Choose a Run, search/filter findings and group by check or object. Check groups split by actual severity and sort critical first. Expand a finding for its reason, matched HCL block, policy assignments, technical evidence and recommendation. |
-| Runs | Select runs, compare two compatible results, or delete selected finished runs. Info shows collection parameters, coverage, metrics and saved configuration. Reanalyze snapshot creates a new run using current saved checks and exceptions without fetching Vault data. |
+| Findings | Use Change run to select an analyzed result, search/filter findings and group by check or object. Check groups split by actual severity and sort critical first. Expand a finding for its reason, matched HCL block, policy assignments, technical evidence and recommendation. |
+| Runs | Use Show to open findings, select runs to compare two compatible results, or delete selected finished runs. Info shows collection parameters, coverage, metrics and saved configuration. Reanalyze snapshot creates a new run using current saved checks and exceptions without fetching Vault data. |
 | Reports | Select a saved run and download JSON, JSONL, YAML, CSV or a complete ZIP report. |
 | Checks | Enable built-in checks, change severity, and edit supported parameters. Default severity remains visible. Save the draft before collecting or reanalyzing. |
 | Exceptions | Manage a searchable exception table with per-row enable switches, object types, exact/glob paths, owner, reason and expiry. A finding also offers Exclude this object. |
-| Sources | Refresh selected sources from an existing native snapshot, or import a compatible Python SQLite snapshot. |
+| Sources | Update current inventory with scoped collection, browse immutable snapshots and update history, analyze saved snapshots, and configure run cleanup. |
 
 Only the latest 100 runs appear in the run list. Findings and assignments have
 client-side pagination; a run's detail is still loaded as one snapshot. Object
