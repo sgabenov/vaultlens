@@ -399,7 +399,7 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
               reset();
             }}
           >
-            {[10, 25, 50].map((n) => (
+            {[10, 25, 50, 100, 500].map((n) => (
               <option key={n}>{n}</option>
             ))}
           </select>
