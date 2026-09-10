@@ -1,35 +1,8 @@
 import AuditPagination from './AuditPagination';
 import AuditDisclosureIcon from './AuditDisclosureIcon';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import ObjectPath from './AuditObjectLink';
 import type { PolicyUsage } from '../../shared/policyUsage';
-
-function objectLink(path: string, namespace: string): string | undefined {
-  // Existing object screens do not accept an audit namespace parameter.
-  if (namespace) return undefined;
-  const role = path.match(/^auth\/(.+)\/roles?\/([^/]+)$/);
-  if (role)
-    return `/access/auth-methods/${encodeURIComponent(role[1])}/roles/${encodeURIComponent(role[2])}`;
-  const identity = path.match(/^identity\/(entity|group)\/id\/([^/]+)$/);
-  if (identity)
-    return `/access/${identity[1] === 'entity' ? 'entities' : 'groups'}/${encodeURIComponent(identity[2])}`;
-}
-function ObjectPath({ path, namespace }: { path: string; namespace: string }) {
-  const href = objectLink(path, namespace);
-  return href ? (
-    <Link
-      to={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="break-all font-mono text-xs text-blue-700 underline"
-      aria-label={`Open live object ${path} in a new tab`}
-    >
-      {path}
-    </Link>
-  ) : (
-    <span className="break-all font-mono text-xs">{path}</span>
-  );
-}
 
 export default function AuditPolicyAssignments({
   usage,

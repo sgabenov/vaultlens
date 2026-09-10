@@ -1,3 +1,4 @@
+import AuditObjectLink from './AuditObjectLink';
 import Pager, { AuditPageSize } from './AuditPagination';
 import AuditDisclosureIcon from './AuditDisclosureIcon';
 import AuditFindingReason, {
@@ -56,10 +57,21 @@ function Evidence({
           <ul className="mt-2 space-y-2 rounded bg-gray-50 p-3 font-mono text-xs">
             {finding.relatedObjects.map((object, index) => (
               <li key={index} className="break-words [overflow-wrap:anywhere]">
-                {object.kind} · {object.path}
+                {object.kind} ·{' '}
+                <AuditObjectLink
+                  path={object.path}
+                  namespace={finding.namespace ?? ''}
+                />
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-xs text-slate-500">
+            Links open the current resource in a new tab, not its saved
+            snapshot.
+            {finding.namespace
+              ? ' Direct links are unavailable for this namespace.'
+              : ' Resources may have changed or been deleted since collection.'}
+          </p>
         </details>
       )}
       <AuditFindingTechnicalDetails evidence={finding.evidence} />
