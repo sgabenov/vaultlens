@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import AuditImportUpload from '../components/AuditImportUpload';
 import AuditSnapshotInfo from '../components/AuditSnapshotInfo';
 import AuditRunDialog from '../components/AuditRunDialog';
 import {
@@ -179,12 +178,7 @@ export default function AuditSourcesPage() {
     : '';
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Sources</h2>
-        <button className={button} onClick={() => setTab('Import')}>
-          Import snapshot
-        </button>
-      </div>
+      <h2 className="text-lg font-semibold">Sources</h2>
       {(inventory.error || runs.error) && (
         <p role="alert" className="text-red-700">
           Could not load inventory or jobs.{' '}
@@ -540,22 +534,6 @@ export default function AuditSourcesPage() {
             </p>
           </div>
         </div>
-      )}
-      {tab === 'Import' && (
-        <>
-          <AuditImportUpload
-            disabled={unavailable}
-            onImported={(id) => {
-              setActiveJob(id);
-              setTab('Update history');
-              invalidate();
-            }}
-          />
-          <p className="text-xs text-slate-500">
-            Imported snapshots stay separate and never replace the current
-            inventory.
-          </p>
-        </>
       )}
       {error && !open && (
         <p role="alert" className="text-sm text-red-700">
