@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { CheckGroup } from '../../shared/auditCheckGroups';
 
 type Change = { path: string[]; value: unknown };
@@ -13,23 +13,30 @@ type Props = {
 
 function StringList({
   label,
+  placeholder,
+  hint,
   values,
   disabled,
   onChange,
 }: {
   label: string;
+  placeholder: string;
+  hint: string;
   values: string[];
   disabled: boolean;
   onChange: (values: string[]) => void;
 }) {
   // Keep blank lines while typing; only normalized entries enter configuration.
   const [text, setText] = useState(values.join('\n'));
+  const hintId = useId();
   return (
     <label className="block text-sm">
       {label}
       <textarea
         rows={3}
-        className="mt-1 block w-full rounded border p-2 font-mono text-xs"
+        placeholder={placeholder}
+        aria-describedby={hintId}
+        className="mt-1 block w-full rounded border p-2 font-mono text-xs placeholder:text-slate-400"
         disabled={disabled}
         value={text}
         onChange={(event) => {
@@ -44,6 +51,9 @@ function StringList({
           ]);
         }}
       />
+      <span id={hintId} className="mt-1 block text-xs text-slate-500">
+        {hint}
+      </span>
     </label>
   );
 }
@@ -67,6 +77,8 @@ export default function AuditListParameters({
             section: 'jwt',
             key: 'broad_globs',
             label: 'Claim values considered broad',
+            placeholder: '*\nteam-*',
+            hint: 'One literal claim pattern per line. Compared exactly with role claim values; this list is not evaluated as regex.',
             fallback: ['*'],
           },
           {
@@ -74,6 +86,8 @@ export default function AuditListParameters({
             key: 'review_only_glob_claims',
             label:
               'Claims requiring review only when another claim restricts access',
+            placeholder: 'ref_protected',
+            hint: 'Exact claim names, one per line. No wildcard or regex matching.',
             fallback: ['ref_protected'],
           },
         ]
@@ -84,6 +98,8 @@ export default function AuditListParameters({
               key: 'allowed_wildcard_namespaces',
               label:
                 'Kubernetes namespaces allowed to use wildcard service accounts',
+              placeholder: 'sandbox\nci',
+              hint: 'Exact Kubernetes namespace names, one per line. No wildcard or regex matching.',
               fallback: [],
             },
           ]
@@ -104,6 +120,8 @@ export default function AuditListParameters({
               <StringList
                 key={item.key}
                 label={item.label}
+                placeholder={item.placeholder}
+                hint={item.hint}
                 values={
                   (section(item.section)[item.key] ?? item.fallback) as string[]
                 }
@@ -128,6 +146,8 @@ export default function AuditListParameters({
                 <div key={name} className="rounded border p-3">
                   <StringList
                     label={`Required claims: ${name}`}
+                    placeholder={'project_id\nnamespace_id'}
+                    hint="Exact claim names that roles must bind, one per line."
                     values={values}
                     disabled={disabled}
                     onChange={(claims) =>
@@ -163,6 +183,7 @@ export default function AuditListParameters({
                   Auth mount
                   <input
                     className="mt-1 block rounded border p-2"
+                    placeholder="oidc"
                     value={mount}
                     disabled={disabled}
                     onChange={(event) => {
@@ -220,6 +241,8 @@ export default function AuditListParameters({
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <StringList
               label="Exact policy names"
+              placeholder={'root\nvault-admins'}
+              hint="Exact names, one per line. No wildcard or regex matching."
               values={
                 (section('privileged_policies').exact ?? [
                   'root',
@@ -235,6 +258,8 @@ export default function AuditListParameters({
             />
             <StringList
               label="Policy name patterns"
+              placeholder={'team-*-admin\nplatform-?'}
+              hint="Glob patterns, one per line: * matches any sequence, ? one character, [abc] a character set. Not regex. Empty means no additional patterns."
               values={
                 (section('privileged_policies').patterns ?? []) as string[]
               }

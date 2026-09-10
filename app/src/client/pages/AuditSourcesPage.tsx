@@ -661,19 +661,28 @@ export default function AuditSourcesPage() {
             Include child namespaces
           </label>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            {[
-              ['namespaceFilters', 'Namespaces'],
-              ['policyFilters', 'Policies'],
-              ['authMountFilters', 'Auth mounts'],
-              ['authTypeFilters', 'Auth types'],
-            ].map(([key, label]) => (
+            {(
+              [
+                ['namespaceFilters', 'Namespaces'],
+                ['policyFilters', 'Policies'],
+                ['authMountFilters', 'Auth mounts'],
+                ['authTypeFilters', 'Auth types'],
+              ] as const
+            ).map(([key, label]) => (
               <label key={key} className="min-w-0 text-sm">
                 {label}
                 <textarea
                   aria-label={`${label} filter`}
                   className={`${field} mt-2`}
                   rows={2}
-                  placeholder="All · or one glob per line"
+                  placeholder={
+                    {
+                      namespaceFilters: 'engineering/*\nroot',
+                      policyFilters: 'team-*-read',
+                      authMountFilters: 'approle*',
+                      authTypeFilters: 'approle\nkubernetes',
+                    }[key]
+                  }
                   value={scope[key as keyof typeof scope]}
                   onChange={(e) =>
                     setScope({ ...scope, [key]: e.target.value })
@@ -683,9 +692,12 @@ export default function AuditSourcesPage() {
             ))}
           </div>
           <p className="mt-4 text-xs text-slate-500">
-            Use root for the root namespace. Filters limit this update; objects
-            outside the scope remain in the inventory. Refreshing secret mounts
-            also discovers auth roles.
+            Glob patterns, one per line: * matches any sequence, ? one
+            character, [abc] a character set. Not regex. Empty includes
+            everything. Use root for the root namespace. Auth mount names omit
+            the trailing slash. Filters limit this update; objects outside the
+            scope remain in the inventory. Refreshing secret mounts also
+            discovers auth roles.
           </p>
         </div>
         <div data-collection-section="limits">

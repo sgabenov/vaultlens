@@ -226,7 +226,7 @@ export default function AuditObjectExceptions() {
             <select
               required
               disabled={save.isPending || rules.isPending || !!rules.error}
-              className="mt-1 block w-full rounded border p-2"
+              className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
               value={editor.value.rule_id}
               onChange={(event) =>
                 setEditor({
@@ -275,12 +275,16 @@ export default function AuditObjectExceptions() {
                     }
                     placeholder={
                       key === 'object_path'
-                        ? 'sys/policies/acl/default'
+                        ? editor.value.match === 'glob'
+                          ? 'sys/policies/acl/team-*'
+                          : 'sys/policies/acl/default'
                         : key === 'expires'
                           ? 'YYYY-MM-DD or never'
-                          : undefined
+                          : key === 'owner'
+                            ? 'Platform team'
+                            : 'Root namespace'
                     }
-                    className="mt-1 block w-full rounded border p-2"
+                    className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
                     value={editor.value[key]}
                     onChange={(event) =>
                       setEditor({
@@ -315,7 +319,9 @@ export default function AuditObjectExceptions() {
           <p className="text-xs text-slate-500">
             Use the path shown in Findings. For an exact root namespace, leave
             Namespace empty; for glob matching use root. Policy exceptions do
-            not exclude assignments on other objects.
+            not exclude assignments on other objects. Glob matching supports *
+            (any sequence), ? (one character), and [abc] (character set), not
+            regex. Exact matching treats the path literally.
           </p>
           <label className="block text-sm">
             Reason
@@ -323,7 +329,8 @@ export default function AuditObjectExceptions() {
               required
               maxLength={2000}
               disabled={save.isPending}
-              className="mt-1 block w-full rounded border p-2"
+              className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
+              placeholder="Why this exception is needed and how the risk is controlled"
               value={editor.value.reason}
               onChange={(event) =>
                 setEditor({
@@ -496,7 +503,7 @@ export default function AuditObjectExceptions() {
           Search
           <input
             placeholder="Check, object, namespace, owner or reason"
-            className="mt-1 block w-full rounded border p-2"
+            className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);

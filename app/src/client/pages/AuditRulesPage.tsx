@@ -508,7 +508,7 @@ export default function AuditRulesPage() {
                             />
                           ) : (
                             <input
-                              className="mt-2 block w-full rounded border border-slate-200 p-2"
+                              className="mt-2 block w-full rounded border border-slate-200 p-2 placeholder:text-slate-400"
                               disabled={saving}
                               type={
                                 typeof p.fallback === 'number'
@@ -516,6 +516,7 @@ export default function AuditRulesPage() {
                                   : 'text'
                               }
                               min={0}
+                              placeholder={String(p.fallback)}
                               value={String(
                                 value([p.section, p.key], p.fallback),
                               )}
@@ -553,8 +554,9 @@ export default function AuditRulesPage() {
                               <label key={key} className="text-sm">
                                 {label}
                                 <input
-                                  className="mt-2 block w-full rounded border border-slate-200 p-2"
+                                  className="mt-2 block w-full rounded border border-slate-200 p-2 placeholder:text-slate-400"
                                   disabled={saving}
+                                  placeholder={fallback}
                                   value={String(
                                     value(['thresholds', key], fallback),
                                   )}

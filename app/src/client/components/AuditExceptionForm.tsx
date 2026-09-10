@@ -68,7 +68,8 @@ export default function AuditExceptionForm({
             <input
               required
               maxLength={200}
-              className="mt-1 block w-full rounded border p-2"
+              className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
+              placeholder="Platform team"
               value={owner}
               onChange={(event) => setOwner(event.target.value)}
             />
@@ -78,7 +79,8 @@ export default function AuditExceptionForm({
             <textarea
               required
               maxLength={2000}
-              className="mt-1 block w-full rounded border p-2"
+              className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
+              placeholder="Why this exception is needed and how the risk is controlled"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />

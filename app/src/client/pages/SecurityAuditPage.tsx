@@ -237,7 +237,8 @@ export default function SecurityAuditPage() {
           <div className="mt-6 border-t border-slate-200 pt-5">
             <h3 className="font-medium">Filters</h3>
             <p className="mb-4 mt-1 text-xs text-slate-500">
-              Optional glob patterns, one per line. Empty fields include
+              Glob patterns, one per line: * matches any sequence, ? one
+              character, [abc] a character set. Not regex. Empty fields include
               everything.
             </p>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
