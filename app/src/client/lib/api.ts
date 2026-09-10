@@ -1240,7 +1240,7 @@ export async function removeAuditObjectException(id:string) {
   await api.delete(`/security-audit/exceptions/${encodeURIComponent(id)}`);
 }
 
-export type AuditExceptionInput = Pick<import('../../shared/securityAudit').AuditException,'rule_id'|'namespace'|'object_path'|'owner'|'reason'|'expires'>;
+export type AuditExceptionInput = Pick<import('../../shared/securityAudit').AuditException,'rule_id'|'namespace'|'object_path'|'owner'|'reason'|'expires'|'name'|'enabled'|'object_type'|'match'>;
 export async function saveAuditObjectException(input:AuditExceptionInput,id?:string) {
   const url='/security-audit/exceptions'+(id?`/${encodeURIComponent(id)}`:'');
   const {data}=id?await api.put(url,input):await api.post(url,input);return data;
@@ -1274,4 +1274,8 @@ export async function getAuditRetention() {
 export async function setAuditRetention(enabled: boolean) {
   const { data } = await api.put<{enabled: boolean; maxRuns: number; deleted: number}>('/security-audit/retention', { enabled });
   return data;
+}
+
+export async function toggleAuditException(id: string, enabled: boolean) {
+ const {data}=await api.patch(`/security-audit/exceptions/${encodeURIComponent(id)}/enabled`,{enabled});return data;
 }

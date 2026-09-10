@@ -131,8 +131,13 @@ export function applyBaseline(
   )
     throw new Error('Baseline namespaces are incompatible');
   if (!validDate(today)) throw new Error('Invalid controls date');
-  const active = exceptions.filter((e) => e.expires >= today),
-    expired = exceptions.filter((e) => e.expires < today),
+  const active = exceptions.filter(
+      (e) =>
+        e.enabled !== false && (e.expires === 'never' || e.expires >= today),
+    ),
+    expired = exceptions.filter(
+      (e) => e.enabled !== false && e.expires !== 'never' && e.expires < today,
+    ),
     used = new Set<string>();
   const known = new Set(baseline?.fingerprints ?? []),
     current = new Set<string>();

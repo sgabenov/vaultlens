@@ -346,7 +346,12 @@ function saveObjectException(
         exceptions: [
           {
             id: existing?.id ?? randomUUID(),
-            match: 'exact',
+            match: req.body?.match ?? existing?.match ?? 'exact',
+            name: req.body?.name ?? existing?.name,
+            enabled: req.body?.enabled ?? existing?.enabled ?? true,
+            object_type: req.body?.object_type ?? existing?.object_type,
+            builtin: existing?.builtin ?? false,
+            policy_path: existing?.policy_path,
             ...scope,
             owner,
             reason,
@@ -364,7 +369,12 @@ function saveObjectException(
       throw new Error('Exception scope is too long');
     const now = new Date(),
       today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (entry.expires < today) throw new Error('Expiry must be today or later');
+    if (
+      entry.enabled !== false &&
+      entry.expires !== 'never' &&
+      entry.expires < today
+    )
+      throw new Error('Expiry must be today or later');
     if (editing) {
       if (!db.updateException(config.vaultAddr, entry)) {
         res.status(404).json({ error: 'Exception not found' });
@@ -383,7 +393,50 @@ function saveObjectException(
     });
   }
 }
+router.patch('/exceptions/:id/enabled', (req, res) => {
+  const db = storage();
+  const entry = db
+    .exceptions(config.vaultAddr)
+    .find((e) => e.id === req.params.id);
+  if (!entry) {
+    res.status(404).json({ error: 'Exception not found' });
+    return;
+  }
+  if (typeof req.body?.enabled !== 'boolean') {
+    res.status(400).json({ error: 'enabled must be a boolean' });
+    return;
+  }
+  if (
+    req.body.enabled &&
+    (entry.object_type === 'token' ||
+      (entry.expires !== 'never' &&
+        entry.expires < new Date().toISOString().slice(0, 10)))
+  ) {
+    res
+      .status(400)
+      .json({
+        error:
+          entry.object_type === 'token'
+            ? 'Individual token collection is not supported. This preset cannot be enabled.'
+            : 'Update the expiry date before enabling this exception.',
+      });
+    return;
+  }
+  const next = { ...entry, enabled: req.body.enabled };
+  db.updateException(config.vaultAddr, next);
+  res.json(next);
+});
 router.delete('/exceptions/:id', (req, res) => {
+  if (
+    storage()
+      .exceptions(config.vaultAddr)
+      .find((e) => e.id === req.params.id)?.builtin
+  ) {
+    res
+      .status(400)
+      .json({ error: 'Built-in presets can be disabled, not removed.' });
+    return;
+  }
   if (!storage().removeException(config.vaultAddr, String(req.params.id))) {
     res.status(404).json({ error: 'Exception not found' });
     return;

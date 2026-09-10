@@ -2572,8 +2572,8 @@ test('saved exact object exceptions survive reopen and never expand wildcard sco
     );
     store.close();
     store = new AuditStore(path);
-    assert.deepEqual(store.exceptions('vault-a'), [entry]);
-    assert.deepEqual(store.exceptions('vault-b'), []);
+    assert.deepEqual(store.exceptions('vault-a').filter(e=>!e.builtin), [entry]);
+    assert.deepEqual(store.exceptions('vault-b').filter(e=>!e.builtin), []);
     const finding = {
       ruleId: 'POL-001',
       namespace: '',
@@ -2630,7 +2630,7 @@ test('saved exact object exceptions survive reopen and never expand wildcard sco
     store.removeException('vault-a', 'second');
     assert.equal(store.removeException('vault-b', entry.id), false);
     assert.equal(store.removeException('vault-a', entry.id), true);
-    assert.deepEqual(store.exceptions('vault-a'), []);
+    assert.deepEqual(store.exceptions('vault-a').filter(e=>!e.builtin), []);
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });
@@ -3195,4 +3195,33 @@ test('run retention is target-scoped, persistent and preserves active jobs and s
     assert.equal(db.get(interrupted, s.target)?.run.status, 'interrupted');
     inspection.close();
   } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('exception presets are disabled, persistent, scoped and support type-limited all checks', () => {
+  const dir=mkdtempSync(join(tmpdir(),'exception-presets-'));
+  let store=new AuditStore(join(dir,'db.sqlite'));
+  try {
+    const presets=store.exceptions('a');
+    assert.equal(presets.length,3);
+    assert.ok(presets.every(e=>e.enabled===false));
+    const policy=presets.find(e=>e.id==='preset-default-policy')!;
+    const finding={ruleId:'POL-001',path:policy.object_path,namespace:'',severity:'critical',title:'Test',evidence:'{}',recommendation:'Test'} as import('../../shared/securityAudit.js').AuditFinding;
+    assert.equal(exceptionMatches(policy,finding),false);
+    const enabled={...policy,enabled:true};
+    const parsed=parseExceptions(JSON.stringify({version:1,exceptions:[enabled]}),new Set(['POL-001']));
+    assert.equal(exceptionMatches(parsed[0],finding),true);
+    assert.equal(exceptionMatches(enabled,{...finding,path:'auth/approle/role/admin'}),false);
+    assert.equal(exceptionMatches(enabled,{...finding,namespace:'child'}),false);
+    const scoped={...enabled,match:'glob' as const,namespace:'root',object_path:'*'};
+    assert.equal(exceptionMatches(scoped,{...finding,path:'identity/group/id/admin'}),false);
+    const token=presets.find(e=>e.object_type==='token')!;
+    assert.throws(()=>parseExceptions(JSON.stringify({version:1,exceptions:[{...token,enabled:true}]}),new Set()),/not supported/);
+    store.updateException('a',enabled);store.close();store=new AuditStore(join(dir,'db.sqlite'));
+    assert.equal(store.exceptions('a').find(e=>e.id===policy.id)?.enabled,true);
+    assert.equal(store.exceptions('b').find(e=>e.id===policy.id)?.enabled,false);
+    const result=execute(snapshot(),DEFAULT_SETTINGS);
+    const controls=applyBaseline([finding],result.configuration,snapshot().target,undefined,[policy], '2026-09-10');
+    assert.equal(controls.states[0].suppressed,false);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true})}
 });

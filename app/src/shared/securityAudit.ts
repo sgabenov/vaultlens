@@ -172,6 +172,10 @@ export interface AuditDiff {
 }
 
 export interface AuditException {
+  name?: string;
+  enabled?: boolean;
+  builtin?: boolean;
+  object_type?: 'policy' | 'token' | 'auth-role' | 'entity' | 'group' | 'any';
   match?: 'exact' | 'glob';
   id: string;
   rule_id: string;

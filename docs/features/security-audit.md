@@ -37,7 +37,7 @@ services retain their existing behavior if you configure their credentials.
 | Runs | Select runs, compare two compatible results, or delete selected finished runs. Info shows collection parameters, coverage, metrics and saved configuration. Reanalyze snapshot creates a new run using current saved checks and exceptions without fetching Vault data. |
 | Reports | Select a saved run and download JSON, JSONL, YAML, CSV or a complete ZIP report. |
 | Checks | Enable built-in checks, change severity, and edit supported parameters. Default severity remains visible. Save the draft before collecting or reanalyzing. |
-| Exceptions | Add, edit, search or remove exact check/namespace/object exceptions with owner, reason and expiry. A finding also offers Exclude this object. |
+| Exceptions | Manage a searchable exception table with per-row enable switches, object types, exact/glob paths, owner, reason and expiry. A finding also offers Exclude this object. |
 | Sources | Refresh selected sources from an existing native snapshot, or import a compatible Python SQLite snapshot. |
 
 Only the latest 100 runs appear in the run list. Findings and assignments have
@@ -69,11 +69,23 @@ JavaScript is not supported.
 
 ## Exceptions and history
 
-Exceptions match a check, namespace and exact Vault API object path. Wildcards in
-that path are literal for UI-created exceptions. `root` and `default` policies
-are not automatically excluded. Exceptions apply to future analysis: editing an
-exception does not rewrite a historical report. Expired exceptions remain visible
-for review. Reanalyze to evaluate the current saved exception set.
+Exceptions have a name, enabled state, object type, check, namespace, path,
+owner, reason and expiry (`YYYY-MM-DD` or `never`). Exact matching is the default;
+glob matching is explicit. All-check exceptions require a specific object type.
+Policy matching is limited to policy object paths and does not suppress findings
+on roles or identities assigned that policy. Existing exceptions without an
+explicit enabled field retain their previous enabled behavior.
+
+Each connection receives disabled Default policy and Root policy presets, scoped
+to their exact object paths in the root namespace. The disabled Bootstrap root
+token preset documents an unsupported source: the collector reads token roles,
+not individual tokens, so token exceptions cannot be enabled. Never enter token
+values. Presets are editable and can be disabled but cannot be removed.
+
+Exceptions apply to future analysis. Switching, editing or removing an exception
+does not rewrite historical runs; reanalyze to apply current settings. Expired
+exceptions cannot be re-enabled until their expiry is updated. The table appears
+above Search and uses the shared pagination controls.
 
 Reanalysis preserves collection timestamps and records a source run. Native
 engine code comes from the installed application; pinning the configuration does

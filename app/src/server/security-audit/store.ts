@@ -236,6 +236,55 @@ export class AuditStore {
       : null;
   }
   exceptions(target: string): AuditException[] {
+    const presets: AuditException[] = [
+      {
+        id: 'preset-default-policy',
+        name: 'Default policy',
+        object_type: 'policy',
+        object_path: 'sys/policies/acl/default',
+        reason: 'Built-in policy exception; review before enabling.',
+      },
+      {
+        id: 'preset-root-policy',
+        name: 'Root policy',
+        object_type: 'policy',
+        object_path: 'sys/policies/acl/root',
+        reason: 'Root policy object only. Root assignments remain in scope.',
+      },
+      {
+        id: 'preset-bootstrap-token',
+        name: 'Bootstrap root token',
+        object_type: 'token',
+        object_path: 'Not configured',
+        reason:
+          'Individual token collection is not supported; this preset remains disabled.',
+      },
+    ].map(
+      (value) =>
+        ({
+          ...value,
+          enabled: false,
+          builtin: true,
+          rule_id: '*',
+          namespace: '',
+          match: 'exact',
+          owner: 'Vault administrators',
+          expires: 'never',
+        }) as AuditException,
+    );
+    for (const entry of presets) {
+      const scope = JSON.stringify([
+        entry.rule_id,
+        entry.namespace,
+        entry.object_path,
+        null,
+      ]);
+      this.db
+        .prepare(
+          'INSERT OR IGNORE INTO audit_object_exceptions(target,id,scope,entry) VALUES(?,?,?,?)',
+        )
+        .run(target, entry.id, scope, JSON.stringify(entry));
+    }
     return this.db
       .prepare(
         'SELECT entry FROM audit_object_exceptions WHERE target=? ORDER BY id',

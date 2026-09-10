@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getAuditRules,
+  toggleAuditException,
   getAuditObjectExceptions,
   removeAuditObjectException,
   saveAuditObjectException,
@@ -10,6 +11,10 @@ import {
 } from '../lib/api';
 import type { AuditException } from '../../shared/securityAudit';
 const empty: AuditExceptionInput = {
+  name: '',
+  enabled: false,
+  object_type: 'policy',
+  match: 'exact',
   rule_id: '',
   namespace: '',
   object_path: '',
@@ -50,6 +55,14 @@ export default function AuditObjectExceptions() {
       );
     },
   });
+  const toggle = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      toggleAuditException(id, enabled),
+    onSuccess: () => {
+      refresh();
+      setNotice('Exception state saved. Applies to new analyses only.');
+    },
+  });
   const save = useMutation({
     mutationFn: ({ value, id }: { value: AuditExceptionInput; id?: string }) =>
       saveAuditObjectException(value, id),
@@ -67,8 +80,14 @@ export default function AuditObjectExceptions() {
     query.data?.filter(
       (entry) =>
         (status === 'All' ||
-          (entry.expires < today ? 'Expired' : 'Active') === status) &&
+          (entry.enabled === false
+            ? 'Disabled'
+            : entry.expires !== 'never' && entry.expires < today
+              ? 'Expired'
+              : 'Enabled') === status) &&
         [
+          entry.name ?? '',
+          entry.object_type ?? '',
           entry.rule_id,
           entry.namespace,
           entry.object_path,
@@ -88,6 +107,10 @@ export default function AuditObjectExceptions() {
       id: entry?.id,
       value: entry
         ? {
+            name: entry.name ?? '',
+            enabled: entry.enabled !== false,
+            object_type: entry.object_type ?? 'any',
+            match: entry.match ?? 'exact',
             rule_id: entry.rule_id,
             namespace: entry.namespace,
             object_path: entry.object_path,
@@ -107,12 +130,12 @@ export default function AuditObjectExceptions() {
           disabled={!!editor}
           onClick={() => edit()}
         >
-          New exception
+          Add exception
         </button>
       </div>
       <p className="text-sm text-gray-500">
-        Accept a risk for one check and exact object. Collection and other
-        checks continue. Historical results are unchanged.
+        Enabled exceptions mark matching findings as excepted in new analyses.
+        Built-in presets are off by default. Saved runs remain unchanged.
       </p>
       {notice && (
         <p role="status" className="text-sm text-blue-700">
@@ -128,8 +151,76 @@ export default function AuditObjectExceptions() {
           }}
         >
           <h3 className="font-medium">
-            {editor.id ? 'Edit exception' : 'New exception'}
+            {editor.id ? 'Edit exception' : 'Add exception'}
           </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              Name
+              <input
+                className="mt-1 block w-full rounded border border-slate-200 p-2"
+                required
+                maxLength={200}
+                value={editor.value.name ?? ''}
+                onChange={(e) =>
+                  setEditor({
+                    ...editor,
+                    value: { ...editor.value, name: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="text-sm">
+              Object type
+              <select
+                className="mt-1 block w-full rounded border border-slate-200 p-2"
+                value={editor.value.object_type ?? 'any'}
+                onChange={(e) =>
+                  setEditor({
+                    ...editor,
+                    value: {
+                      ...editor.value,
+                      object_type: e.target
+                        .value as AuditException['object_type'],
+                      enabled: false,
+                    },
+                  })
+                }
+              >
+                {Object.entries({
+                  policy: 'Policy',
+                  token: 'Token (not collected)',
+                  'auth-role': 'Auth role',
+                  entity: 'Identity entity',
+                  group: 'Identity group',
+                  any: 'Any object',
+                }).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={editor.value.enabled !== false}
+              disabled={editor.value.object_type === 'token'}
+              onChange={(e) =>
+                setEditor({
+                  ...editor,
+                  value: { ...editor.value, enabled: e.target.checked },
+                })
+              }
+            />
+            Enable exception
+          </label>
+          {editor.value.object_type === 'token' && (
+            <p className="text-xs text-amber-800">
+              Individual token collection is not supported. This preset remains
+              disabled; do not enter a token value.
+            </p>
+          )}
           <label className="block text-sm">
             Check
             <select
@@ -145,6 +236,10 @@ export default function AuditObjectExceptions() {
               }
             >
               <option value="">Select a built-in check</option>
+              {editor.value.object_type &&
+                editor.value.object_type !== 'any' && (
+                  <option value="*">All checks for this object type</option>
+                )}
               {rules.data?.catalog
                 .filter((rule) => rule.source === 'builtin')
                 .map((rule) => (
@@ -166,7 +261,7 @@ export default function AuditObjectExceptions() {
                   {
                     {
                       namespace: 'Vault namespace (empty = root)',
-                      object_path: 'Exact object API path',
+                      object_path: 'Object API path',
                       owner: 'Owner',
                       expires: 'Expiry date',
                     }[key]
@@ -174,15 +269,16 @@ export default function AuditObjectExceptions() {
                   <input
                     required={key !== 'namespace'}
                     disabled={save.isPending}
-                    type={key === 'expires' ? 'date' : 'text'}
-                    min={key === 'expires' ? today : undefined}
+                    type="text"
                     maxLength={
                       key === 'owner' ? 200 : key === 'namespace' ? 1024 : 2048
                     }
                     placeholder={
                       key === 'object_path'
                         ? 'sys/policies/acl/default'
-                        : undefined
+                        : key === 'expires'
+                          ? 'YYYY-MM-DD or never'
+                          : undefined
                     }
                     className="mt-1 block w-full rounded border p-2"
                     value={editor.value[key]}
@@ -197,9 +293,29 @@ export default function AuditObjectExceptions() {
               ),
             )}
           </div>
-          <p className="text-xs text-gray-500">
-            Use the full object path shown in Findings. Wildcards are treated
-            literally. For the root namespace, leave the namespace empty.
+          <label className="block text-sm">
+            Path matching
+            <select
+              className="mt-1 block w-full rounded border border-slate-200 p-2"
+              value={editor.value.match ?? 'exact'}
+              onChange={(e) =>
+                setEditor({
+                  ...editor,
+                  value: {
+                    ...editor.value,
+                    match: e.target.value as 'exact' | 'glob',
+                  },
+                })
+              }
+            >
+              <option value="exact">Exact path</option>
+              <option value="glob">Glob pattern</option>
+            </select>
+          </label>
+          <p className="text-xs text-slate-500">
+            Use the path shown in Findings. For an exact root namespace, leave
+            Namespace empty; for glob matching use root. Policy exceptions do
+            not exclude assignments on other objects.
           </p>
           <label className="block text-sm">
             Reason
@@ -240,6 +356,124 @@ export default function AuditObjectExceptions() {
           </div>
         </form>
       )}
+      {query.isPending && <p>Loading exceptions…</p>}
+      {(query.error || remove.error || toggle.error) && (
+        <p role="alert" className="text-sm text-red-700">
+          {errorText(query.error || remove.error || toggle.error)}
+        </p>
+      )}
+      <div className="text-xs text-slate-500">
+        {query.data?.length ?? 0} exceptions ·{' '}
+        {query.data?.filter((e) => e.enabled !== false).length ?? 0} enabled
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-xs text-slate-500">
+              {[
+                'State',
+                'Exception / type',
+                'Target / namespace',
+                'Checks',
+                'Actions',
+              ].map((label) => (
+                <th key={label} className="p-3 font-medium">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matches.slice((page - 1) * size, page * size).map((entry) => (
+              <tr
+                key={entry.id}
+                className="border-b border-slate-200 hover:bg-slate-50"
+              >
+                <td className="p-3 align-top">
+                  <label className="inline-flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label={`Enable ${entry.name || entry.rule_id}`}
+                      checked={entry.enabled !== false}
+                      disabled={
+                        toggle.isPending ||
+                        !!editor ||
+                        entry.object_type === 'token'
+                      }
+                      onChange={(e) =>
+                        toggle.mutate({
+                          id: entry.id,
+                          enabled: e.target.checked,
+                        })
+                      }
+                      className="peer sr-only"
+                    />
+                    <span className="relative h-5 w-9 shrink-0 rounded-full bg-slate-300 after:absolute after:left-1 after:top-1 after:h-3 after:w-3 after:rounded-full after:bg-white peer-checked:bg-blue-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-disabled:opacity-50" />
+                    <span>{entry.enabled === false ? 'Off' : 'On'}</span>
+                  </label>
+                </td>
+                <td className="p-3 align-top">
+                  <div className="font-medium">
+                    {entry.name || entry.rule_id}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {entry.object_type ?? 'Any object'}
+                  </div>
+                  <span className="mt-1 inline-block rounded bg-slate-100 px-1.5 text-xs text-slate-600">
+                    {entry.builtin ? 'Built-in' : 'Custom'}
+                  </span>
+                </td>
+                <td className="p-3 align-top">
+                  <div className="max-w-xs break-all font-mono text-xs">
+                    {entry.object_path}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {entry.namespace || 'root'} · {entry.match ?? 'glob'}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Expires: {entry.expires}
+                  </div>
+                  {entry.expires !== 'never' && entry.expires < today && (
+                    <div className="text-xs text-amber-800">Expired</div>
+                  )}
+                </td>
+                <td className="p-3 align-top">
+                  {entry.rule_id === '*' ? 'All checks' : entry.rule_id}
+                  {entry.object_type === 'token' && (
+                    <p className="max-w-48 text-xs text-amber-800">
+                      Individual tokens are not collected. Preset unavailable.
+                    </p>
+                  )}
+                </td>
+                <td className="p-3 align-top">
+                  <div className="flex gap-2">
+                    <button
+                      className="rounded-md border border-slate-200 px-3 py-1.5"
+                      disabled={!!editor}
+                      onClick={() => edit(entry)}
+                    >
+                      Edit
+                    </button>
+                    {!entry.builtin && (
+                      <button
+                        className="rounded-md border border-slate-200 px-3 py-1.5"
+                        disabled={remove.isPending || !!editor}
+                        onClick={() => remove.mutate(entry.id)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!query.isPending && !query.error && !matches.length && (
+        <p className="text-sm text-gray-500">No matching exceptions.</p>
+      )}
       <div className="flex flex-wrap gap-3">
         <label className="flex-1 text-sm">
           Search
@@ -263,54 +497,12 @@ export default function AuditObjectExceptions() {
               setPage(1);
             }}
           >
-            {['All', 'Active', 'Expired'].map((value) => (
+            {['All', 'Enabled', 'Disabled', 'Expired'].map((value) => (
               <option key={value}>{value}</option>
             ))}
           </select>
         </label>
       </div>
-      {query.isPending && <p>Loading exceptions…</p>}
-      {(query.error || remove.error) && (
-        <p role="alert" className="text-sm text-red-700">
-          {errorText(query.error || remove.error)}
-        </p>
-      )}
-      {matches.slice((page - 1) * size, page * size).map((entry) => (
-        <article
-          key={entry.id}
-          className="space-y-1 rounded border p-4 text-sm"
-        >
-          <h3 className="font-medium">
-            {entry.rule_id} · {entry.expires < today ? 'Expired' : 'Active'}
-          </h3>
-          <p className="break-all font-mono text-xs">
-            {entry.namespace || 'root'} · {entry.object_path}
-          </p>
-          <p>{entry.reason}</p>
-          <p className="text-xs text-gray-500">
-            {entry.owner} · expires {entry.expires}
-          </p>
-          <div className="flex gap-2 pt-2">
-            <button
-              className="rounded border px-3 py-1 disabled:opacity-50"
-              disabled={!!editor || remove.isPending}
-              onClick={() => edit(entry)}
-            >
-              Edit exception
-            </button>
-            <button
-              className="rounded border px-3 py-1 disabled:opacity-50"
-              disabled={!!editor || remove.isPending}
-              onClick={() => remove.mutate(entry.id)}
-            >
-              Remove from future analyses
-            </button>
-          </div>
-        </article>
-      ))}
-      {!query.isPending && !query.error && !matches.length && (
-        <p className="text-sm text-gray-500">No matching exceptions.</p>
-      )}
       <AuditPagination
         page={page}
         total={matches.length}
