@@ -197,3 +197,31 @@ the limit; running jobs do not. Disabling cleanup stops future deletions.
 Snapshots and the current inventory remain intact; deleted run findings and
 configuration are no longer available for viewing or comparison. This setting
 does not limit snapshot disk usage. Retention changes require administrator access.
+
+## Expanded finding examples
+
+The following screenshots use saved disposable-lab data. They show the evidence
+retained with a run; object links open the current Vault object, not its historical
+state. Observed assignments do not prove effective access or token usage.
+
+### Policy evidence
+
+The matched HCL block and technical fields explain why the sudo capability was
+flagged and identify the relevant API scope. The recommendation stays next to
+the evidence.
+
+![Expanded policy evidence](/screenshots/security-audit-finding-technical.png)
+
+### Policy assignments
+
+Expand Policy assignments to inspect the observed auth role, Identity entity and
+group references, with separate relationship/type/namespace/path columns.
+
+![Policy assignments and object links](/screenshots/security-audit-finding-assignments.png)
+
+### Authentication configuration
+
+The AppRole example connects privileged policies to weak credential settings.
+The technical details retain the specific conditions used by the check.
+
+![Expanded AppRole finding](/screenshots/security-audit-finding-approle.png)
