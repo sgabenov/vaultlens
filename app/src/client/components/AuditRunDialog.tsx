@@ -24,6 +24,9 @@ export default function AuditRunDialog({
   error,
   connection,
   children,
+  title = 'Collect and run audit',
+  description = 'Collect a fresh snapshot and analyze it with your saved checks and exceptions.',
+  submitLabel = 'Start collection',
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,6 +36,9 @@ export default function AuditRunDialog({
   error?: string;
   connection?: string;
   children: ReactNode;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState('scope');
@@ -70,12 +76,9 @@ export default function AuditRunDialog({
       >
         <header className="shrink-0 px-5 pb-0 pt-6 sm:px-6">
           <h2 id="audit-run-title" className="text-lg font-semibold">
-            Collect and run audit
+            {title}
           </h2>
-          <p className="mt-2 text-slate-500">
-            Collect a fresh snapshot and analyze it with your saved checks and
-            exceptions.
-          </p>
+          <p className="mt-2 text-slate-500">{description}</p>
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-[#f5f7fb] px-3 py-2.5">
             <span className="text-slate-500">Vault connection</span>
             <span className="min-w-0 break-all font-mono text-xs">
@@ -182,7 +185,7 @@ export default function AuditRunDialog({
               className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2.5 font-medium text-white disabled:opacity-50"
               disabled={disabled}
             >
-              {busy ? 'Starting…' : 'Start collection'}
+              {busy ? 'Starting…' : submitLabel}
             </button>
           </div>
         </footer>

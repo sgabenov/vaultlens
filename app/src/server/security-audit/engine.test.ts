@@ -3063,3 +3063,95 @@ test('collector normalizes Transit epoch and RFC3339 dates while retaining unkno
     );
   }
 });
+
+test('inventory refresh removes only policies inside a completed filter and retains failed reads', () => {
+  const base = snapshot();
+  base.resources = ['atlas-read', 'atlas-old', 'cedar-read'].map((name) => ({ kind: 'policy', path: `sys/policies/acl/${name}`, data: { name, hcl: 'old' }, observedAt: '2026-09-01T00:00:00Z' }));
+  const fresh = snapshot();
+  fresh.resources = [{ ...base.resources[0], data: { name: 'atlas-read', hcl: 'new' }, observedAt: fresh.finishedAt }];
+  fresh.issues = [];
+  fresh.collection = { requestPolicy: parseCollectionOptions({ policyFilters: ['atlas-*'], sources: ['policies'] }), scope: { policyFilters: ['atlas-*'], authMountFilters: [], authTypeFilters: [], skipIdentity: false }, metrics: { requests: 2, retries: 0, rateWaitMs: 0, retryWaitMs: 0 }, stageResults: [{ namespace: '', stage: 'Policies', complete: true, finishedAt: fresh.finishedAt }] };
+  fresh.namespacePolicyCompleteness = { '': false };
+  const merged = mergeRefresh(base, fresh, ['policies']);
+  assert.deepEqual(merged.resources.map((r) => r.data.name).sort(), ['atlas-read', 'cedar-read']);
+  assert.equal(merged.resources.find((r) => r.data.name === 'cedar-read')?.observedAt, '2026-09-01T00:00:00Z');
+  assert.equal(merged.policiesComplete, false);
+  fresh.collection.stageResults![0].complete = false;
+  fresh.issues = [{ path: 'sys/policies/acl/atlas-old', reason: 'Vault HTTP 403' }];
+  assert.equal(mergeRefresh(base, fresh, ['policies']).resources.length, 3);
+  assert.equal(base.resources.length, 3);
+});
+
+test('filtered auth refresh retains roles outside the selected mount and type', () => {
+  const base = snapshot();
+  base.resources = [
+    { kind: 'auth-mount', path: 'auth/team/approle/', data: { type: 'approle' } },
+    { kind: 'auth-mount', path: 'auth/kubernetes/', data: { type: 'kubernetes' } },
+    { kind: 'role', path: 'auth/team/approle/role/old', data: { auth_type: 'approle' } },
+    { kind: 'role', path: 'auth/kubernetes/role/keep', data: { auth_type: 'kubernetes' } },
+  ];
+  const fresh = snapshot();
+  fresh.resources = base.resources.filter((r) => r.kind === 'auth-mount');
+  fresh.collection = { requestPolicy: parseCollectionOptions({ authMountFilters: ['team/*'], authTypeFilters: ['approle'] }), scope: { policyFilters: [], authMountFilters: ['team/*'], authTypeFilters: ['approle'], skipIdentity: false }, metrics: { requests: 2, retries: 0, rateWaitMs: 0, retryWaitMs: 0 }, stageResults: [{ namespace: '', stage: 'Auth mounts and roles', complete: true, finishedAt: fresh.finishedAt }] };
+  const result = mergeRefresh(base, fresh, ['auth_roles']);
+  assert.ok(result.resources.some((r) => r.path === 'auth/kubernetes/role/keep'));
+  assert.ok(!result.resources.some((r) => r.path === 'auth/team/approle/role/old'));
+});
+
+test('saved snapshots survive run deletion and reanalysis does not advance inventory', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-inventory-'));
+  const db = new AuditStore(join(dir, 'audit.sqlite'));
+  try {
+    const s = snapshot();
+    const firstJob = db.create(s.target, 'collect');
+    const first = db.saveSnapshot(firstJob, s, true);
+    db.finish(firstJob, s, []);
+    const next = structuredClone(s);
+    next.resources[0].data.hcl = 'changed';
+    const secondJob = db.create(s.target, 'collect');
+    const second = db.saveSnapshot(secondJob, next, true, first);
+    db.finish(secondJob, next, []);
+    assert.equal(db.currentSnapshot(s.target)?.id, second);
+    assert.equal(db.savedSnapshot(second, s.target)?.info.changes.changed, 1);
+    assert.equal(db.savedSnapshot(first, s.target)?.snapshot.resources[0].data.hcl, '# not evaluated');
+    const analysis = db.create(s.target, 'analyze');
+    db.linkSnapshot(analysis, first);
+    db.finish(analysis, s, []);
+    assert.equal(db.currentSnapshot(s.target)?.id, second);
+    db.deleteRuns(s.target, [firstJob, secondJob]);
+    assert.equal(db.currentSnapshot(s.target)?.id, second);
+    assert.ok(db.savedSnapshot(first, s.target));
+    assert.equal(db.savedSnapshot(first, 'https://other.invalid'), null);
+    const imported = db.create(s.target, 'import');
+    db.saveSnapshot(imported, { ...s, importedFrom: { tool: 'vault-security-audit', schemaVersion: 3, scanId: 'test' } }, false);
+    db.finish(imported, s, []);
+    assert.equal(db.currentSnapshot(s.target)?.id, second);
+    const stale = db.create(s.target, 'collect');
+    assert.throws(() => db.saveSnapshot(stale, s, true, first), /Inventory changed/);
+    assert.equal(db.currentSnapshot(s.target)?.id, second);
+    db.fail(stale);
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('legacy migration preserves run payloads and does not promote a later reanalysis or import', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-legacy-inventory-'));
+  const path = join(dir, 'audit.sqlite');
+  const legacy = new DatabaseSync(path);
+  legacy.exec("CREATE TABLE audit_runs (id TEXT PRIMARY KEY,target TEXT NOT NULL,startedAt TEXT NOT NULL,finishedAt TEXT,status TEXT NOT NULL,resourceCount INTEGER NOT NULL DEFAULT 0,issueCount INTEGER NOT NULL DEFAULT 0,findingCount INTEGER NOT NULL DEFAULT 0,snapshot TEXT,findings TEXT NOT NULL DEFAULT '[]')");
+  const original = snapshot();
+  original.collection = { requestPolicy: parseCollectionOptions({}), metrics: { requests: 2, retries: 0, rateWaitMs: 0, retryWaitMs: 0 } };
+  const insert = legacy.prepare("INSERT INTO audit_runs(id,target,startedAt,status,snapshot) VALUES (?,?,?,'completed',?)");
+  insert.run('native', original.target, '2026-09-01', JSON.stringify(original));
+  insert.run('reanalyzed', original.target, '2026-09-02', JSON.stringify({ ...original, sourceRunId: 'native' }));
+  insert.run('imported', original.target, '2026-09-03', JSON.stringify({ ...original, collection: undefined, importedFrom: { tool: 'vault-security-audit', schemaVersion: 3, scanId: 'old' } }));
+  legacy.close();
+  const db = new AuditStore(path);
+  const current = db.currentSnapshot(original.target)!;
+  assert.equal(current.sourceJobId, 'native');
+  assert.equal(db.snapshots(original.target).length, 3);
+  assert.deepEqual(db.get('native', original.target)?.snapshot, original);
+  db.close();
+  const reopened = new AuditStore(path);
+  try { assert.equal(reopened.currentSnapshot(original.target)?.id, current.id); assert.equal(reopened.snapshots(original.target).length, 3); }
+  finally { reopened.close(); rmSync(dir, { recursive: true, force: true }); }
+});

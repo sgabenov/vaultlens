@@ -120,6 +120,8 @@ export default function AuditRunInfo({
             values={[
               ['Vault', run.target],
               ['Status', run.status],
+              ['Operation', run.operation],
+              ['Snapshot ID', run.snapshotId],
               ['Started', new Date(run.startedAt).toLocaleString()],
               [
                 'Finished',

@@ -1239,3 +1239,20 @@ export async function saveAuditObjectException(input:AuditExceptionInput,id?:str
 export async function deleteSecurityAuditRuns(ids:string[]) {
   const {data}=await api.delete<{deleted:number}>('/security-audit/runs',{data:{ids}});return data;
 }
+
+export async function getAuditInventory() {
+  const { data } = await api.get<import('../../shared/securityAudit').AuditInventoryView>('/security-audit/inventory');
+  return data;
+}
+export async function updateAuditInventory(collectionOptions: Record<string, unknown>, analyze: boolean) {
+  const { data } = await api.post<{ id: string }>('/security-audit/runs', { collectionOptions, collectOnly: !analyze });
+  return data;
+}
+export async function analyzeAuditSnapshot(sourceSnapshotId: string) {
+  const { data } = await api.post<{ id: string }>('/security-audit/runs', { sourceSnapshotId });
+  return data;
+}
+export async function getSavedAuditSnapshot(id: string) {
+  const { data } = await api.get<{info: import('../../shared/securityAudit').SavedAuditSnapshot; snapshot: import('../../shared/securityAudit').AuditSnapshot}>(`/security-audit/snapshots/${encodeURIComponent(id)}`);
+  return data;
+}

@@ -58,6 +58,30 @@ router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
+router.get('/inventory', (_req, res) => {
+  const db = storage();
+  const current = db.currentSnapshot(config.vaultAddr);
+  res.json({
+    target: config.vaultAddr,
+    storagePath: dbPath,
+    current,
+    snapshot: current
+      ? db.savedSnapshot(current.id, config.vaultAddr)?.snapshot
+      : null,
+    snapshots: db.snapshots(config.vaultAddr),
+  });
+});
+router.get('/snapshots/:id', (req, res) => {
+  const saved = storage().savedSnapshot(
+    String(req.params.id),
+    config.vaultAddr,
+  );
+  if (!saved) {
+    res.status(404).json({ error: 'Snapshot not found' });
+    return;
+  }
+  res.json(saved);
+});
 router.post(
   '/imports/python',
   raw({ type: 'application/octet-stream', limit: '32mb' }),
@@ -67,18 +91,15 @@ router.post(
       req.body.length < 16 ||
       req.body.subarray(0, 16).toString('binary') !== 'SQLite format 3\0'
     ) {
-      res
-        .status(400)
-        .json({
-          error:
-            'Expected a Python SQLite snapshot as application/octet-stream',
-        });
+      res.status(400).json({
+        error: 'Expected a Python SQLite snapshot as application/octet-stream',
+      });
       return;
     }
     const db = storage();
     let directory: string | undefined, id: string | undefined;
     try {
-      id = db.create(config.vaultAddr);
+      id = db.create(config.vaultAddr, 'import');
       directory = mkdtempSync(path.join(tmpdir(), 'vaultlens-python-import-'));
       const importPath = path.join(directory, 'snapshot.sqlite');
       writeFileSync(importPath, req.body, { mode: 0o600, flag: 'wx' });
@@ -161,11 +182,9 @@ router.delete('/runs', (req, res) => {
   try {
     res.json({ deleted: storage().deleteRuns(config.vaultAddr, ids) });
   } catch (error) {
-    res
-      .status(409)
-      .json({
-        error: error instanceof Error ? error.message : 'Could not delete runs',
-      });
+    res.status(409).json({
+      error: error instanceof Error ? error.message : 'Could not delete runs',
+    });
   }
 });
 router.get('/diff', (req, res) => {
@@ -185,14 +204,10 @@ router.get('/diff', (req, res) => {
   try {
     res.json(compareRuns(old, next));
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Snapshots cannot be compared',
-      });
+    res.status(400).json({
+      error:
+        error instanceof Error ? error.message : 'Snapshots cannot be compared',
+    });
   }
 });
 router.get('/runs/:id/baseline', (req, res) => {
@@ -204,11 +219,9 @@ router.get('/runs/:id/baseline', (req, res) => {
   try {
     res.json(createBaseline(detail));
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error: error instanceof Error ? error.message : 'Baseline unavailable',
-      });
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Baseline unavailable',
+    });
   }
 });
 router.get('/runs/:id/export', (req, res) => {
@@ -249,11 +262,9 @@ router.get('/runs/:id/export', (req, res) => {
     );
     res.send(body);
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error: error instanceof Error ? error.message : 'Export failed',
-      });
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Export failed',
+    });
   }
 });
 router.get('/exceptions', (_req, res) =>
@@ -352,16 +363,14 @@ function saveObjectException(
     } else db.addException(config.vaultAddr, entry);
     res.status(editing ? 200 : 201).json(entry);
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error:
-          error instanceof Error && error.message.includes('UNIQUE')
-            ? 'An exception already exists for this check and object'
-            : error instanceof Error
-              ? error.message
-              : 'Invalid exception',
-      });
+    res.status(400).json({
+      error:
+        error instanceof Error && error.message.includes('UNIQUE')
+          ? 'An exception already exists for this check and object'
+          : error instanceof Error
+            ? error.message
+            : 'Invalid exception',
+    });
   }
 }
 router.delete('/exceptions/:id', (req, res) => {
@@ -388,20 +397,40 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
   try {
     collectionOptions = parseCollectionOptions(req.body?.collectionOptions);
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error:
-          error instanceof Error ? error.message : 'Invalid collection options',
-      });
+    res.status(400).json({
+      error:
+        error instanceof Error ? error.message : 'Invalid collection options',
+    });
     return;
   }
   const db = storage();
   const sourceRunId = req.body?.sourceRunId;
   const resumeRunId = req.body?.resumeRunId;
   const refreshRunId = req.body?.refreshRunId;
+  const sourceSnapshotId = req.body?.sourceSnapshotId;
+  const collectOnly = req.body?.collectOnly ?? false;
+  if (typeof collectOnly !== 'boolean') {
+    res.status(400).json({ error: 'collectOnly must be boolean' });
+    return;
+  }
   if (
-    [sourceRunId, resumeRunId, refreshRunId].filter(
+    sourceSnapshotId !== undefined &&
+    (typeof sourceSnapshotId !== 'string' ||
+      !db.savedSnapshot(sourceSnapshotId, config.vaultAddr))
+  ) {
+    res.status(404).json({ error: 'Saved snapshot not found' });
+    return;
+  }
+  if (
+    collectOnly &&
+    (sourceSnapshotId !== undefined || sourceRunId !== undefined)
+  ) {
+    res.status(400).json({ error: 'Choose collection or analysis' });
+    return;
+  }
+  const baseSnapshotId = db.currentSnapshot(config.vaultAddr)?.id ?? null;
+  if (
+    [sourceRunId, resumeRunId, refreshRunId, sourceSnapshotId].filter(
       (value) => value !== undefined,
     ).length > 1
   ) {
@@ -415,11 +444,9 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       typeof refreshRunId !== 'string' ||
       req.body?.collectionOptions !== undefined
     ) {
-      res
-        .status(400)
-        .json({
-          error: 'Refresh requires a run ID and its saved collection settings',
-        });
+      res.status(400).json({
+        error: 'Refresh requires a run ID and its saved collection settings',
+      });
       return;
     }
     const source = db.get(refreshRunId, config.vaultAddr);
@@ -438,12 +465,10 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         sources: req.body?.refreshSources ?? COLLECTION_SOURCES,
       });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          error:
-            error instanceof Error ? error.message : 'Invalid refresh sources',
-        });
+      res.status(400).json({
+        error:
+          error instanceof Error ? error.message : 'Invalid refresh sources',
+      });
       return;
     }
   }
@@ -455,12 +480,10 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       sourceRunId !== undefined ||
       req.body?.collectionOptions !== undefined
     ) {
-      res
-        .status(400)
-        .json({
-          error:
-            'Resume requires its own run ID and the saved collection options',
-        });
+      res.status(400).json({
+        error:
+          'Resume requires its own run ID and the saved collection options',
+      });
       return;
     }
     const source = db.get(resumeRunId, config.vaultAddr);
@@ -480,11 +503,9 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         checkpointMaxAgeMs,
       ).options;
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          error: error instanceof Error ? error.message : 'Invalid checkpoint',
-        });
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Invalid checkpoint',
+      });
       return;
     }
   }
@@ -540,24 +561,28 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
       baseline,
       exceptions,
       undefined,
-      sourceRunId
-        ? snapshotNamespaces(db.get(sourceRunId, config.vaultAddr)!.snapshot!)
-        : collectionOptions.recursiveNamespaces && baseline
-          ? (baseline.namespaces ?? [''])
-          : [collectionOptions.namespace],
+      sourceSnapshotId
+        ? snapshotNamespaces(
+            db.savedSnapshot(sourceSnapshotId, config.vaultAddr)!.snapshot,
+          )
+        : sourceRunId
+          ? snapshotNamespaces(db.get(sourceRunId, config.vaultAddr)!.snapshot!)
+          : collectionOptions.recursiveNamespaces && baseline
+            ? (baseline.namespaces ?? [''])
+            : [collectionOptions.namespace],
     );
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        error:
-          error instanceof Error ? error.message : 'Invalid audit controls',
-      });
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Invalid audit controls',
+    });
     return;
   }
   let id: string;
   try {
-    id = db.create(config.vaultAddr);
+    id = db.create(
+      config.vaultAddr,
+      sourceSnapshotId || sourceRunId ? 'analyze' : 'collect',
+    );
   } catch {
     res.status(409).json({ error: 'An audit is already running' });
     return;
@@ -577,6 +602,9 @@ router.post('/runs', (req: AuthenticatedRequest, res, next) => {
         sourceRunId,
         resumeRunId,
         refreshRunId,
+        sourceSnapshotId,
+        baseSnapshotId,
+        collectOnly,
         checkpointMaxAgeMs,
       },
     });

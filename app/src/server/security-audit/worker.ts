@@ -9,6 +9,9 @@ import { execute } from './engine.js';
 import { AuditStore } from './store.js';
 const {
   refreshRunId,
+  sourceSnapshotId,
+  baseSnapshotId,
+  collectOnly,
   resumeRunId,
   checkpointMaxAgeMs,
   importPath,
@@ -45,7 +48,9 @@ try {
       requests: 0,
       updatedAt: new Date().toISOString(),
     });
-    store.finish(id, importPythonSnapshot(importPath, target), []);
+    const imported = importPythonSnapshot(importPath, target);
+    store.saveSnapshot(id, imported, false);
+    store.finish(id, imported, []);
   } else {
     const resumeSource = resumeRunId ? store.get(resumeRunId, target) : null;
     if (
@@ -66,46 +71,75 @@ try {
         ))
     )
       throw new Error('Refresh source unavailable');
-    let snapshot = sourceRunId
-      ? store.get(sourceRunId, target)?.snapshot
-      : await collect(
-          target,
-          token,
-          skipTlsVerify,
-          collectionOptions,
-          progress,
-          (snapshot) => store.saveCheckpoint(id, snapshot),
-          resume,
-        );
+    const base = baseSnapshotId
+      ? store.savedSnapshot(baseSnapshotId, target)
+      : null;
+    const saved = sourceSnapshotId
+      ? store.savedSnapshot(sourceSnapshotId, target)
+      : null;
+    let snapshot = saved
+      ? saved.snapshot
+      : sourceRunId
+        ? store.get(sourceRunId, target)?.snapshot
+        : await collect(
+            target,
+            token,
+            skipTlsVerify,
+            collectionOptions,
+            progress,
+            (snapshot) => store.saveCheckpoint(id, snapshot),
+            resume,
+          );
     if (!snapshot) throw new Error('Source snapshot not found');
-    if (refreshSource?.snapshot)
-      snapshot = mergeRefresh(
-        refreshSource.snapshot,
-        snapshot,
-        collectionOptions.sources,
-      );
+    if (
+      !sourceRunId &&
+      !sourceSnapshotId &&
+      !snapshot.resources.length &&
+      !snapshot.collection?.stageResults?.some((stage) => stage.complete)
+    )
+      throw new Error('No collection scope could be read');
+    // Explicit historical refresh remains an independent branch. Normal collections
+    // reconcile the latest inventory and publish a new immutable revision.
+    const mergeBase = refreshSource?.snapshot ?? base?.snapshot;
+    if (!sourceRunId && !sourceSnapshotId && mergeBase)
+      snapshot = mergeRefresh(mergeBase, snapshot, collectionOptions.sources);
     if (sourceRunId || resumeRunId || refreshRunId)
       snapshot.sourceRunId = sourceRunId ?? resumeRunId ?? refreshRunId;
-    progress({
-      namespace: '',
-      phase: 'Analyzing snapshot',
-      resources: snapshot.resources.length,
-      requests: snapshot.collection?.metrics.requests ?? 0,
-      updatedAt: new Date().toISOString(),
-    });
-    const result = execute(snapshot, settings ?? store.settings());
-    snapshot.controls = applyBaseline(
-      result.findings,
-      result.configuration,
-      target,
-      baseline,
-      exceptions,
-      undefined,
-      snapshotNamespaces(snapshot),
-    );
-    snapshot.analysisPerformed = true;
-    snapshot.identity = result.identity;
-    store.finish(id, snapshot, result.findings, result.configuration);
+    if (!sourceRunId && !sourceSnapshotId) {
+      const parent = refreshRunId
+        ? (refreshSource?.run.snapshotId ?? null)
+        : baseSnapshotId;
+      store.saveSnapshot(id, snapshot, !refreshRunId, parent);
+    } else {
+      const snapshotId =
+        sourceSnapshotId ?? store.get(sourceRunId, target)?.run.snapshotId;
+      if (snapshotId) store.linkSnapshot(id, snapshotId);
+    }
+    if (collectOnly) {
+      snapshot.analysisPerformed = false;
+      store.finish(id, snapshot, []);
+    } else {
+      progress({
+        namespace: '',
+        phase: 'Analyzing snapshot',
+        resources: snapshot.resources.length,
+        requests: snapshot.collection?.metrics.requests ?? 0,
+        updatedAt: new Date().toISOString(),
+      });
+      const result = execute(snapshot, settings ?? store.settings());
+      snapshot.controls = applyBaseline(
+        result.findings,
+        result.configuration,
+        target,
+        baseline,
+        exceptions,
+        undefined,
+        snapshotNamespaces(snapshot),
+      );
+      snapshot.analysisPerformed = true;
+      snapshot.identity = result.identity;
+      store.finish(id, snapshot, result.findings, result.configuration);
+    }
   }
 } catch (error) {
   store.fail(

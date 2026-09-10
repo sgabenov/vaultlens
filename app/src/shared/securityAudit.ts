@@ -128,6 +128,8 @@ export interface AuditProgress {
   updatedAt: string;
 }
 export interface AuditRun {
+  snapshotId?: string | null;
+  operation?: 'collect' | 'analyze' | 'import';
   progress?: AuditProgress | null;
   failureReason?: string | null;
   id: string;
@@ -204,4 +206,30 @@ export interface AuditControls {
     unused: AuditException[];
   };
   absentFingerprints: string[];
+}
+
+/** A saved collection is independent of the analysis runs that reference it. */
+export interface SavedAuditSnapshot {
+  id: string;
+  target: string;
+  createdAt: string;
+  sourceJobId: string | null;
+  parentId: string | null;
+  origin: 'collection' | 'import';
+  resourceCount: number;
+  issueCount: number;
+  retainedCount: number;
+  changes: {
+    added: number;
+    changed: number;
+    unchanged: number;
+    absent: number;
+  };
+}
+export interface AuditInventoryView {
+  target: string;
+  storagePath: string;
+  current: SavedAuditSnapshot | null;
+  snapshot: AuditSnapshot | null;
+  snapshots: SavedAuditSnapshot[];
 }

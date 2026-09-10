@@ -7,6 +7,7 @@ import type {
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import type {
   AuditException,
@@ -14,6 +15,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
   AuditDetail,
+  SavedAuditSnapshot,
 } from '../../shared/securityAudit.js';
 export class AuditStore {
   private db: DatabaseSync;
@@ -39,6 +41,198 @@ export class AuditStore {
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN failureReason TEXT');
     if (!columns.some((c) => c.name === 'progress'))
       this.db.exec('ALTER TABLE audit_runs ADD COLUMN progress TEXT');
+    if (!columns.some((c) => c.name === 'snapshotId'))
+      this.db.exec('ALTER TABLE audit_runs ADD COLUMN snapshotId TEXT');
+    if (!columns.some((c) => c.name === 'operation'))
+      this.db.exec(
+        "ALTER TABLE audit_runs ADD COLUMN operation TEXT NOT NULL DEFAULT 'analyze'",
+      );
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS audit_snapshots (
+        id TEXT PRIMARY KEY, target TEXT NOT NULL, createdAt TEXT NOT NULL,
+        sourceJobId TEXT, parentId TEXT, origin TEXT NOT NULL,
+        resourceCount INTEGER NOT NULL, issueCount INTEGER NOT NULL,
+        retainedCount INTEGER NOT NULL, changes TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS audit_snapshot_target ON audit_snapshots(target,createdAt);
+      CREATE TABLE IF NOT EXISTS audit_inventory (target TEXT PRIMARY KEY, snapshotId TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS audit_migrations (name TEXT PRIMARY KEY);
+    `);
+    this.migrateSnapshots();
+  }
+  private migrateSnapshots() {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if (
+        !this.db
+          .prepare(
+            "SELECT name FROM audit_migrations WHERE name='snapshots-v1'",
+          )
+          .get()
+      ) {
+        const rows = this.db
+          .prepare(
+            "SELECT id,target,snapshot FROM audit_runs WHERE status IN ('collected','completed','partial') AND snapshot IS NOT NULL ORDER BY startedAt,id",
+          )
+          .all();
+        for (const row of rows) {
+          const snapshot = JSON.parse(String(row.snapshot)) as AuditSnapshot;
+          if (!snapshot.finishedAt) continue;
+          // Reanalysis of an older snapshot must not move the current inventory backwards.
+          const native =
+            !!snapshot.collection &&
+            (!snapshot.sourceRunId || !!snapshot.refresh);
+          const id = this.insertSnapshot(
+            String(row.id),
+            snapshot,
+            native,
+            null,
+          );
+          this.db
+            .prepare(
+              'UPDATE audit_runs SET snapshotId=?,operation=? WHERE id=?',
+            )
+            .run(
+              id,
+              snapshot.importedFrom ? 'import' : native ? 'collect' : 'analyze',
+              row.id,
+            );
+        }
+        this.db
+          .prepare("INSERT INTO audit_migrations VALUES ('snapshots-v1')")
+          .run();
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  private insertSnapshot(
+    jobId: string,
+    snapshot: AuditSnapshot,
+    publish: boolean,
+    parentId: string | null,
+  ): string {
+    const id = randomUUID();
+    const saved = structuredClone(
+      snapshot.collection?.requestPolicy.redactPolicySource
+        ? withoutPolicySource(snapshot)
+        : snapshot,
+    );
+    delete saved.controls;
+    delete saved.identity;
+    saved.analysisPerformed = false;
+    const parent = parentId
+      ? this.savedSnapshot(parentId, snapshot.target)?.snapshot
+      : undefined;
+    const key = (r: AuditSnapshot['resources'][number]) =>
+      JSON.stringify([r.namespace ?? '', r.kind, r.path]);
+    const previous = new Map(parent?.resources.map((r) => [key(r), r]) ?? []);
+    const changes = { added: 0, changed: 0, unchanged: 0, absent: 0 };
+    for (const resource of saved.resources) {
+      const old = previous.get(key(resource));
+      if (!old) changes.added++;
+      else if (isDeepStrictEqual(old.data, resource.data)) changes.unchanged++;
+      else changes.changed++;
+      previous.delete(key(resource));
+    }
+    changes.absent = previous.size;
+    this.db
+      .prepare('INSERT INTO audit_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(
+        id,
+        saved.target,
+        new Date().toISOString(),
+        jobId,
+        parentId,
+        saved.importedFrom ? 'import' : 'collection',
+        saved.resources.length,
+        saved.issues.length,
+        saved.resources.filter((r) => r.retainedFromSnapshotAt).length,
+        JSON.stringify(changes),
+        JSON.stringify(saved),
+      );
+    if (publish)
+      this.db
+        .prepare(
+          'INSERT INTO audit_inventory VALUES (?,?) ON CONFLICT(target) DO UPDATE SET snapshotId=excluded.snapshotId',
+        )
+        .run(saved.target, id);
+    return id;
+  }
+  saveSnapshot(
+    jobId: string,
+    snapshot: AuditSnapshot,
+    publish: boolean,
+    parentId: string | null = null,
+  ): string {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const job = this.db
+        .prepare(
+          "SELECT id FROM audit_runs WHERE id=? AND target=? AND status='running'",
+        )
+        .get(jobId, snapshot.target);
+      if (!job || !snapshot.finishedAt)
+        throw new Error('Finished collection and active job required');
+      if (
+        publish &&
+        (this.currentSnapshot(snapshot.target)?.id ?? null) !== parentId
+      )
+        throw new Error(
+          'Inventory changed during collection; retry the update',
+        );
+      const id = this.insertSnapshot(jobId, snapshot, publish, parentId);
+      this.linkSnapshot(jobId, id);
+      this.db.exec('COMMIT');
+      return id;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  linkSnapshot(jobId: string, snapshotId: string) {
+    this.db
+      .prepare(
+        "UPDATE audit_runs SET snapshotId=? WHERE id=? AND status='running'",
+      )
+      .run(snapshotId, jobId);
+  }
+  snapshots(target: string): SavedAuditSnapshot[] {
+    return this.db
+      .prepare(
+        'SELECT id,target,createdAt,sourceJobId,parentId,origin,resourceCount,issueCount,retainedCount,changes FROM audit_snapshots WHERE target=? ORDER BY rowid DESC LIMIT 100',
+      )
+      .all(target)
+      .map((row) => ({
+        ...row,
+        changes: JSON.parse(String(row.changes)),
+      })) as unknown as SavedAuditSnapshot[];
+  }
+  savedSnapshot(
+    id: string,
+    target: string,
+  ): { info: SavedAuditSnapshot; snapshot: AuditSnapshot } | null {
+    const row = this.db
+      .prepare('SELECT * FROM audit_snapshots WHERE id=? AND target=?')
+      .get(id, target);
+    if (!row) return null;
+    const { payload, ...info } = row;
+    return {
+      info: {
+        ...info,
+        changes: JSON.parse(String(row.changes)),
+      } as unknown as SavedAuditSnapshot,
+      snapshot: JSON.parse(String(payload)),
+    };
+  }
+  currentSnapshot(target: string): SavedAuditSnapshot | null {
+    const row = this.db
+      .prepare('SELECT snapshotId FROM audit_inventory WHERE target=?')
+      .get(target);
+    return row
+      ? (this.savedSnapshot(String(row.snapshotId), target)?.info ?? null)
+      : null;
   }
   exceptions(target: string): AuditException[] {
     return this.db
@@ -132,7 +326,7 @@ export class AuditStore {
   list(target: string): AuditRun[] {
     return this.db
       .prepare(
-        'SELECT id,target,startedAt,finishedAt,status,resourceCount,issueCount,findingCount,failureReason FROM audit_runs WHERE target=? ORDER BY startedAt DESC LIMIT 100',
+        'SELECT id,target,startedAt,finishedAt,status,resourceCount,issueCount,findingCount,failureReason,snapshotId,operation FROM audit_runs WHERE target=? ORDER BY startedAt DESC LIMIT 100',
       )
       .all(target) as unknown as AuditRun[];
   }
@@ -190,13 +384,16 @@ export class AuditStore {
       configuration: configuration ? JSON.parse(configuration) : null,
     };
   }
-  create(target: string): string {
+  create(
+    target: string,
+    operation: 'collect' | 'analyze' | 'import' = 'analyze',
+  ): string {
     const id = randomUUID();
     this.db
       .prepare(
-        "INSERT INTO audit_runs(id,target,startedAt,status) VALUES (?,?,?,'running')",
+        "INSERT INTO audit_runs(id,target,startedAt,status,operation) VALUES (?,?,?,'running',?)",
       )
-      .run(id, target, new Date().toISOString());
+      .run(id, target, new Date().toISOString(), operation);
     return id;
   }
   finish(
@@ -215,7 +412,7 @@ export class AuditStore {
           : snapshot.issues.length || configuration?.issues.length
             ? 'partial'
             : 'completed',
-        snapshot.sourceRunId ? new Date().toISOString() : snapshot.finishedAt,
+        new Date().toISOString(),
         snapshot.resources.length,
         snapshot.issues.length + (configuration?.issues.length ?? 0),
         findings.length,

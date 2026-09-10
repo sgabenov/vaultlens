@@ -1,3 +1,4 @@
+import { globMatch } from './authDetectors.js';
 import type { AuditSnapshot } from '../../shared/securityAudit.js';
 import { RESOURCE_STAGE, stageKey } from './collectionStages.js';
 
@@ -16,12 +17,54 @@ export function mergeRefresh(
   );
   const key = (resource: AuditSnapshot['resources'][number]) =>
     JSON.stringify([resource.namespace ?? '', resource.kind, resource.path]);
+  const scope = fresh.collection?.scope;
+  const matches = (value: string, patterns: string[] = []) =>
+    !patterns.length || patterns.some((pattern) => globMatch(pattern, value));
+  const inScope = (resource: AuditSnapshot['resources'][number]) => {
+    if (resource.kind === 'policy')
+      return matches(
+        String(
+          resource.data.name ??
+            decodeURIComponent(resource.path.split('/').pop()!),
+        ),
+        scope?.policyFilters,
+      );
+    if (resource.kind === 'role') {
+      const mounts = [...fresh.resources, ...base.resources].filter(
+        (r) =>
+          r.kind === 'auth-mount' &&
+          (r.namespace ?? '') === (resource.namespace ?? '') &&
+          resource.path.startsWith(
+            r.path.endsWith('/') ? r.path : r.path + '/',
+          ),
+      );
+      const mount = mounts.sort((a, b) => b.path.length - a.path.length)[0];
+      if (!mount)
+        return (
+          !scope?.authMountFilters.length && !scope?.authTypeFilters.length
+        );
+      return (
+        matches(
+          mount.path.replace(/^auth\//, '').replace(/\/$/, ''),
+          scope?.authMountFilters,
+        ) &&
+        matches(
+          String(resource.data.auth_type ?? mount.data.type ?? ''),
+          scope?.authTypeFilters,
+        )
+      );
+    }
+    return true;
+  };
   const resources = new Map<string, AuditSnapshot['resources'][number]>(
     base.resources
       .filter(
         (resource) =>
-          !complete.has(
-            stageKey(resource.namespace ?? '', RESOURCE_STAGE[resource.kind]),
+          !(
+            inScope(resource) &&
+            complete.has(
+              stageKey(resource.namespace ?? '', RESOURCE_STAGE[resource.kind]),
+            )
           ),
       )
       .map((resource) => [
@@ -53,13 +96,12 @@ export function mergeRefresh(
       stageKey(namespace, 'Policies'),
     )
       ? (fresh.namespacePolicyCompleteness?.[namespace] ?? false)
-      : (base.namespacePolicyCompleteness?.[namespace] ??
-        base.policiesComplete);
+      : false;
     aliasCoverage[namespace] = refreshedStages.has(
       stageKey(namespace, 'Identity aliases'),
     )
       ? (fresh.namespaceAliasCompleteness?.[namespace] ?? false)
-      : (base.namespaceAliasCompleteness?.[namespace] ?? false);
+      : false;
   }
   return {
     ...fresh,
@@ -71,7 +113,41 @@ export function mergeRefresh(
       (namespace) => policyCoverage[namespace],
     ),
     issues: [
-      ...base.issues,
+      ...base.issues.filter((issue) => {
+        const resource = base.resources.find(
+          (r) =>
+            r.path === issue.path &&
+            (r.namespace ?? '') === (issue.namespace ?? ''),
+        );
+        const namespace = issue.namespace ?? '';
+        if (resource)
+          return (
+            !inScope(resource) ||
+            !complete.has(stageKey(namespace, RESOURCE_STAGE[resource.kind]))
+          );
+        const fullStage =
+          issue.path.startsWith('sys/policies/acl') &&
+          !scope?.policyFilters.length
+            ? 'Policies'
+            : issue.path.startsWith('identity/entity')
+              ? 'Identity entities'
+              : issue.path.startsWith('identity/group') &&
+                  !issue.path.includes('alias')
+                ? 'Identity groups'
+                : issue.path.includes('identity/') &&
+                    issue.path.includes('alias')
+                  ? 'Identity aliases'
+                  : (issue.path === 'sys/auth' ||
+                        issue.path.startsWith('auth/')) &&
+                      !scope?.authMountFilters.length &&
+                      !scope?.authTypeFilters.length
+                    ? 'Auth mounts and roles'
+                    : issue.path === 'sys/mounts'
+                      ? 'Secret mounts'
+                      : undefined;
+        if (issue.path === 'collection/source-scope') return false;
+        return !fullStage || !complete.has(stageKey(namespace, fullStage));
+      }),
       ...fresh.issues.filter(
         (issue) => issue.path !== 'collection/source-scope',
       ),
@@ -79,11 +155,8 @@ export function mergeRefresh(
     collection: fresh.collection
       ? {
           ...fresh.collection,
-          requestPolicy: {
-            ...fresh.collection.requestPolicy,
-            sources: base.collection?.requestPolicy.sources,
-          },
-          scope: base.collection?.scope,
+          requestPolicy: fresh.collection.requestPolicy,
+          scope: fresh.collection.scope,
         }
       : undefined,
     refresh: {

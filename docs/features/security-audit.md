@@ -125,3 +125,51 @@ credentials are retained. Resume requires a valid initiating token again.
 See [architecture](../architecture/security-audit.md) for extension points,
 [CLI and development](../development/security-audit.md) for commands, and
 [local lab](../development/audit-lab.md) for disposable test data.
+
+## Local inventory and immutable snapshots
+
+Sources now manages the current local configuration inventory, saved snapshots,
+collection history and the server-side SQLite location. No additional database
+service is required. This is manual synchronization; schedules and unattended
+credentials are not enabled.
+
+- **Update inventory** rereads the selected resource categories and filters,
+  merges observations into the current inventory and saves a new immutable snapshot.
+  **Analyze after update** additionally runs the saved checks and exceptions.
+- **Analyze latest snapshot**, or **Analyze** beside an older snapshot, creates an
+  analysis run without collecting Vault configuration again. Request authentication
+  still validates the current session with Vault.
+- The Findings **Run audit** action also updates the inventory before analysis.
+- Snapshot IDs are independent of run IDs. Deleting a run does not delete its
+  snapshot or the current inventory. Snapshot cleanup is not enabled yet.
+- Existing completed run payloads are preserved. A one-time SQLite migration
+  creates independent snapshot records and selects the latest native collection;
+  a later reanalysis or imported snapshot does not become the current inventory.
+- Imports remain separate. The legacy explicit historical-refresh endpoint creates
+  an independent snapshot branch; it does not replace the current inventory.
+
+Filters define the update scope, not the inventory's entire contents. For example,
+refreshing `atlas-*` policies retains `cedar-*` and all untouched Identity data.
+An absent object is removed from the current view only after its namespace/stage
+was completely read and the object belongs to the selected filter. Errors and
+limits retain previous observations. Historical snapshots still contain objects
+that disappeared. No Vault deletion is performed.
+
+Retained objects keep their original observation times. Snapshot details show the
+collection interval, filters, parent snapshot and retained count. A snapshot is a
+set of API observations, not an atomic Vault/Raft backup. Policy and alias absence
+checks require current coverage; retained data does not imply fresh completeness.
+Full policy-source redaction continues to limit later offline analysis.
+
+The backend executes one worker job at a time. Browser closure does not cancel it;
+server shutdown or token expiry can interrupt it. Snapshot publication and the
+inventory pointer update occur in one SQLite transaction. Failed collections with
+no usable reads leave the inventory unchanged. A successful collection remains
+available even if subsequent analysis fails. A restart marks unfinished jobs
+interrupted; it does not persist the browser token or silently restart them.
+
+Storage remains protected by the existing audit administrator access checks and
+partitioned by the configured Vault address. This first version assumes that an
+address continues to identify the same cluster and authorization boundary; cluster
+replacement and multiple independent credential profiles require explicit source
+identity management before sharing a database between those deployments.
