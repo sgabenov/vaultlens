@@ -448,7 +448,7 @@ export default function AuditRulesPage() {
                         className="mt-2 text-xs text-slate-500"
                       >
                         {hasSeverityOverride(chosen)
-                          ? `Manual override: ${severity(chosen)}. Reset restores the check's default severity logic.`
+                          ? `Manual override: ${severity(chosen)}. Default: ${chosen.severity}. Reset restores the check's default severity logic.`
                           : isTTL
                             ? 'Default: medium. Findings become high above a high threshold; actual severity is determined during analysis.'
                             : `Default: ${chosen.severity}. Findings may use a different severity when the detector evaluates the collected data.`}
