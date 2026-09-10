@@ -53,9 +53,9 @@ function Evidence({
             <AuditDisclosureIcon level="detail" />
             <span>Related resources · {finding.relatedObjects.length}</span>
           </summary>
-          <ul>
+          <ul className="mt-2 space-y-2 rounded bg-gray-50 p-3 font-mono text-xs">
             {finding.relatedObjects.map((object, index) => (
-              <li key={index} className="mt-1 break-all font-mono text-xs">
+              <li key={index} className="break-words [overflow-wrap:anywhere]">
                 {object.kind} · {object.path}
               </li>
             ))}
