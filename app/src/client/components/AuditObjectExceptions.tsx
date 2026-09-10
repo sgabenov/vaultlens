@@ -371,7 +371,7 @@ export default function AuditObjectExceptions() {
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500">
               {[
-                'State',
+                'Exception status',
                 'Exception / type',
                 'Target / namespace',
                 'Checks',
@@ -394,7 +394,8 @@ export default function AuditObjectExceptions() {
                     <input
                       type="checkbox"
                       role="switch"
-                      aria-label={`Enable ${entry.name || entry.rule_id}`}
+                      aria-label={`Enable exception for ${entry.name || entry.rule_id}`}
+                      aria-describedby={`exception-effect-${entry.id}`}
                       checked={entry.enabled !== false}
                       disabled={
                         toggle.isPending ||
@@ -410,8 +411,24 @@ export default function AuditObjectExceptions() {
                       className="peer sr-only"
                     />
                     <span className="relative h-5 w-9 shrink-0 rounded-full bg-slate-300 after:absolute after:left-1 after:top-1 after:h-3 after:w-3 after:rounded-full after:bg-white peer-checked:bg-blue-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-disabled:opacity-50" />
-                    <span>{entry.enabled === false ? 'Off' : 'On'}</span>
+                    <span className="whitespace-nowrap">
+                      {entry.enabled === false
+                        ? 'Exception off'
+                        : 'Exception on'}
+                    </span>
                   </label>
+                  <p
+                    id={`exception-effect-${entry.id}`}
+                    className="mt-2 max-w-48 text-xs text-slate-500"
+                  >
+                    {entry.object_type === 'token'
+                      ? 'Target not collected. Exception unavailable.'
+                      : entry.enabled === false
+                        ? 'Target stays in audit scope. No findings are excepted by this rule.'
+                        : entry.expires !== 'never' && entry.expires < today
+                          ? 'Exception expired. Target stays in audit scope.'
+                          : 'Selected checks still run. Matching findings are marked as excepted.'}
+                  </p>
                 </td>
                 <td className="p-3 align-top">
                   <div className="font-medium">
