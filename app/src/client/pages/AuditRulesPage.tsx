@@ -108,8 +108,10 @@ export default function AuditRulesPage() {
     );
   const active = (rule: RuleView) =>
     Boolean(value(['rules', rule.id, 'enabled'], rule.active));
+  const hasSeverityOverride = (rule: RuleView) =>
+    document?.hasIn(['rules', rule.id, 'severity']) ?? false;
   const severity = (rule: RuleView) =>
-    String(value(['rules', rule.id, 'severity'], 'auto'));
+    String(value(['rules', rule.id, 'severity'], rule.severity));
   function update(changes: { path: string[]; value: unknown }[]) {
     if (!settings || !document || saving) return;
     for (const change of changes) {
@@ -344,9 +346,10 @@ export default function AuditRulesPage() {
                         <span className="text-xs text-slate-500">
                           {chosen.id} / Built-in · {chosen.status}
                         </span>
-                        <label className="flex items-center gap-2 text-xs text-slate-500">
-                          Severity
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <label htmlFor="check-severity">Severity</label>
                           <select
+                            id="check-severity"
                             aria-label="Check severity"
                             aria-describedby="check-severity-help"
                             disabled={saving}
@@ -356,22 +359,33 @@ export default function AuditRulesPage() {
                               update([
                                 {
                                   path: ['rules', chosen.id, 'severity'],
-                                  value:
-                                    event.target.value === 'auto'
-                                      ? undefined
-                                      : event.target.value,
+                                  value: event.target.value,
                                 },
                               ])
                             }
                           >
-                            <option value="auto">Auto</option>
                             {SEVERITIES.map((level) => (
                               <option key={level} value={level}>
                                 {level}
                               </option>
                             ))}
                           </select>
-                        </label>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 disabled:opacity-40"
+                            disabled={saving || !hasSeverityOverride(chosen)}
+                            onClick={() =>
+                              update([
+                                {
+                                  path: ['rules', chosen.id, 'severity'],
+                                  value: undefined,
+                                },
+                              ])
+                            }
+                          >
+                            Reset to default
+                          </button>
+                        </div>
                       </div>
                       <h3 className="text-lg font-semibold">{chosen.title}</h3>
                       <p className="mt-2 text-xs text-slate-500">
@@ -383,11 +397,11 @@ export default function AuditRulesPage() {
                         id="check-severity-help"
                         className="mt-2 text-xs text-slate-500"
                       >
-                        {severity(chosen) === 'auto'
-                          ? isTTL
-                            ? 'Auto: medium above warning limits; high above high limits.'
-                            : `Auto uses the detector severity. Rule default: ${chosen.severity}.`
-                          : 'Fixed severity override for this check. Detection conditions are unchanged.'}
+                        {hasSeverityOverride(chosen)
+                          ? `Manual override: ${severity(chosen)}. Reset restores the check's default severity logic.`
+                          : isTTL
+                            ? 'Default: medium. Findings become high above a high threshold; actual severity is determined during analysis.'
+                            : `Default: ${chosen.severity}. Findings may use a different severity when the detector evaluates the collected data.`}
                       </p>
                     </div>
                     <p className="text-sm text-slate-600">
