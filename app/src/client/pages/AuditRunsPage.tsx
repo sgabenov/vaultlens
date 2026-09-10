@@ -7,6 +7,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSecurityAuditRuns, deleteSecurityAuditRuns } from '../lib/api';
 
+const rowActionClass =
+  'inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border border-slate-200 text-sm';
+
 export default function AuditRunsPage() {
   const [params, setParams] = useSearchParams();
   const client = useQueryClient();
@@ -299,29 +302,38 @@ export default function AuditRunsPage() {
                     <td className="p-3">{run.findingCount}</td>
                     <td className="p-3">{run.issueCount}</td>
                     <td className="p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {hasAuditResults(run) ? (
-                          <Link
-                            aria-label={`View findings for run ${run.id.slice(0, 8)}`}
-                            className="whitespace-nowrap rounded-md border border-slate-200 px-3 py-1.5 text-blue-700 hover:border-blue-300 hover:bg-blue-50"
-                            to={`/security-audit/findings?${new URLSearchParams({ run: run.id })}`}
-                          >
-                            View findings →
-                          </Link>
-                        ) : (
-                          <span className="text-xs text-slate-500">
-                            {run.status === 'running'
-                              ? 'In progress'
-                              : 'Not analyzed'}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           aria-label={`Info for run ${run.id.slice(0, 8)}`}
-                          className="rounded border px-3 py-1"
+                          className={`${rowActionClass} text-slate-700 hover:bg-slate-50`}
                           onClick={() => setInfo(run.id)}
                         >
                           Info
                         </button>
+                        {hasAuditResults(run) ? (
+                          <Link
+                            aria-label={`Show findings for run ${run.id.slice(0, 8)}`}
+                            className={`${rowActionClass} text-blue-700 hover:border-blue-300 hover:bg-blue-50`}
+                            to={`/security-audit/findings?${new URLSearchParams({ run: run.id })}`}
+                          >
+                            Show
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className={`${rowActionClass} cursor-not-allowed text-slate-400`}
+                            title={
+                              run.status === 'running'
+                                ? 'Audit in progress'
+                                : 'No analysis results'
+                            }
+                            aria-label={`Show findings unavailable: ${run.status === 'running' ? 'audit in progress' : 'not analyzed'}`}
+                          >
+                            Show
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
