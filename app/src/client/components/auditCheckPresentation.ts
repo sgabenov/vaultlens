@@ -73,3 +73,29 @@ export function checkExample(rule: RuleView) {
     }).trim(),
   };
 }
+
+/** Resource type is separate from the check's topic/category and stable ID. */
+export function checkObjectTypes(rule: RuleView): string {
+  const labels: Record<string, string> = {
+    acl_policy: 'ACL policy',
+    policy: 'ACL policy',
+    token_role: 'Token role',
+    approle: 'AppRole role',
+    jwt_role: 'JWT/OIDC role',
+    kubernetes_role: 'Kubernetes role',
+    auth_role: 'Auth role',
+    entity: 'Identity entity',
+    group: 'Identity group',
+    alias: 'Identity alias',
+    'transit-key': 'Transit key',
+    'pki-role': 'PKI role',
+    'pki-issuer': 'PKI issuer',
+  };
+  return [
+    ...new Set(
+      rule.object_types.map(
+        (type) => labels[type] ?? type.replace(/[_-]/g, ' '),
+      ),
+    ),
+  ].join(' / ');
+}

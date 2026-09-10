@@ -2,6 +2,7 @@ import { useAuditDraft } from '../components/AuditDraftContext';
 import AuditPagination from '../components/AuditPagination';
 import {
   checkExample,
+  checkObjectTypes,
   ttlDetectors,
   privilegedDetectors,
 } from '../components/auditCheckPresentation';
@@ -66,6 +67,10 @@ export default function AuditRulesPage() {
   } = useAuditDraft();
   const [message, setMessage] = useState('');
   const [size, setSize] = useState(10);
+  const [sort, setSort] = useState<{
+    key: 'Check' | 'Severity' | 'On';
+    descending: boolean;
+  } | null>(null);
   const save = useMutation({
     mutationFn: saveAuditRules,
     onMutate: () => setSaving(true),
@@ -84,10 +89,41 @@ export default function AuditRulesPage() {
     document?.getIn(path) ?? fallback;
   const rules =
     query.data?.catalog.filter((rule) => rule.source === 'builtin') ?? [];
-  const inGroup =
+  const active = (rule: RuleView) =>
+    Boolean(value(['rules', rule.id, 'enabled'], rule.active));
+  const hasSeverityOverride = (rule: RuleView) =>
+    document?.hasIn(['rules', rule.id, 'severity']) ?? false;
+  const severity = (rule: RuleView) =>
+    String(value(['rules', rule.id, 'severity'], rule.severity));
+  const members =
     group === 'All'
       ? rules
       : rules.filter((rule) => checkGroup(rule) === group);
+  function sorted(items: RuleView[], order: typeof sort) {
+    if (!order) return items;
+    return [...items].sort((a, b) => {
+      const result =
+        order.key === 'Check'
+          ? a.title.localeCompare(b.title, 'en', { sensitivity: 'base' })
+          : order.key === 'On'
+            ? Number(active(a)) - Number(active(b))
+            : SEVERITIES.indexOf(severity(b) as (typeof SEVERITIES)[number]) -
+              SEVERITIES.indexOf(severity(a) as (typeof SEVERITIES)[number]);
+      return (
+        (order.descending ? -result : result) ||
+        a.id.localeCompare(b.id, 'en', { numeric: true })
+      );
+    });
+  }
+  const inGroup = sorted(members, sort);
+  function changeSort(key: 'Check' | 'Severity' | 'On') {
+    const next = {
+      key,
+      descending: sort?.key === key ? !sort.descending : key !== 'Check',
+    };
+    setSort(next);
+    setSelected(sorted(members, next)[0]?.id ?? '');
+  }
   const chosen = inGroup.find((rule) => rule.id === selected) ?? inGroup[0];
   const chosenIndex = Math.max(
     0,
@@ -106,12 +142,6 @@ export default function AuditRulesPage() {
     ['jwt_broad_glob', 'jwt_bound_claims', 'kubernetes_wildcard_name'].includes(
       chosen.detector,
     );
-  const active = (rule: RuleView) =>
-    Boolean(value(['rules', rule.id, 'enabled'], rule.active));
-  const hasSeverityOverride = (rule: RuleView) =>
-    document?.hasIn(['rules', rule.id, 'severity']) ?? false;
-  const severity = (rule: RuleView) =>
-    String(value(['rules', rule.id, 'severity'], rule.severity));
   function update(changes: { path: string[]; value: unknown }[]) {
     if (!settings || !document || saving) return;
     for (const change of changes) {
@@ -241,6 +271,11 @@ export default function AuditRulesPage() {
               );
             })}
           </div>
+          <p className="text-xs text-slate-500">
+            Categories group checks by topic. Each check shows its resource
+            type; POL identifies ACL policy checks, including those concerning
+            tokens.
+          </p>
           {!inGroup.length ? (
             <p className="rounded border p-4 text-sm text-gray-500">
               No dedicated built-in checks in this category yet. Collection of
@@ -278,16 +313,31 @@ export default function AuditRulesPage() {
               </div>
               <div className="grid items-start gap-5 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.2fr)]">
                 <div className="min-w-0" aria-label="Check list">
-                  <div className="grid grid-cols-[24px_minmax(0,1fr)_64px] gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-500">
-                    <span>On</span>
-                    <span>Check</span>
-                    <span>Severity</span>
+                  <div className="grid grid-cols-[40px_minmax(0,1fr)_80px] gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-500">
+                    {(['On', 'Check', 'Severity'] as const).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => changeSort(key)}
+                        aria-label={`Sort by ${key}${sort?.key === key ? (sort.descending ? ', descending' : ', ascending') : ''}`}
+                        className={`flex items-center gap-1 text-left hover:text-blue-700 ${sort?.key === key ? 'text-blue-700' : ''}`}
+                      >
+                        {key}
+                        <span aria-hidden="true">
+                          {sort?.key === key
+                            ? sort.descending
+                              ? '↓'
+                              : '↑'
+                            : '↕'}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                   <div className="divide-y divide-slate-200">
                     {visible.map((rule) => (
                       <div
                         key={rule.id}
-                        className={`grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 px-3 py-3 ${rule.id === chosen?.id ? 'bg-blue-50 shadow-[inset_2px_0_0_#2563eb]' : 'hover:bg-slate-50'}`}
+                        className={`grid grid-cols-[40px_minmax(0,1fr)] items-center gap-2 px-3 py-3 ${rule.id === chosen?.id ? 'bg-blue-50 shadow-[inset_2px_0_0_#2563eb]' : 'hover:bg-slate-50'}`}
                       >
                         <input
                           type="checkbox"
@@ -308,11 +358,11 @@ export default function AuditRulesPage() {
                           onClick={() => setSelected(rule.id)}
                           aria-pressed={rule.id === chosen?.id}
                           aria-controls="check-configuration"
-                          className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px] items-center gap-2 text-left"
+                          className="grid min-w-0 grid-cols-[minmax(0,1fr)_80px] items-center gap-2 text-left"
                         >
                           <span className="min-w-0">
                             <span className="text-xs text-slate-500">
-                              {rule.id} / {checkGroup(rule)}
+                              {rule.id} / {checkObjectTypes(rule)}
                             </span>
                             <span className="mt-1 block text-sm font-medium">
                               {rule.title}
@@ -344,7 +394,8 @@ export default function AuditRulesPage() {
                     <div>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                         <span className="text-xs text-slate-500">
-                          {chosen.id} / Built-in · {chosen.status}
+                          {chosen.id} / {checkObjectTypes(chosen)} ·{' '}
+                          {chosen.status}
                         </span>
                         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                           <label htmlFor="check-severity">Severity</label>
