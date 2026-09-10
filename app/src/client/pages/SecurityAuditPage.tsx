@@ -1,9 +1,10 @@
+import { isAxiosError } from 'axios';
 import { auditPollingInterval } from '../lib/requestBackoff';
 import AuditFindings from '../components/AuditFindings';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditRunDialog from '../components/AuditRunDialog';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import AuditResultPicker, {
   hasAuditResults,
@@ -17,6 +18,10 @@ import {
 const collectionInput =
   'min-h-[42px] w-full min-w-0 rounded-md border border-[#dce3ed] bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500';
 export default function SecurityAuditPage() {
+  const [recoveredRun, setRecoveredRun] = useState<{
+    missing: string;
+    latest: string;
+  } | null>(null);
   const [recursiveNamespaces, setRecursiveNamespaces] = useState(false);
   const [namespace, setNamespace] = useState('');
   const [scopeText, setScopeText] = useState({
@@ -82,6 +87,11 @@ export default function SecurityAuditPage() {
     queryKey: ['security-audit-run', id],
     queryFn: () => getSecurityAuditRun(id),
     enabled: !!id,
+    retry: (attempt, error) =>
+      !isAxiosError(error) ||
+      ![401, 403, 404, 429].includes(error.response?.status ?? 0)
+        ? attempt < 1
+        : false,
     refetchInterval: (q) =>
       q.state.data?.run.status === 'running'
         ? auditPollingInterval(true)
@@ -113,7 +123,46 @@ export default function SecurityAuditPage() {
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
-  const error = runs.error || detail.error || start.error;
+  const runMissing =
+    isAxiosError(detail.error) && detail.error.response?.status === 404;
+  const { refetch: refreshRuns } = runs;
+  useEffect(() => {
+    if (!runMissing) return;
+    let cancelled = false;
+    // Refresh the list before recovering from a deleted or stale run link.
+    void refreshRuns().then((result) => {
+      const latest = !result.isError
+        ? result.data?.find((run) => run.id !== id && hasAuditResults(run))
+        : undefined;
+      if (cancelled || !latest) return;
+      setRecoveredRun({ missing: id, latest: latest.id });
+      setParams(
+        (current) => {
+          if (current.get('run') !== id) return current;
+          const next = new URLSearchParams(current);
+          next.set('run', latest.id);
+          return next;
+        },
+        { replace: true },
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [runMissing, id, refreshRuns, setParams]);
+  const error =
+    runs.error || (!runMissing ? detail.error : null) || start.error;
+  const errorStatus = isAxiosError(error) ? error.response?.status : undefined;
+  const errorMessage =
+    errorStatus === 403
+      ? 'Audit access requires root or vaultlens-admin.'
+      : errorStatus === 401
+        ? 'Your session is no longer valid. Sign in again.'
+        : errorStatus === 429
+          ? 'Too many requests. Please wait before trying again.'
+          : errorStatus && errorStatus >= 500
+            ? 'The audit service is temporarily unavailable. Try again shortly.'
+            : error?.message;
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -369,19 +418,71 @@ export default function SecurityAuditPage() {
           role="alert"
           className="rounded border border-red-200 bg-red-50 p-3 text-red-800"
         >
-          {error.message}. Audit access requires root or vaultlens-admin.
+          {errorMessage}
         </p>
+      )}
+      {recoveredRun?.latest === id && (
+        <p
+          role="status"
+          className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"
+        >
+          The requested run <code>{recoveredRun.missing}</code> is no longer
+          available. Showing the latest available audit result instead.
+        </p>
+      )}
+      {!id && runs.isSuccess && !latestId && (
+        <p
+          role="status"
+          className="rounded-lg border border-slate-200 p-4 text-sm text-slate-600"
+        >
+          No analyzed runs are available yet. Use Run audit to collect data and
+          create your first result.
+        </p>
+      )}
+      {runMissing && (
+        <section
+          role="status"
+          className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <h3 className="font-medium">This audit run is no longer available</h3>
+          <p>
+            Run <code className="break-all">{id}</code> was not found for this
+            Vault connection. It may have been deleted or the link may refer to
+            another connection. This is not an authorization error.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {latestId && latestId !== id && (
+              <button
+                type="button"
+                className="rounded-md bg-blue-600 px-3 py-2 text-white"
+                onClick={() => setSelected(latestId)}
+              >
+                Open latest result
+              </button>
+            )}
+            <Link
+              className="rounded-md border border-amber-300 bg-white px-3 py-2"
+              to="/security-audit/runs"
+            >
+              View available runs
+            </Link>
+          </div>
+        </section>
       )}
       <div className="space-y-4">
         <AuditResultPicker
           runs={runs.data ?? []}
-          current={detail.data?.run ?? runs.data?.find((run) => run.id === id)}
+          current={
+            runMissing
+              ? undefined
+              : (detail.data?.run ?? runs.data?.find((run) => run.id === id))
+          }
           selectedId={id}
           loading={runs.isPending || (!!id && detail.isPending)}
           onSelect={setSelected}
         />
         <section className="min-w-0 space-y-4">
-          {detail.data && (
+          {detail.data && !runMissing && (
             <>
               <div className="grid grid-cols-3 gap-3">
                 {[
