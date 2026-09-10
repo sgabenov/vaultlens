@@ -340,10 +340,10 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
             }}
           />
         </label>
-        <label className="text-sm">
+        <label className="w-36 shrink-0 text-sm">
           Group by
           <select
-            className="mt-1 block rounded border border-slate-200 bg-white p-2"
+            className="mt-1 block w-full rounded border border-slate-200 bg-white p-2"
             value={grouping}
             onChange={(event) => {
               setGrouping(event.target.value as FindingGrouping);
@@ -356,10 +356,10 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
           </select>
         </label>
         {filters.map((filter) => (
-          <label key={filter.label} className="text-sm">
+          <label key={filter.label} className="w-36 shrink-0 text-sm">
             {filter.label}
             <select
-              className="mt-1 block max-w-full rounded border border-slate-200 bg-white p-2"
+              className="mt-1 block w-full rounded border border-slate-200 bg-white p-2"
               value={filter.value}
               onChange={(event) => {
                 filter.change(event.target.value);
