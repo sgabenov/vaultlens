@@ -1,3 +1,4 @@
+import AuditPagination, { AuditPageSize } from '../components/AuditPagination';
 import { hasAuditResults } from '../components/AuditResultPicker';
 import { auditPollingInterval } from '../lib/requestBackoff';
 import AuditRunInfo from '../components/AuditRunInfo';
@@ -227,21 +228,13 @@ export default function AuditRunsPage() {
             <p className="text-gray-500">
               Most recent runs · up to 100 retained in this list
             </p>
-            <label>
-              Per page
-              <select
-                className="ml-2 rounded border p-1"
-                value={size}
-                onChange={(event) => {
-                  setSize(Number(event.target.value));
-                  setPage(1);
-                }}
-              >
-                {[10, 25, 50].map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </label>
+            <AuditPageSize
+              size={size}
+              onChange={(value) => {
+                setSize(value);
+                setPage(1);
+              }}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -341,25 +334,12 @@ export default function AuditRunsPage() {
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-end gap-3 text-sm">
-            <span>
-              {(page - 1) * size + 1}–{Math.min(page * size, total)} of {total}
-            </span>
-            <button
-              className="rounded border px-2 py-1 disabled:opacity-40"
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-            >
-              Previous
-            </button>
-            <button
-              className="rounded border px-2 py-1 disabled:opacity-40"
-              disabled={page * size >= total}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <AuditPagination
+            page={page}
+            total={total}
+            size={size}
+            onChange={setPage}
+          />
         </>
       )}
       {info && (

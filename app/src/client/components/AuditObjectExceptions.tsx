@@ -1,3 +1,4 @@
+import AuditPagination from './AuditPagination';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -75,7 +76,11 @@ export default function AuditObjectExceptions() {
           entry.reason,
         ].some((value) => value.toLowerCase().includes(search.toLowerCase())),
     ) ?? [];
-  const page = Math.min(requested, Math.max(1, Math.ceil(matches.length / 10)));
+  const [size, setSize] = useState(10);
+  const page = Math.min(
+    requested,
+    Math.max(1, Math.ceil(matches.length / size)),
+  );
   function edit(entry?: AuditException) {
     save.reset();
     setNotice('');
@@ -270,7 +275,7 @@ export default function AuditObjectExceptions() {
           {errorText(query.error || remove.error)}
         </p>
       )}
-      {matches.slice((page - 1) * 10, page * 10).map((entry) => (
+      {matches.slice((page - 1) * size, page * size).map((entry) => (
         <article
           key={entry.id}
           className="space-y-1 rounded border p-4 text-sm"
@@ -306,25 +311,13 @@ export default function AuditObjectExceptions() {
       {!query.isPending && !query.error && !matches.length && (
         <p className="text-sm text-gray-500">No matching exceptions.</p>
       )}
-      <div className="flex items-center justify-end gap-3 text-sm">
-        <span>
-          {matches.length} matches · page {page}
-        </span>
-        <button
-          disabled={page <= 1}
-          onClick={() => setPage(page - 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
-        >
-          Previous
-        </button>
-        <button
-          disabled={page * 10 >= matches.length}
-          onClick={() => setPage(page + 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
-        >
-          Next
-        </button>
-      </div>
+      <AuditPagination
+        page={page}
+        total={matches.length}
+        size={size}
+        onChange={setPage}
+        onSizeChange={setSize}
+      />
     </section>
   );
 }

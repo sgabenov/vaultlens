@@ -1,3 +1,4 @@
+import AuditPagination from './AuditPagination';
 import AuditDisclosureIcon from './AuditDisclosureIcon';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -35,6 +36,7 @@ export default function AuditPolicyAssignments({
 }: {
   usage: PolicyUsage;
 }) {
+  const [size, setSize] = useState(10);
   const [query, setQuery] = useState(''),
     [page, setPage] = useState(1);
   const rows = usage.references.filter((reference) =>
@@ -45,7 +47,7 @@ export default function AuditPolicyAssignments({
       reference.sourcePath,
     ].some((value) => value.toLowerCase().includes(query.toLowerCase())),
   );
-  const current = Math.min(page, Math.max(1, Math.ceil(rows.length / 25)));
+  const current = Math.min(page, Math.max(1, Math.ceil(rows.length / size)));
   return (
     <details>
       <summary className="audit-disclosure-summary">
@@ -103,7 +105,7 @@ export default function AuditPolicyAssignments({
               </thead>
               <tbody>
                 {rows
-                  .slice((current - 1) * 25, current * 25)
+                  .slice((current - 1) * size, current * size)
                   .map((reference, index) => (
                     <tr key={index} className="border-t align-top">
                       <td className="px-3 py-2">
@@ -160,27 +162,13 @@ export default function AuditPolicyAssignments({
           {!rows.length && (
             <p className="mt-2 text-xs">No matching assignments.</p>
           )}
-          {rows.length > 25 && (
-            <div className="mt-3 flex items-center gap-3 text-xs">
-              <span>
-                {rows.length} matches · page {current}
-              </span>
-              <button
-                disabled={current <= 1}
-                className="rounded border px-2 py-1 disabled:opacity-40"
-                onClick={() => setPage(current - 1)}
-              >
-                Previous
-              </button>
-              <button
-                disabled={current * 25 >= rows.length}
-                className="rounded border px-2 py-1 disabled:opacity-40"
-                onClick={() => setPage(current + 1)}
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <AuditPagination
+            page={current}
+            total={rows.length}
+            size={size}
+            onChange={setPage}
+            onSizeChange={setSize}
+          />
         </>
       )}
     </details>

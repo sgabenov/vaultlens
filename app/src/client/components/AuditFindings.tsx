@@ -1,3 +1,4 @@
+import Pager, { AuditPageSize } from './AuditPagination';
 import AuditDisclosureIcon from './AuditDisclosureIcon';
 import AuditFindingReason, {
   AuditFindingTechnicalDetails,
@@ -18,40 +19,6 @@ import type {
   AuditControls,
 } from '../../shared/securityAudit';
 
-function Pager({
-  page,
-  total,
-  size,
-  onChange,
-}: {
-  page: number;
-  total: number;
-  size: number;
-  onChange: (page: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-3 py-3 text-xs text-gray-600">
-      <span>
-        {total ? (page - 1) * size + 1 : 0}–{Math.min(page * size, total)} of{' '}
-        {total}
-      </span>
-      <button
-        className="rounded border border-slate-200 bg-white px-2 py-1 disabled:opacity-40"
-        disabled={page <= 1}
-        onClick={() => onChange(page - 1)}
-      >
-        Previous
-      </button>
-      <button
-        className="rounded border border-slate-200 bg-white px-2 py-1 disabled:opacity-40"
-        disabled={page * size >= total}
-        onClick={() => onChange(page + 1)}
-      >
-        Next
-      </button>
-    </div>
-  );
-}
 type FindingControl = AuditControls['states'][number] | null;
 function Evidence({
   finding,
@@ -158,7 +125,10 @@ function FindingRows({
   return (
     <div className="px-4">
       {findings.slice((page - 1) * size, page * size).map((finding, index) => (
-        <details key={`${page}:${index}`} className="border-t border-slate-200 py-3">
+        <details
+          key={`${page}:${index}`}
+          className="border-t border-slate-200 py-3"
+        >
           <summary className="audit-disclosure-summary text-sm">
             <AuditDisclosureIcon level="finding" />
             <span className="min-w-0">
@@ -389,21 +359,13 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
           {detail.findings.length.toLocaleString()} findings
           {grouping !== 'none' ? ` · ${groups.length} groups` : ''}
         </p>
-        <label>
-          Per page
-          <select
-            className="ml-2 rounded border border-slate-200 bg-white p-1"
-            value={size}
-            onChange={(event) => {
-              setSize(Number(event.target.value));
-              reset();
-            }}
-          >
-            {[10, 25, 50, 100, 500].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-        </label>
+        <AuditPageSize
+          size={size}
+          onChange={(value) => {
+            setSize(value);
+            reset();
+          }}
+        />
       </div>
       {!matched.length && (
         <p className="rounded border border-slate-200 bg-white p-4 text-sm text-gray-500">

@@ -1,3 +1,4 @@
+import AuditPagination from '../components/AuditPagination';
 import { auditPollingInterval } from '../lib/requestBackoff';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -43,6 +44,10 @@ const patterns = (s: string) =>
 export default function AuditSourcesPage() {
   const navigate = useNavigate();
   const client = useQueryClient();
+  const [snapshotSize, setSnapshotSize] = useState(10);
+  const [snapshotRequested, setSnapshotPage] = useState(1);
+  const [historySize, setHistorySize] = useState(10);
+  const [historyRequested, setHistoryPage] = useState(1);
   const [tab, setTab] = useState('Inventory');
   const [inspectSnapshot, setInspectSnapshot] = useState('');
   const [open, setOpen] = useState(false);
@@ -75,7 +80,10 @@ export default function AuditSourcesPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
+    refetchInterval: (query) =>
+      auditPollingInterval(
+        !!query.state.data?.some((run) => run.status === 'running'),
+      ),
   });
   const running = runs.data?.find((r) => r.status === 'running');
   const jobId = running?.id || activeJob;
@@ -84,7 +92,9 @@ export default function AuditSourcesPage() {
     queryFn: () => getSecurityAuditRun(jobId),
     enabled: !!jobId,
     refetchInterval: (q) =>
-      q.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
+      q.state.data?.run.status === 'running'
+        ? auditPollingInterval(true)
+        : false,
   });
   useEffect(() => {
     if (job.data?.run.finishedAt) {
@@ -177,6 +187,16 @@ export default function AuditSourcesPage() {
       ? failure.response.data.error
       : 'Could not start the operation.'
     : '';
+  const snapshotTotal = data?.snapshots.length ?? 0;
+  const snapshotPage = Math.min(
+    snapshotRequested,
+    Math.max(1, Math.ceil(snapshotTotal / snapshotSize)),
+  );
+  const history = runs.data?.filter((r) => r.operation !== 'analyze') ?? [];
+  const historyPage = Math.min(
+    historyRequested,
+    Math.max(1, Math.ceil(history.length / historySize)),
+  );
   return (
     <section className="space-y-5">
       <h2 className="text-lg font-semibold">Sources</h2>
@@ -411,39 +431,51 @@ export default function AuditSourcesPage() {
                 </tr>
               </thead>
               <tbody>
-                {data?.snapshots.map((s) => (
-                  <tr key={s.id} className="border-b border-slate-200">
-                    <td className="p-3 font-mono text-xs">
-                      <button
-                        className="text-blue-700 underline"
-                        onClick={() => setInspectSnapshot(s.id)}
-                      >
-                        {short(s.id)}
-                      </button>
-                      {data.current?.id === s.id && (
-                        <span className="ml-2 text-blue-700">Latest</span>
-                      )}
-                      <p className="font-sans text-slate-500">{s.origin}</p>
-                    </td>
-                    <td className="p-3 text-xs">{date(s.createdAt)}</td>
-                    <td className="p-3">{s.resourceCount}</td>
-                    <td className="p-3 text-xs">
-                      {s.issueCount} gaps · {s.retainedCount} retained
-                    </td>
-                    <td className="p-3">
-                      <button
-                        className={button}
-                        disabled={unavailable}
-                        onClick={() => analysis.mutate(s.id)}
-                      >
-                        Analyze
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {data?.snapshots
+                  .slice(
+                    (snapshotPage - 1) * snapshotSize,
+                    snapshotPage * snapshotSize,
+                  )
+                  .map((s) => (
+                    <tr key={s.id} className="border-b border-slate-200">
+                      <td className="p-3 font-mono text-xs">
+                        <button
+                          className="text-blue-700 underline"
+                          onClick={() => setInspectSnapshot(s.id)}
+                        >
+                          {short(s.id)}
+                        </button>
+                        {data.current?.id === s.id && (
+                          <span className="ml-2 text-blue-700">Latest</span>
+                        )}
+                        <p className="font-sans text-slate-500">{s.origin}</p>
+                      </td>
+                      <td className="p-3 text-xs">{date(s.createdAt)}</td>
+                      <td className="p-3">{s.resourceCount}</td>
+                      <td className="p-3 text-xs">
+                        {s.issueCount} gaps · {s.retainedCount} retained
+                      </td>
+                      <td className="p-3">
+                        <button
+                          className={button}
+                          disabled={unavailable}
+                          onClick={() => analysis.mutate(s.id)}
+                        >
+                          Analyze
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
+          <AuditPagination
+            page={snapshotPage}
+            total={snapshotTotal}
+            size={snapshotSize}
+            onChange={setSnapshotPage}
+            onSizeChange={setSnapshotSize}
+          />
           {!data?.snapshots.length && (
             <p className="text-sm text-slate-500">No saved snapshots yet.</p>
           )}
@@ -464,8 +496,11 @@ export default function AuditSourcesPage() {
                 </tr>
               </thead>
               <tbody>
-                {runs.data
-                  ?.filter((r) => r.operation !== 'analyze')
+                {history
+                  .slice(
+                    (historyPage - 1) * historySize,
+                    historyPage * historySize,
+                  )
                   .map((r) => {
                     const s = data?.snapshots.find(
                       (s) => s.sourceJobId === r.id,
@@ -497,6 +532,13 @@ export default function AuditSourcesPage() {
               </tbody>
             </table>
           </div>
+          <AuditPagination
+            page={historyPage}
+            total={history.length}
+            size={historySize}
+            onChange={setHistoryPage}
+            onSizeChange={setHistorySize}
+          />
           <p className="text-xs text-slate-500">
             Collection runs on the backend. Closing the browser does not stop an
             active job. Server shutdown or token expiry can interrupt
