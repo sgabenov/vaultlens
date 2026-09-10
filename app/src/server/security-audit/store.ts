@@ -1,5 +1,6 @@
+import { canonicalCheckId } from '../../shared/auditCheckIds.js';
 import { withoutPolicySource } from './sourceRedaction.js';
-import { DEFAULT_SETTINGS, catalog } from './catalog.js';
+import { DEFAULT_SETTINGS, catalog, normalizeConfigIds } from './catalog.js';
 import type {
   RuleSettings,
   RunConfiguration,
@@ -290,9 +291,10 @@ export class AuditStore {
         'SELECT entry FROM audit_object_exceptions WHERE target=? ORDER BY id',
       )
       .all(target)
-      .map((row) => JSON.parse(String(row.entry)));
+      .map((row) => { const entry = JSON.parse(String(row.entry)); return { ...entry, rule_id: canonicalCheckId(entry.rule_id) }; });
   }
   addException(target: string, entry: AuditException): void {
+    entry = { ...entry, rule_id: canonicalCheckId(entry.rule_id) };
     const scope = JSON.stringify([
       entry.rule_id,
       entry.namespace,
@@ -301,6 +303,8 @@ export class AuditStore {
     ]);
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      if (this.exceptions(target).some(existing => existing.rule_id === entry.rule_id && existing.namespace === entry.namespace && existing.object_path === entry.object_path && (existing.policy_path ?? null) === (entry.policy_path ?? null)))
+        throw new Error('An exception already exists for this check and object');
       if (this.exceptions(target).length >= 1000)
         throw new Error('At most 1000 object exceptions are supported');
       if (
@@ -325,6 +329,7 @@ export class AuditStore {
     }
   }
   updateException(target: string, entry: AuditException): boolean {
+    entry = { ...entry, rule_id: canonicalCheckId(entry.rule_id) };
     const scope = JSON.stringify([
       entry.rule_id,
       entry.namespace,
@@ -352,9 +357,10 @@ export class AuditStore {
         'SELECT revision,configYaml,customRulesYaml FROM audit_settings ORDER BY revision DESC LIMIT 1',
       )
       .get() as unknown as RuleSettings | undefined;
-    return row ?? { ...DEFAULT_SETTINGS };
+    return row ? { ...row, configYaml: normalizeConfigIds(row.configYaml) } : { ...DEFAULT_SETTINGS };
   }
   saveSettings(next: RuleSettings): RuleSettings {
+    next = { ...next, configYaml: normalizeConfigIds(next.configYaml) };
     catalog(next);
     this.db.exec('BEGIN IMMEDIATE');
     try {

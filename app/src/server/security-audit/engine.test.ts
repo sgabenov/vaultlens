@@ -1,3 +1,4 @@
+import { canonicalCheckId } from '../../shared/auditCheckIds.js';
 import { exceptionMatches } from './exceptions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -222,7 +223,7 @@ test('auth detectors match Python evidence and severity across synthetic control
       }))
       .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
     try {
-      assert.deepEqual(actual, fixture.expected);
+      assert.deepEqual(actual, fixture.expected.map(f => ({ ...f, ruleId: canonicalCheckId(f.ruleId) })));
     } catch {
       mismatches.push({
         name: fixture.name,
@@ -308,7 +309,7 @@ test('policy detectors and lexical source information match the Python corpus', 
           matchedBlock: f.matchedBlock,
         }))
         .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
-      assert.deepEqual(actual, fixture.expected);
+      assert.deepEqual(actual, fixture.expected.map(f => ({ ...f, ruleId: canonicalCheckId(f.ruleId) })));
     } catch (error) {
       mismatches.push({ name: fixture.name, error: String(error) });
     }
@@ -492,7 +493,7 @@ test('six relationship detectors match Python evidence and severity', () => {
           [
             'POL-010',
             'POL-011',
-            'POL-012',
+            'TOKEN-006',
             'POL-013',
             'POL-014',
             'POL-015',
@@ -504,7 +505,7 @@ test('six relationship detectors match Python evidence and severity', () => {
         evidence: JSON.parse(f.evidence),
       }))
       .sort((a, b) => a.ruleId.localeCompare(b.ruleId));
-    assert.deepEqual(actual, fixture.expected, fixture.name);
+    assert.deepEqual(actual, fixture.expected.map(f => ({ ...f, ruleId: canonicalCheckId(f.ruleId) })).sort((a, b) => a.ruleId.localeCompare(b.ruleId)), fixture.name);
   }
 });
 
@@ -2706,18 +2707,18 @@ test('management checks use mount types, namespace and operation context', async
       parsePolicy(`path "${path}" { capabilities = ${JSON.stringify(caps)} }`),
       inventory,
     );
-  assert.equal(check('POL-017', 'crypto/keys/app', ['update']).length, 1);
-  assert.equal(check('POL-017', 'crypto/encrypt/app', ['update']).length, 0);
-  assert.equal(check('POL-017', 'transit/keys/app', ['update']).length, 0);
-  assert.equal(check('POL-017', 'crypto/keys/app', ['read']).length, 0);
+  assert.equal(check('TRANSIT-006', 'crypto/keys/app', ['update']).length, 1);
+  assert.equal(check('TRANSIT-006', 'crypto/encrypt/app', ['update']).length, 0);
+  assert.equal(check('TRANSIT-006', 'transit/keys/app', ['update']).length, 0);
+  assert.equal(check('TRANSIT-006', 'crypto/keys/app', ['read']).length, 0);
   assert.equal(
-    check('POL-017', 'crypto/keys/app', ['deny', 'update']).length,
+    check('TRANSIT-006', 'crypto/keys/app', ['deny', 'update']).length,
     0,
   );
-  assert.equal(check('POL-017', 'crypto/*', ['update']).length, 1);
+  assert.equal(check('TRANSIT-006', 'crypto/*', ['update']).length, 1);
   assert.equal(
     check(
-      'POL-017',
+      'TRANSIT-006',
       'crypto/keys/app',
       ['update'],
       mounts.map((m) => ({ ...m, namespace: 'other' })),
@@ -2725,11 +2726,11 @@ test('management checks use mount types, namespace and operation context', async
     0,
   );
   assert.equal(
-    check('POL-016', 'identity/group/id/example', ['update']).length,
+    check('IDENTITY-004', 'identity/group/id/example', ['update']).length,
     1,
   );
   assert.equal(
-    check('POL-016', 'identity/lookup/entity', ['update']).length,
+    check('IDENTITY-004', 'identity/lookup/entity', ['update']).length,
     0,
   );
   assert.equal(check('POL-020', 'store/metadata/app', ['update']).length, 0);
@@ -2749,7 +2750,7 @@ test('management checks use mount types, namespace and operation context', async
   );
   for (const [id, type, path] of [
     ['POL-018', 'database', 'custom/roles/app'],
-    ['POL-019', 'pki', 'custom/sign/app'],
+    ['PKI-007', 'pki', 'custom/sign/app'],
   ]) {
     assert.equal(
       check(
@@ -3224,4 +3225,30 @@ test('exception presets are disabled, persistent, scoped and support type-limite
     const controls=applyBaseline([finding],result.configuration,snapshot().target,undefined,[policy], '2026-09-10');
     assert.equal(controls.states[0].suppressed,false);
   }finally{store.close();rmSync(dir,{recursive:true,force:true})}
+});
+
+
+test('renamed check IDs preserve old overrides and exception matching', () => {
+  const configYaml = `version: 1\nprofile: default\nrules:\n  POL-005: { enabled: false, severity: critical }\n`;
+  const rule = catalog({ ...DEFAULT_SETTINGS, configYaml }).find(r => r.id === 'TOKEN-005')!;
+  assert.equal(rule.active, false);
+  assert.equal(rule.effectiveSeverity, 'critical');
+  assert.ok(!catalog(DEFAULT_SETTINGS).some(r => r.id === 'POL-005'));
+  const finding = { ruleId: 'TOKEN-005', namespace: '', path: 'sys/policies/acl/test' } as Parameters<typeof exceptionMatches>[1];
+  const entry = { rule_id: 'POL-005', namespace: '', object_path: finding.path, match: 'exact' } as Parameters<typeof exceptionMatches>[0];
+  assert.equal(exceptionMatches(entry, finding), true);
+  assert.equal(exceptionMatches({ ...entry, rule_id: 'TOKEN-005' }, { ...finding, ruleId: 'POL-005' }), true);
+});
+
+
+test('stored legacy configuration is exposed and saved with canonical IDs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-rename-'));
+  const store = new AuditStore(join(dir, 'audit.sqlite'));
+  try {
+    const saved = store.saveSettings({ ...DEFAULT_SETTINGS, configYaml: 'version: 1\nrules:\n  POL-005: { enabled: false, severity: critical }\n  TOKEN-005: { severity: low }\n' });
+    assert.doesNotMatch(saved.configYaml, /POL-005/);
+    const rule = catalog(store.settings()).find(r => r.id === 'TOKEN-005')!;
+    assert.equal(rule.active, false);
+    assert.equal(rule.effectiveSeverity, 'low');
+  } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
 });

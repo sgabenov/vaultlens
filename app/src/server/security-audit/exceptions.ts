@@ -1,3 +1,4 @@
+import { canonicalCheckId } from '../../shared/auditCheckIds.js';
 import { parseDocument } from 'yaml';
 import { globMatch } from './authDetectors.js';
 import type { AuditFinding } from '../../shared/securityAudit.js';
@@ -105,6 +106,7 @@ export function parseExceptions(
     if (seen.has(entry.id))
       throw new Error(`Duplicate exception id: ${entry.id}`);
     seen.add(entry.id);
+    entry.rule_id = canonicalCheckId(entry.rule_id);
     if (entry.rule_id !== '*' && !ruleIds.has(entry.rule_id))
       throw new Error(`Unknown exception rule: ${entry.rule_id}`);
     if (entry.expires !== 'never' && !validDate(entry.expires))
@@ -137,14 +139,14 @@ export function exceptionMatches(
     return false;
   if (entry.match === 'exact')
     return (
-      (entry.rule_id === '*' || entry.rule_id === finding.ruleId) &&
+      (entry.rule_id === '*' || canonicalCheckId(entry.rule_id) === canonicalCheckId(finding.ruleId)) &&
       entry.namespace === (finding.namespace ?? '') &&
       entry.object_path === finding.path &&
       (entry.policy_path === undefined ||
         entry.policy_path === finding.policyPath)
     );
   return (
-    (entry.rule_id === '*' || entry.rule_id === finding.ruleId) &&
+    (entry.rule_id === '*' || canonicalCheckId(entry.rule_id) === canonicalCheckId(finding.ruleId)) &&
     globMatch(entry.namespace, finding.namespace || 'root') &&
     globMatch(entry.object_path, finding.path) &&
     (entry.policy_path === undefined ||

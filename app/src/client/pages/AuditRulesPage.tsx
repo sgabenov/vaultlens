@@ -273,8 +273,7 @@ export default function AuditRulesPage() {
           </div>
           <p className="text-xs text-slate-500">
             Categories group checks by topic. Each check shows its resource
-            type; POL identifies ACL policy checks, including those concerning
-            tokens.
+            type.
           </p>
           {!inGroup.length ? (
             <p className="rounded border p-4 text-sm text-gray-500">

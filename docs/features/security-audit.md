@@ -225,3 +225,23 @@ The AppRole example connects privileged policies to weak credential settings.
 The technical details retain the specific conditions used by the check.
 
 ![Expanded AppRole finding](/screenshots/security-audit-finding-approle.png)
+
+
+### Check identifier changes
+
+Token, Identity, Transit and PKI checks use their category prefix:
+
+| Previous ID | Current ID |
+| --- | --- |
+| POL-005 | TOKEN-005 |
+| POL-012 | TOKEN-006 |
+| POL-016 | IDENTITY-004 |
+| POL-017 | TRANSIT-006 |
+| POL-019 | PKI-007 |
+
+Saved configuration overrides and exception references accept the previous IDs
+and expose the current IDs. Saving settings writes the current IDs. If both IDs
+are present, explicitly configured fields under the current ID take precedence.
+Historical findings keep their original IDs and remain readable; exceptions
+match either ID. New analyses use the current IDs. As with other catalog changes,
+run comparison requires matching saved analysis configurations.

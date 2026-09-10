@@ -1,3 +1,4 @@
+import { CHECK_ID_ALIASES } from '../../shared/auditCheckIds.js';
 import { RELATIONSHIP_DETECTORS } from './relationshipDetectors.js';
 import { POLICY_DETECTORS } from './policyDetectors.js';
 import { AUTH_DETECTORS } from './authDetectors.js';
@@ -223,7 +224,24 @@ export function parseRule(yaml: string): RuleDefinition {
     documentation: strings(raw.documentation ?? [], 'documentation'),
   } as RuleDefinition;
 }
+export function normalizeConfigIds(yaml: string): string {
+  const doc = parseDocument(yaml, { uniqueKeys: true });
+  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  const raw = doc.toJS({ maxAliasCount: 0 });
+  let changed = false;
+  for (const [oldId, newId] of Object.entries(CHECK_ID_ALIASES)) {
+    if (!doc.hasIn(['rules', oldId])) continue;
+    const oldValue = mapping(raw.rules[oldId], oldId);
+    const newValue = doc.hasIn(['rules', newId])
+      ? mapping(raw.rules[newId], newId) : {};
+    doc.setIn(['rules', newId], { ...oldValue, ...newValue });
+    doc.deleteIn(['rules', oldId]);
+    changed = true;
+  }
+  return changed ? doc.toString() : yaml;
+}
 export function parseConfig(yaml: string, ids: Set<string>) {
+  yaml = normalizeConfigIds(yaml);
   const raw = mapping(decode(yaml), 'configuration');
   only(
     raw,

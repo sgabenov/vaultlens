@@ -22,7 +22,7 @@ export const PRIVILEGE_SIGNALS = new Set([
   'POL-002',
   'POL-003',
   'POL-004',
-  'POL-005',
+  'TOKEN-005',
   'POL-008',
   'POL-009',
 ]);
