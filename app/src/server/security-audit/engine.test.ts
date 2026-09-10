@@ -114,7 +114,7 @@ test('catalog validates YAML, profiles, overrides and duplicate IDs without exec
     definitions.filter(
       (r) => r.source === 'builtin' && !r.id.startsWith('LOCAL-'),
     ).length,
-    58,
+    59,
   );
   assert.equal(definitions.find((r) => r.id === 'POL-008')?.active, false);
   const extended = catalog({
@@ -3251,4 +3251,21 @@ test('stored legacy configuration is exposed and saved with canonical IDs', () =
     assert.equal(rule.active, false);
     assert.equal(rule.effectiveSeverity, 'low');
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('short PKI role lifetime checks positive TTLs against a configurable minimum', () => {
+  const check = (data: Record<string, unknown>, minimum = '24h') => {
+    const s = snapshot();
+    s.resources = [{ kind: 'pki-role', path: 'pki/roles/web', data }];
+    return execute(s, { ...DEFAULT_SETTINGS, configYaml: `version: 1\nthresholds:\n  certificate_ttl_minimum: ${minimum}\n` }).findings.filter(f => f.ruleId === 'PKI-008');
+  };
+  assert.equal(check({ ttl: 3600, max_ttl: 172800 })[0].severity, 'low');
+  assert.equal(check({ ttl: '1h', no_store: true }).length, 1);
+  assert.equal(check({ max_ttl: '12h', no_store: false }).length, 1);
+  assert.equal(check({ ttl: '24h', max_ttl: '48h' }).length, 0);
+  assert.equal(check({ ttl: 0, max_ttl: 0 }).length, 0);
+  assert.equal(check({}).length, 0);
+  assert.equal(check({ ttl: '12h' }, '8h').length, 0);
+  assert.equal(JSON.parse(check({ ttl: '1h', no_store: false })[0].evidence).certificate_storage, 'enabled');
 });

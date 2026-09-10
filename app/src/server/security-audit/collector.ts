@@ -396,6 +396,7 @@ export async function collect(
                     'allow_subdomains',
                     'max_ttl',
                     'ttl',
+                    'no_store',
                     'key_type',
                     'key_bits',
                   ]

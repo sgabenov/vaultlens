@@ -51,6 +51,10 @@ const examples: Record<string, string> = {
     'bound_service_account_names = ["*"]\ntoken_policies = ["root"]',
 };
 export function checkExample(rule: RuleView) {
+  if (rule.id === 'PKI-008') return {
+    label: 'Example / short certificate lifetime',
+    source: 'ttl: 1h\nmax_ttl: 12h\nno_store: false\n\n# Both TTLs are below the default 24h review threshold.\n# Actual issuance volume and tidy configuration require separate review.',
+  };
   if (ttlDetectors.has(rule.detector))
     return {
       label: 'Example / role configuration',

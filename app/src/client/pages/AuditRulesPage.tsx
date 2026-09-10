@@ -137,6 +137,10 @@ export default function AuditRulesPage() {
   const chosenParameters = parameters.filter(
     (p) => p.detector === chosen?.detector,
   );
+  if (chosen?.id === 'PKI-008') chosenParameters.push({
+    detector: 'domain_configuration', section: 'thresholds', key: 'certificate_ttl_minimum',
+    label: 'Minimum certificate lifetime (seconds, or duration such as 12h or 1d)', fallback: '24h',
+  });
   const listParameters =
     !!chosen &&
     ['jwt_broad_glob', 'jwt_bound_claims', 'kubernetes_wildcard_name'].includes(

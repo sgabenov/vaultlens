@@ -174,7 +174,7 @@ export function parseRule(yaml: string): RuleDefinition {
     throw new Error('Forbidden field name');
   if (detector === 'domain_configuration') {
     const check = String(parameters.check ?? id);
-    const supported = ['TOKEN-001','TOKEN-002','TOKEN-003','TOKEN-004','IDENTITY-001','IDENTITY-002','IDENTITY-003','PKI-001','PKI-002','PKI-003','PKI-004','PKI-005','TRANSIT-001','TRANSIT-002','TRANSIT-003'];
+    const supported = ['TOKEN-001','TOKEN-002','TOKEN-003','TOKEN-004','IDENTITY-001','IDENTITY-002','IDENTITY-003','PKI-001','PKI-002','PKI-003','PKI-004','PKI-005','PKI-008','TRANSIT-001','TRANSIT-002','TRANSIT-003'];
     if (!supported.includes(check)) throw new Error('Unknown domain configuration check');
     const threshold = ['TOKEN-004','PKI-003'].includes(check) ? 'max_seconds' : ['PKI-005','TRANSIT-003'].includes(check) ? 'days' : null;
     if (threshold && (typeof parameters[threshold] !== 'number' || !Number.isFinite(parameters[threshold]) || Number(parameters[threshold]) <= 0))

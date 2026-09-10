@@ -166,6 +166,18 @@ export function evaluateDomain(
         });
     }
     if (resource.kind === 'pki-role') {
+      if (check === 'PKI-008') {
+        const threshold = seconds((context.config.thresholds as Record<string, unknown> | undefined)?.certificate_ttl_minimum ?? '24h');
+        const shortFields = ['ttl', 'max_ttl'].filter(field => seconds(d[field]) > 0 && seconds(d[field]) < threshold);
+        if (shortFields.length) emit({
+          ttl_seconds: seconds(d.ttl),
+          max_ttl_seconds: seconds(d.max_ttl),
+          minimum_ttl_seconds: threshold,
+          below_threshold_fields: shortFields,
+          certificate_storage: d.no_store === true ? 'disabled' : d.no_store === false ? 'enabled' : 'unknown',
+          scope: 'Configured role TTL only; requested certificate TTLs, issuance volume and tidy configuration are not evaluated',
+        });
+      }
       if (check === 'PKI-001' && d.allow_any_name === true)
         emit({ allow_any_name: true });
       if (

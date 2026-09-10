@@ -245,3 +245,17 @@ are present, explicitly configured fields under the current ID take precedence.
 Historical findings keep their original IDs and remain readable; exceptions
 match either ID. New analyses use the current IDs. As with other catalog changes,
 run comparison requires matching saved analysis configurations.
+
+
+### Short certificate role lifetime
+
+`PKI-008` reports a low-severity review finding when an explicit, positive role
+`ttl` or `max_ttl` is below the configurable `certificate_ttl_minimum` threshold
+(default: `24h`). Zero and absent values are treated as inherited or unknown,
+not as short lifetimes. Equality with the threshold does not produce a finding.
+
+Short lifetimes can be intentional. Frequent issuance across active roles may
+increase stored certificate records when storage is enabled and tidy does not
+keep pace. The finding includes the observed `no_store` state; it does not claim
+to measure database growth or check auto-tidy. Review renewal frequency, retention
+and revocation requirements before increasing TTLs or changing certificate storage.
