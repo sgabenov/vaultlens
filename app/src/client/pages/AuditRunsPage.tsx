@@ -1,3 +1,4 @@
+import { auditPollingInterval } from '../lib/requestBackoff';
 import AuditRunInfo from '../components/AuditRunInfo';
 import AuditDiffPanel from '../components/AuditDiffPanel';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -13,7 +14,7 @@ export default function AuditRunsPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: 3000,
+    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
   });
   const [requested, setPage] = useState(1),
     [size, setSize] = useState(10);
@@ -196,7 +197,7 @@ export default function AuditRunsPage() {
       {runs.isPending && <p>Loading runs…</p>}
       {runs.error && (
         <p role="alert">
-          Could not load audit runs. Administrator access is required.
+          Could not refresh audit runs. Previously loaded results remain visible. If the server is rate-limiting requests, updates will resume after its cooldown.
         </p>
       )}
       {runs.data?.length === 0 && (

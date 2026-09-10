@@ -1,3 +1,4 @@
+import { auditPollingInterval } from '../lib/requestBackoff';
 import AuditFindings from '../components/AuditFindings';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
@@ -56,7 +57,7 @@ export default function SecurityAuditPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: 3000,
+    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
   });
   const latestId = runs.data?.[0]?.id;
   useEffect(() => {
@@ -77,7 +78,7 @@ export default function SecurityAuditPage() {
     queryFn: () => getSecurityAuditRun(id),
     enabled: !!id,
     refetchInterval: (q) =>
-      q.state.data?.run.status === 'running' ? 2000 : false,
+      q.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
   });
   const start = useMutation({
     mutationFn: () =>

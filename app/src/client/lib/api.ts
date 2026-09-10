@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import { rateLimitDelay, recordRateLimit } from './requestBackoff';
 import type {
   SecretEngine,
   Policy,
@@ -20,6 +21,14 @@ const api = axios.create({
 
 // Read CSRF token from cookie and attach to state-changing requests
 api.interceptors.request.use((reqConfig) => {
+  const wait = rateLimitDelay();
+  if (wait > 0) {
+    throw new AxiosError('Too many requests. Please wait before retrying.', 'ERR_RATE_LIMIT_COOLDOWN', reqConfig, undefined, {
+      status: 429, statusText: 'Too Many Requests', config: reqConfig,
+      headers: { 'retry-after': String(Math.ceil(wait / 1000)) },
+      data: { error: 'Too many requests. Please wait before retrying.' },
+    });
+  }
   const method = (reqConfig.method || '').toUpperCase();
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
@@ -33,6 +42,7 @@ api.interceptors.request.use((reqConfig) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 429 && error.code !== 'ERR_RATE_LIMIT_COOLDOWN') recordRateLimit(error.response.headers?.['retry-after']);
     if (error.response?.status === 401) {
       // Don't redirect when already on a public page — avoids reload loops
       // during the initial checkAuth call and mid-wizard sessions.

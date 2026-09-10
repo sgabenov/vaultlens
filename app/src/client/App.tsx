@@ -1,3 +1,4 @@
+import { retryQuery } from './lib/requestBackoff';
 import AuditWorkspace from './components/AuditWorkspace';
 import AuditReportsPage from './pages/AuditReportsPage';
 import AuditRunsPage from './pages/AuditRunsPage';
@@ -40,7 +41,7 @@ import LoadingSpinner from './components/common/LoadingSpinner';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: retryQuery,
       refetchOnWindowFocus: false,
     },
   },
@@ -170,7 +171,7 @@ function SetupRouteGuard({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const location = useLocation();
-  const { checkAuth, isAuthenticated } = useAuthStore();
+  const { checkAuth, isAuthenticated, authCheckError, authRetryAt } = useAuthStore();
   const { loadBranding } = useBrandingStore();
   const [checking, setChecking] = useState(true);
 
@@ -180,12 +181,28 @@ function AppRoutes() {
     checkAuth().finally(() => setChecking(false));
   }, [checkAuth, loadBranding]);
 
+  useEffect(() => {
+    if (!authCheckError) return;
+    const timer = window.setTimeout(() => void checkAuth(), Math.max(1000, authRetryAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [authCheckError, authRetryAt, checkAuth]);
+
   if (checking) {
     return (
       <div className="flex h-screen items-center justify-center">
         <LoadingSpinner />
       </div>
     );
+  }
+
+  if (authCheckError && !isAuthenticated) {
+    return <main className="flex min-h-screen items-center justify-center bg-white p-6">
+      <div className="max-w-md space-y-4" role="alert">
+        <h1 className="text-lg font-semibold">Session check temporarily unavailable</h1>
+        <p className="text-sm text-slate-600">{authCheckError}</p>
+        <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={() => void checkAuth()}>Retry session check</button>
+      </div>
+    </main>;
   }
 
   return (

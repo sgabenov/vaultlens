@@ -1,3 +1,4 @@
+import { auditPollingInterval } from '../lib/requestBackoff';
 import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,7 +45,7 @@ export default function AuditRunInfo({
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: 3000,
+    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
   });
   const reanalyze = useMutation({
     mutationFn: () =>
@@ -69,7 +70,7 @@ export default function AuditRunInfo({
     queryKey: ['security-audit-run', runId],
     queryFn: () => getSecurityAuditRun(runId),
     refetchInterval: (q) =>
-      q.state.data?.run.status === 'running' ? 2000 : false,
+      q.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
   });
   const detail = query.data,
     run = detail?.run,

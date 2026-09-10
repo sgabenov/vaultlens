@@ -1,3 +1,4 @@
+import { auditPollingInterval } from '../lib/requestBackoff';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import AuditExportButton from '../components/AuditExportButton';
@@ -9,7 +10,7 @@ export default function AuditReportsPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: 3000,
+    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
   });
   const available =
     runs.data?.filter((run) =>
@@ -21,7 +22,7 @@ export default function AuditReportsPage() {
     queryFn: () => getSecurityAuditRun(runId),
     enabled: !!runId,
     refetchInterval: (query) =>
-      query.state.data?.run.status === 'running' ? 2000 : false,
+      query.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
   });
   const report = detail.data;
   const ready =

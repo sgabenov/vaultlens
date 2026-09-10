@@ -1,3 +1,4 @@
+import { auditPollingInterval } from '../lib/requestBackoff';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,12 +70,12 @@ export default function AuditSourcesPage() {
   const inventory = useQuery({
     queryKey: ['audit-inventory'],
     queryFn: getAuditInventory,
-    refetchInterval: 3000,
+    refetchInterval: () => auditPollingInterval(false),
   });
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: 3000,
+    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
   });
   const running = runs.data?.find((r) => r.status === 'running');
   const jobId = running?.id || activeJob;
@@ -83,7 +84,7 @@ export default function AuditSourcesPage() {
     queryFn: () => getSecurityAuditRun(jobId),
     enabled: !!jobId,
     refetchInterval: (q) =>
-      q.state.data?.run.status === 'running' ? 2000 : false,
+      q.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
   });
   useEffect(() => {
     if (job.data?.run.finishedAt) {
