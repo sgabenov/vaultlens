@@ -4,6 +4,8 @@ import type { CheckGroup } from '../../shared/auditCheckGroups';
 type Change = { path: string[]; value: unknown };
 type Props = {
   group: CheckGroup;
+  detector: string;
+  privileged: boolean;
   configuration: Record<string, unknown>;
   disabled: boolean;
   onChange: (changes: Change[]) => void;
@@ -48,6 +50,8 @@ function StringList({
 
 export default function AuditListParameters({
   group,
+  detector,
+  privileged,
   configuration,
   disabled,
   onChange,
@@ -57,7 +61,7 @@ export default function AuditListParameters({
   const section = (name: string) =>
     (configuration[name] ?? {}) as Record<string, unknown>;
   const lists =
-    group === 'JWT / OIDC'
+    detector === 'jwt_broad_glob'
       ? [
           {
             section: 'jwt',
@@ -73,7 +77,7 @@ export default function AuditListParameters({
             fallback: ['ref_protected'],
           },
         ]
-      : group === 'Kubernetes'
+      : detector === 'kubernetes_wildcard_name'
         ? [
             {
               section: 'kubernetes',
@@ -88,11 +92,9 @@ export default function AuditListParameters({
     {}) as Record<string, string[]>;
   return (
     <>
-      {!!lists.length && (
-        <details className="rounded border p-4">
-          <summary className="cursor-pointer text-sm font-medium">
-            {group} parameters
-          </summary>
+      {(!!lists.length || detector === 'jwt_bound_claims') && (
+        <section className="border-t border-slate-200 pt-5">
+          <h4 className="text-sm font-medium">{group} parameters</h4>
           <p className="mt-2 text-xs text-gray-500">
             One value per line. These settings apply to enabled detectors in
             this category.
@@ -112,7 +114,7 @@ export default function AuditListParameters({
               />
             ))}
           </div>
-          {group === 'JWT / OIDC' && (
+          {detector === 'jwt_bound_claims' && (
             <div className="mt-5 space-y-3">
               <h3 className="text-sm font-medium">
                 Required bound claims by auth mount
@@ -206,44 +208,46 @@ export default function AuditListParameters({
               )}
             </div>
           )}
-        </details>
+        </section>
       )}
-      <details className="rounded border p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          Privileged policy selectors
-        </summary>
-        <p className="mt-2 text-xs text-gray-500">
-          Shared by assignment and authentication checks. These identify
-          privileged policies; they do not exclude policies from analysis.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <StringList
-            label="Exact policy names"
-            values={
-              (section('privileged_policies').exact ?? [
-                'root',
-                'vault-admins',
-              ]) as string[]
-            }
-            disabled={disabled}
-            onChange={(values) =>
-              onChange([
-                { path: ['privileged_policies', 'exact'], value: values },
-              ])
-            }
-          />
-          <StringList
-            label="Policy name patterns"
-            values={(section('privileged_policies').patterns ?? []) as string[]}
-            disabled={disabled}
-            onChange={(values) =>
-              onChange([
-                { path: ['privileged_policies', 'patterns'], value: values },
-              ])
-            }
-          />
-        </div>
-      </details>
+      {privileged && (
+        <section className="border-t border-slate-200 pt-5">
+          <h4 className="text-sm font-medium">Privileged policy selectors</h4>
+          <p className="mt-2 text-xs text-gray-500">
+            Shared by assignment and authentication checks. These identify
+            privileged policies; they do not exclude policies from analysis.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <StringList
+              label="Exact policy names"
+              values={
+                (section('privileged_policies').exact ?? [
+                  'root',
+                  'vault-admins',
+                ]) as string[]
+              }
+              disabled={disabled}
+              onChange={(values) =>
+                onChange([
+                  { path: ['privileged_policies', 'exact'], value: values },
+                ])
+              }
+            />
+            <StringList
+              label="Policy name patterns"
+              values={
+                (section('privileged_policies').patterns ?? []) as string[]
+              }
+              disabled={disabled}
+              onChange={(values) =>
+                onChange([
+                  { path: ['privileged_policies', 'patterns'], value: values },
+                ])
+              }
+            />
+          </div>
+        </section>
+      )}
     </>
   );
 }

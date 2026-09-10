@@ -1,39 +1,41 @@
 import { useAuditDraft } from '../components/AuditDraftContext';
+import AuditPagination from '../components/AuditPagination';
+import {
+  checkExample,
+  ttlDetectors,
+  privilegedDetectors,
+} from '../components/auditCheckPresentation';
 import AuditListParameters from '../components/AuditListParameters';
 import { useState } from 'react';
 import { parseDocument } from 'yaml';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuditRules, saveAuditRules } from '../lib/api';
 import { SEVERITIES, type RuleView } from '../../shared/auditRules';
-import {
-  CHECK_GROUPS,
-  checkGroup,
-  type CheckGroup,
-} from '../../shared/auditCheckGroups';
+import { CHECK_GROUPS, checkGroup } from '../../shared/auditCheckGroups';
 
 const parameters: {
-  group: CheckGroup;
+  detector: string;
   section: string;
   key: string;
   label: string;
   fallback: string | number | boolean;
 }[] = [
   {
-    group: 'AppRole',
+    detector: 'approle_secret_id_ttl',
     section: 'approle',
     key: 'secret_id_ttl_warning',
     label: 'SecretID TTL warning',
     fallback: '24h',
   },
   {
-    group: 'AppRole',
+    detector: 'approle_secret_id_uses',
     section: 'approle',
     key: 'secret_id_num_uses_warning',
     label: 'SecretID use-count warning',
     fallback: 100,
   },
   {
-    group: 'AppRole',
+    detector: 'approle_cidr_review',
     section: 'approle',
     key: 'require_cidr_for_privileged_roles',
     label: 'Require CIDR restrictions for privileged roles',
@@ -63,6 +65,7 @@ export default function AuditRulesPage() {
     discard,
   } = useAuditDraft();
   const [message, setMessage] = useState('');
+  const [size, setSize] = useState(10);
   const save = useMutation({
     mutationFn: saveAuditRules,
     onMutate: () => setSaving(true),
@@ -81,15 +84,38 @@ export default function AuditRulesPage() {
     document?.getIn(path) ?? fallback;
   const rules =
     query.data?.catalog.filter((rule) => rule.source === 'builtin') ?? [];
-  const inGroup = rules.filter((rule) => checkGroup(rule) === group);
+  const inGroup =
+    group === 'All'
+      ? rules
+      : rules.filter((rule) => checkGroup(rule) === group);
   const chosen = inGroup.find((rule) => rule.id === selected) ?? inGroup[0];
+  const chosenIndex = Math.max(
+    0,
+    inGroup.findIndex((rule) => rule.id === chosen?.id),
+  );
+  const page = Math.floor(chosenIndex / size) + 1;
+  const visible = inGroup.slice((page - 1) * size, page * size);
+  const example = chosen ? checkExample(chosen) : null;
+  const isTTL = !!chosen && ttlDetectors.has(chosen.detector);
+  const privileged = !!chosen && privilegedDetectors.has(chosen.detector);
+  const chosenParameters = parameters.filter(
+    (p) => p.detector === chosen?.detector,
+  );
+  const listParameters =
+    !!chosen &&
+    ['jwt_broad_glob', 'jwt_bound_claims', 'kubernetes_wildcard_name'].includes(
+      chosen.detector,
+    );
   const active = (rule: RuleView) =>
     Boolean(value(['rules', rule.id, 'enabled'], rule.active));
   const severity = (rule: RuleView) =>
-    String(value(['rules', rule.id, 'severity'], rule.effectiveSeverity));
+    String(value(['rules', rule.id, 'severity'], 'auto'));
   function update(changes: { path: string[]; value: unknown }[]) {
     if (!settings || !document || saving) return;
-    for (const change of changes) document.setIn(change.path, change.value);
+    for (const change of changes) {
+      if (change.value === undefined) document.deleteIn(change.path);
+      else document.setIn(change.path, change.value);
+    }
     setDraft({ ...settings, configYaml: document.toString() });
     setMessage('');
   }
@@ -190,10 +216,11 @@ export default function AuditRulesPage() {
             </p>
           )}
           <div className="flex flex-wrap gap-2" aria-label="Check categories">
-            {CHECK_GROUPS.map((category) => {
-              const members = rules.filter(
-                (rule) => checkGroup(rule) === category,
-              );
+            {(['All', ...CHECK_GROUPS] as const).map((category) => {
+              const members =
+                category === 'All'
+                  ? rules
+                  : rules.filter((rule) => checkGroup(rule) === category);
               return (
                 <button
                   key={category}
@@ -219,212 +246,302 @@ export default function AuditRulesPage() {
             </p>
           ) : (
             <>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={inGroup.every(active)}
-                  disabled={saving}
-                  onChange={(event) =>
-                    update(
-                      inGroup.map((rule) => ({
-                        path: ['rules', rule.id, 'enabled'],
-                        value: event.target.checked,
-                      })),
-                    )
-                  }
-                />
-                Enable all {group} checks
-              </label>
-              <div className="grid gap-5 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.4fr)]">
-                <div className="divide-y rounded border">
-                  {inGroup.map((rule) => (
-                    <button
-                      key={rule.id}
-                      onClick={() => setSelected(rule.id)}
-                      aria-pressed={rule.id === chosen?.id}
-                      className={`block w-full p-4 text-left ${rule.id === chosen?.id ? 'bg-blue-50' : ''}`}
-                    >
-                      <span className="text-xs text-gray-500">
-                        {rule.id} · {active(rule) ? 'Enabled' : 'Disabled'} ·{' '}
-                        {severity(rule)}
-                      </span>
-                      <strong className="mt-1 block text-sm font-medium">
-                        {rule.title}
-                      </strong>
-                    </button>
-                  ))}
-                </div>
-                {chosen && (
-                  <div className="space-y-4 rounded border p-5">
-                    <div>
-                      <span className="text-xs text-gray-500">
-                        Built-in · {chosen.status}
-                      </span>
-                      <h3 className="mt-1 font-semibold">{chosen.title}</h3>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      {chosen.description}
-                    </p>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        disabled={saving}
-                        checked={active(chosen)}
-                        onChange={(event) =>
-                          update([
-                            {
-                              path: ['rules', chosen.id, 'enabled'],
-                              value: event.target.checked,
-                            },
-                          ])
-                        }
-                      />
-                      Enable this check
-                    </label>
-                    <div className="text-sm">
-                      <label htmlFor="check-severity">Severity</label>
-                      <div className="mt-2 flex flex-wrap items-center gap-3">
-                        <select
-                          id="check-severity"
-                          aria-label="Check severity"
-                          aria-describedby="check-default-severity"
-                          className="rounded border p-2"
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <h3 className="text-sm font-medium">
+                  {group} / {inGroup.length} checks
+                </h3>
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={inGroup.every(active)}
+                    ref={(node) => {
+                      if (node)
+                        node.indeterminate =
+                          inGroup.some(active) && !inGroup.every(active);
+                    }}
+                    disabled={saving}
+                    onChange={(event) =>
+                      update(
+                        inGroup.map((rule) => ({
+                          path: ['rules', rule.id, 'enabled'],
+                          value: event.target.checked,
+                        })),
+                      )
+                    }
+                  />
+                  {group === 'All'
+                    ? `Enable all ${rules.length} checks`
+                    : `Enable all ${group} checks`}
+                </label>
+              </div>
+              <div className="grid items-start gap-5 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.2fr)]">
+                <div className="min-w-0" aria-label="Check list">
+                  <div className="grid grid-cols-[24px_minmax(0,1fr)_64px] gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-500">
+                    <span>On</span>
+                    <span>Check</span>
+                    <span>Severity</span>
+                  </div>
+                  <div className="divide-y divide-slate-200">
+                    {visible.map((rule) => (
+                      <div
+                        key={rule.id}
+                        className={`grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 px-3 py-3 ${rule.id === chosen?.id ? 'bg-blue-50 shadow-[inset_2px_0_0_#2563eb]' : 'hover:bg-slate-50'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`Enable ${rule.id}`}
+                          checked={active(rule)}
                           disabled={saving}
-                          value={severity(chosen)}
                           onChange={(event) =>
                             update([
                               {
-                                path: ['rules', chosen.id, 'severity'],
-                                value: event.target.value,
+                                path: ['rules', rule.id, 'enabled'],
+                                value: event.target.checked,
                               },
                             ])
                           }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSelected(rule.id)}
+                          aria-pressed={rule.id === chosen?.id}
+                          aria-controls="check-configuration"
+                          className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px] items-center gap-2 text-left"
                         >
-                          {SEVERITIES.map((level) => (
-                            <option key={level} value={level}>
-                              {level}
-                            </option>
-                          ))}
-                        </select>
-                        <span
-                          id="check-default-severity"
-                          className="text-xs text-gray-500"
-                        >
-                          Default:{' '}
-                          <span className="font-medium">{chosen.severity}</span>
-                        </span>
+                          <span className="min-w-0">
+                            <span className="text-xs text-slate-500">
+                              {rule.id} / {checkGroup(rule)}
+                            </span>
+                            <span className="mt-1 block text-sm font-medium">
+                              {rule.title}
+                            </span>
+                          </span>
+                          <span className="text-xs capitalize text-slate-500">
+                            {severity(rule)}
+                          </span>
+                        </button>
                       </div>
+                    ))}
+                  </div>
+                  <AuditPagination
+                    page={page}
+                    size={size}
+                    total={inGroup.length}
+                    onChange={(next) =>
+                      setSelected(inGroup[(next - 1) * size]?.id ?? '')
+                    }
+                    onSizeChange={setSize}
+                  />
+                </div>
+                {chosen && (
+                  <section
+                    id="check-configuration"
+                    aria-label="Selected check configuration"
+                    className="min-h-[900px] min-w-0 space-y-5 rounded-lg border border-slate-200 bg-white p-5"
+                  >
+                    <div>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-xs text-slate-500">
+                          {chosen.id} / Built-in · {chosen.status}
+                        </span>
+                        <label className="flex items-center gap-2 text-xs text-slate-500">
+                          Severity
+                          <select
+                            aria-label="Check severity"
+                            aria-describedby="check-severity-help"
+                            disabled={saving}
+                            className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                            value={severity(chosen)}
+                            onChange={(event) =>
+                              update([
+                                {
+                                  path: ['rules', chosen.id, 'severity'],
+                                  value:
+                                    event.target.value === 'auto'
+                                      ? undefined
+                                      : event.target.value,
+                                },
+                              ])
+                            }
+                          >
+                            <option value="auto">Auto</option>
+                            {SEVERITIES.map((level) => (
+                              <option key={level} value={level}>
+                                {level}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <h3 className="text-lg font-semibold">{chosen.title}</h3>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {active(chosen)
+                          ? 'Enabled · included in new analyses'
+                          : 'Disabled · skipped in new analyses'}
+                      </p>
+                      <p
+                        id="check-severity-help"
+                        className="mt-2 text-xs text-slate-500"
+                      >
+                        {severity(chosen) === 'auto'
+                          ? isTTL
+                            ? 'Auto: medium above warning limits; high above high limits.'
+                            : `Auto uses the detector severity. Rule default: ${chosen.severity}.`
+                          : 'Fixed severity override for this check. Detection conditions are unchanged.'}
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500">
-                      Default: {chosen.severity}. Selecting a severity creates
-                      an explicit override for this check.
+                    <p className="text-sm text-slate-600">
+                      {chosen.description}
                     </p>
-                    <h4 className="text-sm font-medium">Recommendation</h4>
-                    <p className="text-sm text-gray-600">
-                      {chosen.remediation}
-                    </p>
+                    {example && (
+                      <div className="rounded-md bg-slate-50 p-3">
+                        <h4 className="text-xs font-medium text-slate-500">
+                          {example.label}
+                        </h4>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-700">
+                          <code>{example.source}</code>
+                        </pre>
+                        {isTTL && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            With default limits, this example produces a medium
+                            finding. Current thresholds and severity overrides
+                            determine the actual result.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-5 border-t border-slate-200 pt-5">
+                      <h4 className="text-sm font-medium">Check parameters</h4>
+                      {!isTTL &&
+                        !privileged &&
+                        !chosenParameters.length &&
+                        !listParameters && (
+                          <p className="text-sm text-slate-500">
+                            This check uses built-in detection conditions and
+                            has no configurable analysis parameters.
+                          </p>
+                        )}
+                      {chosenParameters.map((p) => (
+                        <label key={p.key} className="block text-sm">
+                          {p.label}
+                          {typeof p.fallback === 'boolean' ? (
+                            <input
+                              type="checkbox"
+                              className="ml-2"
+                              disabled={saving}
+                              checked={Boolean(
+                                value([p.section, p.key], p.fallback),
+                              )}
+                              onChange={(event) =>
+                                update([
+                                  {
+                                    path: [p.section, p.key],
+                                    value: event.target.checked,
+                                  },
+                                ])
+                              }
+                            />
+                          ) : (
+                            <input
+                              className="mt-2 block w-full rounded border border-slate-200 p-2"
+                              disabled={saving}
+                              type={
+                                typeof p.fallback === 'number'
+                                  ? 'number'
+                                  : 'text'
+                              }
+                              min={0}
+                              value={String(
+                                value([p.section, p.key], p.fallback),
+                              )}
+                              onChange={(event) =>
+                                update([
+                                  {
+                                    path: [p.section, p.key],
+                                    value:
+                                      typeof p.fallback === 'number'
+                                        ? Number(event.target.value)
+                                        : event.target.value,
+                                  },
+                                ])
+                              }
+                            />
+                          )}
+                          <span className="mt-1 block text-xs text-slate-500">
+                            Default: {String(p.fallback)}
+                          </span>
+                        </label>
+                      ))}
+                      {isTTL && (
+                        <div>
+                          <h4 className="text-sm font-medium">
+                            Token lifetime / Shared thresholds
+                          </h4>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Shared by AppRole, Kubernetes and JWT/OIDC token
+                            lifetime checks. These are analysis limits; they do
+                            not change Vault token settings. Durations accept
+                            seconds or values such as 8h and 1d.
+                          </p>
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            {ttlParameters.map(([key, label, fallback]) => (
+                              <label key={key} className="text-sm">
+                                {label}
+                                <input
+                                  className="mt-2 block w-full rounded border border-slate-200 p-2"
+                                  disabled={saving}
+                                  value={String(
+                                    value(['thresholds', key], fallback),
+                                  )}
+                                  onChange={(event) =>
+                                    update([
+                                      {
+                                        path: ['thresholds', key],
+                                        value: event.target.value,
+                                      },
+                                    ])
+                                  }
+                                />
+                                <span className="mt-1 block text-xs text-slate-500">
+                                  Default: {fallback}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                          <p className="mt-3 text-xs text-slate-500">
+                            Triggers when either TTL is strictly greater than
+                            its threshold. Equal values do not trigger that
+                            threshold.
+                          </p>
+                        </div>
+                      )}
+                      <AuditListParameters
+                        key={`${settings.revision}:${chosen.id}:${editorVersion}`}
+                        group={checkGroup(chosen)}
+                        detector={chosen.detector}
+                        privileged={privileged}
+                        configuration={document?.toJS() ?? {}}
+                        disabled={saving}
+                        onChange={update}
+                      />
+                    </div>
+                    <div className="border-t border-slate-200 pt-5">
+                      <h4 className="text-sm font-medium">Recommendation</h4>
+                      <p className="mt-2 text-sm text-slate-600">
+                        {chosen.remediation}
+                      </p>
+                    </div>
                     {!chosen.supported && (
                       <p className="text-sm text-amber-800">
                         This detector is unavailable. Enabling it produces a
                         coverage gap.
                       </p>
                     )}
-                  </div>
+                  </section>
                 )}
               </div>
             </>
           )}
-          {!!parameters.filter((p) => p.group === group).length && (
-            <details className="rounded border p-4">
-              <summary className="cursor-pointer text-sm font-medium">
-                {group} parameters
-              </summary>
-              <div className="mt-3 space-y-3">
-                {parameters
-                  .filter((p) => p.group === group)
-                  .map((p) => (
-                    <label key={p.key} className="block text-sm">
-                      {p.label}
-                      {typeof p.fallback === 'boolean' ? (
-                        <input
-                          className="ml-2"
-                          type="checkbox"
-                          disabled={saving}
-                          checked={Boolean(
-                            value([p.section, p.key], p.fallback),
-                          )}
-                          onChange={(event) =>
-                            update([
-                              {
-                                path: [p.section, p.key],
-                                value: event.target.checked,
-                              },
-                            ])
-                          }
-                        />
-                      ) : (
-                        <input
-                          className="ml-2 rounded border p-2"
-                          disabled={saving}
-                          type={
-                            typeof p.fallback === 'number' ? 'number' : 'text'
-                          }
-                          min={0}
-                          value={String(value([p.section, p.key], p.fallback))}
-                          onChange={(event) =>
-                            update([
-                              {
-                                path: [p.section, p.key],
-                                value:
-                                  typeof p.fallback === 'number'
-                                    ? Number(event.target.value)
-                                    : event.target.value,
-                              },
-                            ])
-                          }
-                        />
-                      )}
-                    </label>
-                  ))}
-              </div>
-            </details>
-          )}
-          <details className="rounded border p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              Shared token lifetime thresholds
-            </summary>
-            <p className="mt-2 text-xs text-gray-500">
-              These thresholds apply to every detector that uses token lifetime
-              limits. Durations accept seconds or values such as 8h and 1d.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {ttlParameters.map(([key, label, fallback]) => (
-                <label key={key} className="text-sm">
-                  {label}
-                  <input
-                    className="mt-1 block w-full rounded border p-2"
-                    disabled={saving}
-                    value={String(value(['thresholds', key], fallback))}
-                    onChange={(event) =>
-                      update([
-                        {
-                          path: ['thresholds', key],
-                          value: event.target.value,
-                        },
-                      ])
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-          </details>
-          <AuditListParameters
-            key={`${settings.revision}:${group}:${editorVersion}`}
-            group={group}
-            configuration={document?.toJS() ?? {}}
-            disabled={saving}
-            onChange={update}
-          />
         </>
       )}
     </section>

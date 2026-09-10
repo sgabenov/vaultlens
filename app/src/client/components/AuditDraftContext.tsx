@@ -4,7 +4,7 @@ import type { CheckGroup } from '../../shared/auditCheckGroups';
 
 function useDraftState() {
   const [draft, setDraft] = useState<RuleSettings | null>(null);
-  const [group, setGroup] = useState<CheckGroup>('Policies');
+  const [group, setGroup] = useState<CheckGroup | 'All'>('All');
   const [selected, setSelected] = useState('');
   const [saving, setSaving] = useState(false);
   const [editorVersion, setEditorVersion] = useState(0);
