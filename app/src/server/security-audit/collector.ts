@@ -452,13 +452,8 @@ export async function collect(
               );
               const versions = data.keys as Record<string, unknown> | undefined;
               const latest = versions?.[String(data.latest_version)];
-              const created =
-                typeof latest === 'number'
-                  ? latest
-                  : latest && typeof latest === 'object'
-                    ? (latest as Record<string, unknown>).creation_time
-                    : undefined;
-              if (typeof created === 'number')
+              const created = transitVersionCreatedAt(latest);
+              if (created !== undefined)
                 selected.latest_version_created_at = created;
               else
                 snapshot.issues.push({
@@ -674,4 +669,19 @@ export async function collect(
   snapshot.finishedAt = new Date().toISOString();
   stage('Collection finished');
   return snapshot;
+}
+
+/** Normalize symmetric Unix timestamps and asymmetric RFC3339 metadata to seconds. */
+export function transitVersionCreatedAt(latest: unknown): number | undefined {
+  const value = latest && typeof latest === 'object'
+    ? (latest as Record<string, unknown>).creation_time
+    : latest;
+  if (typeof value === 'number')
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  if (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value))
+    return undefined;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) && milliseconds > 0
+    ? milliseconds / 1000 : undefined;
 }

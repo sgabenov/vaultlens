@@ -28,7 +28,7 @@ import type {
   AuditSnapshot,
   AuditFinding,
 } from '../../shared/securityAudit.js';
-export const ENGINE_VERSION = '15';
+export const ENGINE_VERSION = '16';
 export const RULES = [
   { id: 'assignment.root', title: 'Root policy assigned to a principal' },
   { id: 'assignment.missing-policy', title: 'Assigned policy does not exist' },

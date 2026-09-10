@@ -2956,3 +2956,110 @@ test('finding groups separate severity before pagination without changing origin
   assert.equal(new Set(groups.map(group=>group.key)).size,2);
   assert.equal(findings.indexOf(groups[0].findings[0]),1);
 });
+
+test('JSON ACL policies preserve HCL semantics, attributes and evidence locations', () => {
+  const json =
+    '{\n  "path": {\n    "secret/data/app/*": {"capabilities":["read","list"],"allowed_parameters":{"env":["dev"]}},\n    "sys/*": {"capabilities":["sudo","update"]}\n  }\n}';
+  const hcl =
+    'path "secret/data/app/*" { capabilities=["read","list"] allowed_parameters={env=["dev"]} }\npath "sys/*" { capabilities=["sudo","update"] }';
+  const normalize = (source: string) =>
+    parsePolicy(source).map(({ path, capabilities, attributes }) => ({
+      path,
+      capabilities,
+      attributes,
+    }));
+  assert.deepEqual(normalize(json), normalize(hcl));
+  const first = parsePolicy(json)[0];
+  assert.equal(first.line, 3);
+  assert.equal(first.column, 5);
+  assert.equal(
+    first.source,
+    '"secret/data/app/*": {"capabilities":["read","list"],"allowed_parameters":{"env":["dev"]}}',
+  );
+  assert.equal(
+    parsePolicy('{"path":[{"sys/*":{"capabilities":["read"]}}]}')[0].path,
+    'sys/*',
+  );
+  assert.equal(
+    parsePolicy(
+      String.raw`{"path":{"secret\/app":{"capabilities":["read"]}}}`,
+    )[0].path,
+    'secret/app',
+  );
+  for (const source of [
+    '{"path":{"*":{"capabilities":["read"],"capabilities":["deny"]}}}',
+    '{"path":{"*":{"capabilities":["read"]},"*":{"capabilities":["deny"]}}}',
+    '{"path":{},"path":{}}',
+    '{"path":{"*":{"capabilities":[42]}}}',
+    '{"path":{"*":null}}',
+    '{"path":{},}',
+    '{"unexpected":{}}',
+  ])
+    assert.throws(() => parsePolicy(source), PolicyParseError);
+});
+
+test('collector normalizes Transit epoch and RFC3339 dates while retaining unknown-date gaps', async () => {
+  const entries: Record<string, unknown> = {
+    symmetric: 1789035362,
+    asymmetric: {
+      creation_time: '2026-09-10T13:16:02.840223+03:00',
+      public_key: 'not-collected',
+    },
+    invalid: { creation_time: 'not-a-date' },
+  };
+  const server = createRawServer((socket) => {
+    let request = '';
+    socket.on('data', (chunk) => {
+      request += chunk.toString();
+      if (!request.includes('\r\n\r\n')) return;
+      const url = request.split(' ')[1];
+      let data: unknown = {};
+      if (url === '/v1/sys/mounts') data = { 'crypto/': { type: 'transit' } };
+      else if (url === '/v1/crypto/keys') data = { keys: Object.keys(entries) };
+      else if (url?.startsWith('/v1/crypto/keys/')) {
+        const name = url.split('/').at(-1)!;
+        data = {
+          type: name === 'symmetric' ? 'aes256-gcm96' : 'rsa-2048',
+          latest_version: 1,
+          keys: { '1': entries[name] },
+        };
+      }
+      const payload = JSON.stringify({ data });
+      socket.end(
+        `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`,
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = server.address() as import('node:net').AddressInfo;
+    const s = await collect(
+      `http://127.0.0.1:${port}`,
+      'fixture-token',
+      false,
+      { sources: ['mounts'], retries: 0, requestsPerSecond: 1000 },
+    );
+    const dates = new Map(
+      s.resources
+        .filter((r) => r.kind === 'transit-key')
+        .map((r) => [r.path, r.data.latest_version_created_at]),
+    );
+    assert.equal(dates.get('crypto/keys/symmetric'), 1789035362);
+    assert.equal(
+      dates.get('crypto/keys/asymmetric'),
+      Date.parse('2026-09-10T10:16:02.840Z') / 1000,
+    );
+    assert.equal(dates.get('crypto/keys/invalid'), undefined);
+    assert.deepEqual(
+      s.issues
+        .filter((i) => i.reason.includes('rotation age'))
+        .map((i) => i.path),
+      ['crypto/keys/invalid'],
+    );
+    assert.equal(JSON.stringify(s.resources).includes('not-collected'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});

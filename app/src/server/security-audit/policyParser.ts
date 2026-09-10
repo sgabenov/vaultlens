@@ -1,4 +1,4 @@
-/** Literal Vault ACL HCL parser. Lexical parsing preserves comments, offsets and attributes.
+/** Literal Vault ACL HCL/JSON parser. Lexical parsing preserves comments, offsets and attributes.
  * Expressions outside quoted strings are rejected rather than guessed or evaluated.
  */
 export interface PolicyBlock {
@@ -83,6 +83,9 @@ export function parsePolicy(source: string): PolicyBlock[] {
         const escape = source[pos++];
         const simple: Record<string, string> = {
           n: '\n',
+          b: '\b',
+          f: '\f',
+          '/': '/',
           r: '\r',
           t: '\t',
           '"': '"',
@@ -221,6 +224,72 @@ export function parsePolicy(source: string): PolicyBlock[] {
     fail('Expected literal value; expressions are not evaluated', token.start);
   }
   const blocks: PolicyBlock[] = [];
+  if (source.trimStart().startsWith('{')) {
+    // JSON.parse enforces JSON syntax; the lexer below additionally rejects
+    // duplicate keys and preserves source locations for finding evidence.
+    try {
+      JSON.parse(source);
+    } catch {
+      fail('Invalid JSON policy', source.search(/\S/));
+    }
+    const append = (label: Token) => {
+      const body = value();
+      if (!body || typeof body !== 'object' || Array.isArray(body))
+        fail('Expected a JSON path attribute object', label.start);
+      const attributes = body as Record<string, unknown>;
+      const capabilities = attributes.capabilities;
+      if (
+        !Array.isArray(capabilities) ||
+        !capabilities.length ||
+        !capabilities.every((item) => typeof item === 'string')
+      )
+        fail('A non-empty string capabilities list is required', label.start);
+      delete attributes.capabilities;
+      blocks.push({
+        path: label.value.replace(/^\/+|\/+$/g, ''),
+        capabilities: capabilities.map((item) => item.toLowerCase()),
+        attributes,
+        ...location(label.start),
+        source: source.slice(label.start, token.start).trim(),
+        leadingComments: [],
+      });
+    };
+    const pathMap = () => {
+      take('{');
+      const seen = new Set<string>();
+      while (String(token.kind) !== '}') {
+        const label = take('string');
+        if (seen.has(label.value)) fail('Duplicate JSON path key', label.start);
+        seen.add(label.value);
+        take(':');
+        append(label);
+        if (String(token.kind) === ',') take();
+      }
+      take('}');
+    };
+    take('{');
+    let seenPath = false;
+    while (String(token.kind) !== '}') {
+      const key = take('string');
+      if (key.value !== 'path')
+        fail('Only path blocks are supported', key.start);
+      if (seenPath) fail('Duplicate JSON path declaration', key.start);
+      seenPath = true;
+      take(':');
+      if (String(token.kind) === '[') {
+        take('[');
+        while (String(token.kind) !== ']') {
+          pathMap();
+          if (String(token.kind) === ',') take();
+        }
+        take(']');
+      } else pathMap();
+      if (String(token.kind) === ',') take();
+    }
+    take('}');
+    take('eof');
+    return blocks;
+  }
   while (token.kind !== 'eof') {
     if (token.kind === ',') {
       take();
