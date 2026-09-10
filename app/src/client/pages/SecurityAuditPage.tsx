@@ -3,9 +3,11 @@ import AuditFindings from '../components/AuditFindings';
 import AuditResumeButton from '../components/AuditResumeButton';
 import AuditImportDetails from '../components/AuditImportDetails';
 import AuditRunDialog from '../components/AuditRunDialog';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import type { AuditRun } from '../../shared/securityAudit';
+import AuditResultPicker, {
+  hasAuditResults,
+} from '../components/AuditResultPicker';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSecurityAuditRuns,
@@ -57,9 +59,12 @@ export default function SecurityAuditPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
+    refetchInterval: (query) =>
+      auditPollingInterval(
+        !!query.state.data?.some((run) => run.status === 'running'),
+      ),
   });
-  const latestId = runs.data?.[0]?.id;
+  const latestId = runs.data?.find(hasAuditResults)?.id;
   useEffect(() => {
     if (!selected && latestId)
       setParams(
@@ -78,7 +83,9 @@ export default function SecurityAuditPage() {
     queryFn: () => getSecurityAuditRun(id),
     enabled: !!id,
     refetchInterval: (q) =>
-      q.state.data?.run.status === 'running' ? auditPollingInterval(true) : false,
+      q.state.data?.run.status === 'running'
+        ? auditPollingInterval(true)
+        : false,
   });
   const start = useMutation({
     mutationFn: () =>
@@ -106,8 +113,6 @@ export default function SecurityAuditPage() {
     ...(detail.data?.snapshot?.issues ?? []),
     ...(detail.data?.configuration?.issues ?? []),
   ];
-  const runLabel = (run: AuditRun) =>
-    `${new Date(run.startedAt).toLocaleString()} · ${run.status} · ${run.findingCount} findings · ${run.id.slice(0, 8)}`;
   const error = runs.error || detail.error || start.error;
   return (
     <div className="space-y-6">
@@ -368,42 +373,13 @@ export default function SecurityAuditPage() {
         </p>
       )}
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            Run
-            <select
-              aria-label="Run"
-              className="min-w-0 max-w-full flex-1 rounded border border-slate-200 bg-white p-2"
-              value={id}
-              disabled={!id && !runs.data?.length}
-              onChange={(event) => setSelected(event.target.value)}
-            >
-              {!id && (
-                <option value="">
-                  {runs.isPending ? 'Loading runs…' : 'No runs yet'}
-                </option>
-              )}
-              {id && !runs.data?.some((run) => run.id === id) && (
-                <option value={id}>
-                  {detail.data
-                    ? runLabel(detail.data.run)
-                    : `Selected run · ${id}`}
-                </option>
-              )}
-              {runs.data?.map((run) => (
-                <option key={run.id} value={run.id}>
-                  {runLabel(run)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Link
-            className="text-blue-700 underline"
-            to={`/security-audit/runs${id ? `?${new URLSearchParams({ run: id })}` : ''}`}
-          >
-            View run history
-          </Link>
-        </div>
+        <AuditResultPicker
+          runs={runs.data ?? []}
+          current={detail.data?.run ?? runs.data?.find((run) => run.id === id)}
+          selectedId={id}
+          loading={runs.isPending || (!!id && detail.isPending)}
+          onSelect={setSelected}
+        />
         <section className="min-w-0 space-y-4">
           {detail.data && (
             <>

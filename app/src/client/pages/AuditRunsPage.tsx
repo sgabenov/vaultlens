@@ -1,3 +1,4 @@
+import { hasAuditResults } from '../components/AuditResultPicker';
 import { auditPollingInterval } from '../lib/requestBackoff';
 import AuditRunInfo from '../components/AuditRunInfo';
 import AuditDiffPanel from '../components/AuditDiffPanel';
@@ -14,7 +15,10 @@ export default function AuditRunsPage() {
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
     queryFn: getSecurityAuditRuns,
-    refetchInterval: (query) => auditPollingInterval(!!query.state.data?.some((run) => run.status === 'running')),
+    refetchInterval: (query) =>
+      auditPollingInterval(
+        !!query.state.data?.some((run) => run.status === 'running'),
+      ),
   });
   const [requested, setPage] = useState(1),
     [size, setSize] = useState(10);
@@ -197,7 +201,9 @@ export default function AuditRunsPage() {
       {runs.isPending && <p>Loading runs…</p>}
       {runs.error && (
         <p role="alert">
-          Could not refresh audit runs. Previously loaded results remain visible. If the server is rate-limiting requests, updates will resume after its cooldown.
+          Could not refresh audit runs. Previously loaded results remain
+          visible. If the server is rate-limiting requests, updates will resume
+          after its cooldown.
         </p>
       )}
       {runs.data?.length === 0 && (
@@ -260,7 +266,7 @@ export default function AuditRunsPage() {
                   <th className="p-3">Resources</th>
                   <th className="p-3">Findings</th>
                   <th className="p-3">Coverage gaps</th>
-                  <th className="p-3">Info</th>
+                  <th className="p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,12 +286,12 @@ export default function AuditRunsPage() {
                       />
                     </td>
                     <td className="p-3">
-                      <Link
-                        className="text-blue-700 underline"
-                        to={`/security-audit/findings?${new URLSearchParams({ run: run.id })}`}
-                      >
-                        {new Date(run.startedAt).toLocaleString()}
-                      </Link>
+                      <span>{new Date(run.startedAt).toLocaleString()}</span>
+                      {params.get('run') === run.id && hasAuditResults(run) && (
+                        <span className="mt-1 block text-xs text-blue-600">
+                          Viewing
+                        </span>
+                      )}
                     </td>
                     <td className="p-3">{run.target}</td>
                     <td className="p-3">{run.status}</td>
@@ -293,13 +299,30 @@ export default function AuditRunsPage() {
                     <td className="p-3">{run.findingCount}</td>
                     <td className="p-3">{run.issueCount}</td>
                     <td className="p-3">
-                      <button
-                        aria-label={`Info for run ${run.id.slice(0, 8)}`}
-                        className="rounded border px-3 py-1"
-                        onClick={() => setInfo(run.id)}
-                      >
-                        Info
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {hasAuditResults(run) ? (
+                          <Link
+                            aria-label={`View findings for run ${run.id.slice(0, 8)}`}
+                            className="whitespace-nowrap rounded-md border border-slate-200 px-3 py-1.5 text-blue-700 hover:border-blue-300 hover:bg-blue-50"
+                            to={`/security-audit/findings?${new URLSearchParams({ run: run.id })}`}
+                          >
+                            View findings →
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-500">
+                            {run.status === 'running'
+                              ? 'In progress'
+                              : 'Not analyzed'}
+                          </span>
+                        )}
+                        <button
+                          aria-label={`Info for run ${run.id.slice(0, 8)}`}
+                          className="rounded border px-3 py-1"
+                          onClick={() => setInfo(run.id)}
+                        >
+                          Info
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
