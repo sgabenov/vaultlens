@@ -372,7 +372,7 @@ export default function SecurityAuditPage() {
             Run
             <select
               aria-label="Run"
-              className="min-w-0 max-w-full flex-1 rounded border p-2"
+              className="min-w-0 max-w-full flex-1 rounded border border-slate-200 bg-white p-2"
               value={id}
               disabled={!id && !runs.data?.length}
               onChange={(event) => setSelected(event.target.value)}

@@ -36,14 +36,14 @@ function Pager({
         {total}
       </span>
       <button
-        className="rounded border px-2 py-1 disabled:opacity-40"
+        className="rounded border border-slate-200 bg-white px-2 py-1 disabled:opacity-40"
         disabled={page <= 1}
         onClick={() => onChange(page - 1)}
       >
         Previous
       </button>
       <button
-        className="rounded border px-2 py-1 disabled:opacity-40"
+        className="rounded border border-slate-200 bg-white px-2 py-1 disabled:opacity-40"
         disabled={page * size >= total}
         onClick={() => onChange(page + 1)}
       >
@@ -158,7 +158,7 @@ function FindingRows({
   return (
     <div className="px-4">
       {findings.slice((page - 1) * size, page * size).map((finding, index) => (
-        <details key={`${page}:${index}`} className="border-t py-3">
+        <details key={`${page}:${index}`} className="border-t border-slate-200 py-3">
           <summary className="audit-disclosure-summary text-sm">
             <AuditDisclosureIcon level="finding" />
             <span className="min-w-0">
@@ -331,7 +331,7 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
         <label className="min-w-48 flex-1 text-sm">
           Search
           <input
-            className="mt-1 block w-full rounded border p-2"
+            className="mt-1 block w-full rounded border border-slate-200 bg-white p-2"
             placeholder="Check, object path or namespace"
             value={query}
             onChange={(event) => {
@@ -343,7 +343,7 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
         <label className="text-sm">
           Group by
           <select
-            className="mt-1 block rounded border p-2"
+            className="mt-1 block rounded border border-slate-200 bg-white p-2"
             value={grouping}
             onChange={(event) => {
               setGrouping(event.target.value as FindingGrouping);
@@ -359,7 +359,7 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
           <label key={filter.label} className="text-sm">
             {filter.label}
             <select
-              className="mt-1 block max-w-full rounded border p-2"
+              className="mt-1 block max-w-full rounded border border-slate-200 bg-white p-2"
               value={filter.value}
               onChange={(event) => {
                 filter.change(event.target.value);
@@ -392,7 +392,7 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
         <label>
           Per page
           <select
-            className="ml-2 rounded border p-1"
+            className="ml-2 rounded border border-slate-200 bg-white p-1"
             value={size}
             onChange={(event) => {
               setSize(Number(event.target.value));
@@ -406,16 +406,16 @@ export default function AuditFindings({ detail }: { detail: AuditDetail }) {
         </label>
       </div>
       {!matched.length && (
-        <p className="rounded border p-4 text-sm text-gray-500">
+        <p className="rounded border border-slate-200 bg-white p-4 text-sm text-gray-500">
           No findings match these filters. Review collection and analysis gaps
           before drawing conclusions.
         </p>
       )}
-      <div className="divide-y rounded border">
+      <div className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
         {groups.slice((page - 1) * size, page * size).map((group) => (
           <div key={group.key}>
             <button
-              className="flex w-full items-center gap-3 p-4 text-left"
+              className="flex w-full items-center gap-3 bg-white p-4 text-left hover:bg-slate-50 focus-visible:outline-blue-600"
               aria-expanded={expanded === group.key}
               onClick={() =>
                 setExpanded(expanded === group.key ? null : group.key)
