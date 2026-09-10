@@ -130,7 +130,7 @@ export default function AuditRunsPage() {
           onClick={() => {
             if (
               window.confirm(
-                `Delete ${selected.length} selected runs and their saved snapshots and reports? This cannot be undone. Vault configuration and other runs will not be changed.`,
+                `Delete ${selected.length} selected runs and their analysis results? This cannot be undone. Saved snapshots, the current inventory and Vault configuration will be kept.`,
               )
             )
               remove.mutate([...selected]);
@@ -266,7 +266,8 @@ export default function AuditRunsPage() {
                 {runs.data.slice((page - 1) * size, page * size).map((run) => (
                   <tr
                     key={run.id}
-                    className={`border-t ${params.get('run') === run.id ? 'bg-blue-50' : ''}`}
+                    className={`border-t border-slate-200 ${selected.includes(run.id) ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-slate-50'}`}
+                    aria-selected={selected.includes(run.id)}
                   >
                     <td className="p-3">
                       <input
