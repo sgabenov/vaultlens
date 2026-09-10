@@ -1266,3 +1266,12 @@ export async function getSavedAuditSnapshot(id: string) {
   const { data } = await api.get<{info: import('../../shared/securityAudit').SavedAuditSnapshot; snapshot: import('../../shared/securityAudit').AuditSnapshot}>(`/security-audit/snapshots/${encodeURIComponent(id)}`);
   return data;
 }
+
+export async function getAuditRetention() {
+  const { data } = await api.get<{enabled: boolean; maxRuns: number}>('/security-audit/retention');
+  return data;
+}
+export async function setAuditRetention(enabled: boolean) {
+  const { data } = await api.put<{enabled: boolean; maxRuns: number; deleted: number}>('/security-audit/retention', { enabled });
+  return data;
+}

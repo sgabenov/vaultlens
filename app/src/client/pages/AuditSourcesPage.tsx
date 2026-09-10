@@ -9,6 +9,8 @@ import AuditRunDialog from '../components/AuditRunDialog';
 import {
   analyzeAuditSnapshot,
   getAuditInventory,
+  getAuditRetention,
+  setAuditRetention,
   getSecurityAuditRun,
   getSecurityAuditRuns,
   updateAuditInventory,
@@ -76,6 +78,18 @@ export default function AuditSourcesPage() {
     queryKey: ['audit-inventory'],
     queryFn: getAuditInventory,
     refetchInterval: () => auditPollingInterval(false),
+  });
+  const retention = useQuery({
+    queryKey: ['audit-retention'],
+    queryFn: getAuditRetention,
+  });
+  const saveRetention = useMutation({
+    mutationFn: setAuditRetention,
+    onSuccess: (result) => {
+      client.setQueryData(['audit-retention'], result);
+      client.invalidateQueries({ queryKey: ['security-audit-runs'] });
+      client.invalidateQueries({ queryKey: ['security-audit-run'] });
+    },
   });
   const runs = useQuery({
     queryKey: ['security-audit-runs'],
@@ -572,9 +586,34 @@ export default function AuditSourcesPage() {
           </div>
           <div className="border-t border-slate-200 pt-4">
             <h3 className="font-medium">Retention</h3>
+            <label className="mt-3 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={retention.data?.enabled ?? false}
+                disabled={!retention.data || saveRetention.isPending}
+                onChange={(event) => saveRetention.mutate(event.target.checked)}
+              />
+              Auto-cleanup runs
+            </label>
             <p className="mt-2 text-slate-500">
-              All snapshots are retained. Automatic cleanup is not enabled.
+              Keep the latest 100 finished runs for this Vault connection,
+              including failed, interrupted and collection-only runs. Older runs
+              are deleted when enabled and after each run finishes. Running
+              jobs, snapshots and current inventory are retained.
             </p>
+            {(retention.error || saveRetention.error) && (
+              <p role="alert" className="mt-2 text-red-700">
+                Could not save or load cleanup settings. Try again.
+              </p>
+            )}
+            {saveRetention.isSuccess && (
+              <p role="status" className="mt-2 text-xs text-slate-500">
+                {saveRetention.data.enabled
+                  ? 'Auto-cleanup enabled.'
+                  : 'Auto-cleanup disabled.'}{' '}
+                {saveRetention.data.deleted} old runs deleted.
+              </p>
+            )}
           </div>
         </div>
       )}

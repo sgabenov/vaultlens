@@ -55,6 +55,7 @@ export class AuditStore {
         retainedCount INTEGER NOT NULL, changes TEXT NOT NULL, payload TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS audit_snapshot_target ON audit_snapshots(target,createdAt);
       CREATE TABLE IF NOT EXISTS audit_inventory (target TEXT PRIMARY KEY, snapshotId TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS audit_retention (target TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS audit_migrations (name TEXT PRIMARY KEY);
     `);
     this.migrateSnapshots();
@@ -330,6 +331,47 @@ export class AuditStore {
       )
       .all(target) as unknown as AuditRun[];
   }
+  retention(target: string) {
+    const row = this.db
+      .prepare('SELECT enabled FROM audit_retention WHERE target=?')
+      .get(target);
+    return { enabled: row?.enabled === 1, maxRuns: 100 };
+  }
+  setRetention(target: string, enabled: boolean) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db
+        .prepare(
+          'INSERT INTO audit_retention(target,enabled) VALUES (?,?) ON CONFLICT(target) DO UPDATE SET enabled=excluded.enabled',
+        )
+        .run(target, enabled ? 1 : 0);
+      const deleted = this.cleanupRuns(target);
+      this.db.exec('COMMIT');
+      return { ...this.retention(target), deleted };
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  private cleanupRuns(target: string): number {
+    if (!this.retention(target).enabled) return 0;
+    return Number(
+      this.db
+        .prepare(
+          `DELETE FROM audit_runs WHERE target=? AND id IN (
+      SELECT id FROM audit_runs WHERE target=? AND status!='running'
+      ORDER BY COALESCE(finishedAt,startedAt) DESC, startedAt DESC, rowid DESC LIMIT -1 OFFSET 100
+    )`,
+        )
+        .run(target, target).changes,
+    );
+  }
+  private cleanupForRun(id: string) {
+    const row = this.db
+      .prepare('SELECT target FROM audit_runs WHERE id=?')
+      .get(id);
+    if (row) this.cleanupRuns(String(row.target));
+  }
   deleteRuns(target: string, ids: string[]): number {
     if (!ids.length || ids.length > 100 || new Set(ids).size !== ids.length)
       throw new Error('Select between 1 and 100 distinct runs');
@@ -425,6 +467,7 @@ export class AuditStore {
         configuration ? JSON.stringify(configuration) : null,
         id,
       );
+    this.cleanupForRun(id);
   }
   saveCheckpoint(id: string, snapshot: AuditSnapshot) {
     const saved = snapshot.collection?.requestPolicy.redactPolicySource
@@ -461,6 +504,7 @@ export class AuditStore {
         "UPDATE audit_runs SET status='failed',finishedAt=?,failureReason=? WHERE id=? AND status='running'",
       )
       .run(new Date().toISOString(), reason, id);
+    this.cleanupForRun(id);
   }
   recover() {
     this.db
@@ -468,6 +512,10 @@ export class AuditStore {
         "UPDATE audit_runs SET status='interrupted',finishedAt=? WHERE status='running'",
       )
       .run(new Date().toISOString());
+    for (const row of this.db
+      .prepare('SELECT target FROM audit_retention WHERE enabled=1')
+      .all())
+      this.cleanupRuns(String(row.target));
   }
   close() {
     this.db.close();

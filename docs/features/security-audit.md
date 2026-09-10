@@ -98,7 +98,7 @@ Provision the writable database directory first. Without `VAULTLENS_AUDIT_DB`,
 the path is `data/security-audit.sqlite` relative to the application working
 directory. SQLite uses WAL; persist the directory, not just the main file. The
 file is created with mode 0600. Back up with the process stopped or a SQLite-aware
-backup, including WAL state. There is no automatic retention or encryption at
+backup, including WAL state. Snapshot retention is unlimited. There is no encryption at
 rest. Reports and policy source should be treated as sensitive configuration.
 
 Use one application instance per database. All VaultLens administrators can read
@@ -173,3 +173,15 @@ partitioned by the configured Vault address. This first version assumes that an
 address continues to identify the same cluster and authorization boundary; cluster
 replacement and multiple independent credential profiles require explicit source
 identity management before sharing a database between those deployments.
+
+### Automatic run cleanup
+
+Sources → Connection & storage offers a persisted, per-Vault-connection
+Auto-cleanup runs checkbox. New connections default to disabled. Enabling it
+immediately keeps the latest 100 finished runs ordered by finish time, then
+start time and insertion order. Cleanup also runs after completion, failure,
+and startup recovery. Collection-only, failed and interrupted runs count toward
+the limit; running jobs do not. Disabling cleanup stops future deletions.
+Snapshots and the current inventory remain intact; deleted run findings and
+configuration are no longer available for viewing or comparison. This setting
+does not limit snapshot disk usage. Retention changes require administrator access.

@@ -58,6 +58,16 @@ router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
+router.get('/retention', (_req, res) =>
+  res.json(storage().retention(config.vaultAddr)),
+);
+router.put('/retention', (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') {
+    res.status(400).json({ error: 'enabled must be a boolean' });
+    return;
+  }
+  res.json(storage().setRetention(config.vaultAddr, req.body.enabled));
+});
 router.get('/inventory', (_req, res) => {
   const db = storage();
   const current = db.currentSnapshot(config.vaultAddr);

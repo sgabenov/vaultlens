@@ -3155,3 +3155,44 @@ test('legacy migration preserves run payloads and does not promote a later reana
   try { assert.equal(reopened.currentSnapshot(original.target)?.id, current.id); assert.equal(reopened.snapshots(original.target).length, 3); }
   finally { reopened.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('run retention is target-scoped, persistent and preserves active jobs and snapshots', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'audit-retention-'));
+  const file = join(directory, 'audit.sqlite');
+  let db = new AuditStore(file);
+  try {
+    const s = snapshot();
+    const first = db.create(s.target);
+    const saved = db.saveSnapshot(first, s, true);
+    db.finish(first, s, []);
+    const other = db.create('http://other.invalid');
+    db.finish(other, {...s, target: 'http://other.invalid'}, []);
+    for (let i = 0; i < 101; i++) {
+      const id = db.create(s.target);
+      db.finish(id, s, []);
+    }
+    assert.ok(db.get(first, s.target));
+    const active = db.create(s.target);
+    assert.equal(db.setRetention(s.target, true).deleted, 2);
+    assert.equal(db.get(first, s.target), null);
+    assert.ok(db.get(other, 'http://other.invalid'));
+    assert.equal(db.get(active, s.target)?.run.status, 'running');
+    assert.equal(db.currentSnapshot(s.target)?.id, saved);
+    assert.ok(db.savedSnapshot(saved, s.target));
+    db.fail(active);
+    const inspection = new DatabaseSync(file);
+    const count = () => Number(inspection.prepare('SELECT count(*) AS n FROM audit_runs WHERE target=?').get(s.target)?.n);
+    assert.equal(count(), 100);
+    db.close(); db = new AuditStore(file);
+    assert.equal(db.retention(s.target).enabled, true);
+    db.setRetention(s.target, false);
+    db.finish(db.create(s.target), s, []);
+    assert.equal(count(), 101);
+    const interrupted = db.create(s.target);
+    db.setRetention(s.target, true);
+    db.recover();
+    assert.equal(count(), 100);
+    assert.equal(db.get(interrupted, s.target)?.run.status, 'interrupted');
+    inspection.close();
+  } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
+});
