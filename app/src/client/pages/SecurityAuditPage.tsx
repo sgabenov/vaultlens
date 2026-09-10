@@ -11,6 +11,8 @@ import {
   getSecurityAuditRun,
   startSecurityAudit,
 } from '../lib/api';
+const collectionInput =
+  'min-h-[42px] w-full min-w-0 rounded-md border border-[#dce3ed] bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500';
 export default function SecurityAuditPage() {
   const [recursiveNamespaces, setRecursiveNamespaces] = useState(false);
   const [namespace, setNamespace] = useState('');
@@ -138,6 +140,7 @@ export default function SecurityAuditPage() {
         </button>
       </div>
       <AuditRunDialog
+        connection={runs.data?.[0]?.target}
         open={collecting}
         onClose={closeCollection}
         onStart={() => start.mutate()}
@@ -153,142 +156,207 @@ export default function SecurityAuditPage() {
             : undefined)
         }
       >
-        <p className="rounded border bg-gray-50 p-3 text-sm">
-          Source: current Vault connection. The latest saved checks and object
-          exceptions will be applied.
-        </p>
-        <label className="mt-3 block">
-          Vault namespace (empty = root)
-          <input
-            aria-label="Vault namespace"
-            className="ml-2 rounded border p-2"
-            disabled={!!running || start.isPending}
-            value={namespace}
-            onChange={(event) => setNamespace(event.target.value)}
-          />
-        </label>
-        <label className="mt-3 block">
-          <input
-            type="checkbox"
-            checked={recursiveNamespaces}
-            disabled={!!running || start.isPending}
-            onChange={(event) => setRecursiveNamespaces(event.target.checked)}
-          />{' '}
-          Include child namespaces recursively
-        </label>
-        <details className="rounded border p-3 text-sm">
-          <summary>Advanced collection settings</summary>
-          <p className="mt-3 text-xs text-gray-500">
-            Optional glob filters, one per line. Empty means all. Auth mount
-            names omit the trailing slash.
-          </p>
-          <div className="mt-3 grid gap-3 lg:grid-cols-3">
-            {(
-              [
-                'namespaceFilters',
-                'policyFilters',
-                'authMountFilters',
-                'authTypeFilters',
-              ] as const
-            ).map((key) => (
-              <label key={key}>
-                {
-                  {
-                    namespaceFilters:
-                      'Namespace filters (root for root namespace)',
-                    policyFilters: 'Policy filters',
-                    authMountFilters: 'Auth mount filters',
-                    authTypeFilters: 'Auth type filters',
-                  }[key]
-                }
-                <textarea
-                  aria-label={key}
-                  rows={3}
-                  className="mt-2 w-full rounded border p-2 font-mono text-xs"
-                  disabled={!!running || start.isPending}
-                  value={scopeText[key]}
-                  onChange={(event) =>
-                    setScopeText((current) => ({
-                      ...current,
-                      [key]: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-          <label className="mt-3 block">
+        <section data-collection-section="scope">
+          <label className="flex flex-col gap-2">
+            Vault namespace
+            <input
+              aria-label="Vault namespace"
+              className={collectionInput}
+              placeholder="Root namespace"
+              value={namespace}
+              onChange={(event) => setNamespace(event.target.value)}
+            />
+            <span className="text-xs text-slate-500">
+              Leave empty to use the root namespace.
+            </span>
+          </label>
+          <label className="mt-4 flex items-center gap-2.5">
             <input
               type="checkbox"
-              checked={redactPolicySource}
-              disabled={!!running || start.isPending}
-              onChange={(event) => setRedactPolicySource(event.target.checked)}
-            />{' '}
-            Do not store full policy source
+              className="h-4 w-4 accent-blue-600"
+              checked={recursiveNamespaces}
+              onChange={(event) => setRecursiveNamespaces(event.target.checked)}
+            />
+            Include child namespaces
           </label>
-          <p className="text-xs text-gray-500">
-            Initial analysis uses the source in memory. Matched ACL blocks
-            remain in findings; later offline analysis will have coverage gaps.
-          </p>
-          <label className="mt-3 block">
-            <input
-              type="checkbox"
-              checked={skipIdentity}
-              disabled={!!running || start.isPending}
-              onChange={(event) => setSkipIdentity(event.target.checked)}
-            />{' '}
-            Skip Identity collection (reported as a coverage gap)
-          </label>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {(
-              [
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <h3 className="font-medium">Filters</h3>
+            <p className="mb-4 mt-1 text-xs text-slate-500">
+              Optional glob patterns, one per line. Empty fields include
+              everything.
+            </p>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {(
                 [
-                  'maxObjects',
-                  'Maximum objects (0 = unlimited)',
-                  0,
-                  10000000,
+                  [
+                    'namespaceFilters',
+                    'Namespaces',
+                    'e.g. engineering/*\nroot',
+                  ],
+                  ['policyFilters', 'Policies', 'e.g. lab-atlas-*'],
+                  ['authMountFilters', 'Auth mounts', 'e.g. lab-approle-*'],
+                  ['authTypeFilters', 'Auth types', 'e.g. approle\nkubernetes'],
+                ] as const
+              ).map(([key, label, placeholder]) => (
+                <label key={key} className="flex min-w-0 flex-col gap-2">
+                  {label}
+                  <textarea
+                    aria-label={label + ' filter'}
+                    rows={2}
+                    placeholder={placeholder}
+                    className={collectionInput + ' resize-y'}
+                    value={scopeText[key]}
+                    onChange={(event) =>
+                      setScopeText((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Use “root” for the root namespace. Auth mount patterns omit the
+              trailing slash.
+            </p>
+          </div>
+        </section>
+        <section data-collection-section="limits">
+          <p className="mb-5 text-slate-500">
+            Control the load on Vault and how long collection can run.
+          </p>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {(
+              [
+                ['workers', 'Concurrent workers', 1, 32, 1, 1, ''],
+                [
+                  'requestsPerSecond',
+                  'Request rate',
+                  0.1,
+                  1000,
+                  0.1,
                   1,
+                  'req/s',
                 ],
-                ['timeoutMs', 'Request timeout (ms)', 1, 86400000, 1],
+                [
+                  'timeoutMs',
+                  'Request timeout',
+                  0.001,
+                  86400,
+                  'any',
+                  1000,
+                  'sec',
+                ],
                 [
                   'maxDurationMs',
-                  'Collection duration limit (ms)',
-                  1,
-                  86400000,
-                  1,
+                  'Collection time limit',
+                  1 / 60000,
+                  1440,
+                  'any',
+                  60000,
+                  'min',
                 ],
-                ['workers', 'Concurrent workers', 1, 32, 1],
-                ['requestsPerSecond', 'Requests per second', 0.1, 1000, 0.1],
-                ['retries', 'Retries per request', 0, 10, 1],
-                ['retryBackoffMs', 'Initial retry delay (ms)', 0, 10000, 100],
+                ['retries', 'Retries per request', 0, 10, 1, 1, ''],
+                [
+                  'retryBackoffMs',
+                  'Initial retry delay',
+                  0,
+                  10000,
+                  100,
+                  1,
+                  'ms',
+                ],
+                ['maxObjects', 'Maximum objects', 0, 10000000, 1, 1, ''],
               ] as const
-            ).map(([key, label, min, max, step]) => (
-              <label key={key}>
+            ).map(([key, label, min, max, step, scale, unit]) => (
+              <label
+                key={key}
+                className={`flex min-w-0 flex-col gap-2 ${key === 'maxObjects' ? 'mt-1 border-t border-slate-200 pt-5 sm:col-span-2' : ''}`}
+              >
                 {label}
-                <input
-                  type="number"
-                  aria-label={label}
-                  min={min}
-                  max={max}
-                  step={step}
-                  className="ml-2 rounded border p-2"
-                  disabled={!!running || start.isPending}
-                  value={collectionOptions[key]}
-                  onChange={(event) =>
-                    setCollectionOptions((current) => ({
-                      ...current,
-                      [key]: Number(event.target.value),
-                    }))
-                  }
-                />
+                <span className="flex items-center rounded-md border border-[#dce3ed] bg-white focus-within:ring-2 focus-within:ring-blue-500">
+                  <input
+                    required
+                    type="number"
+                    aria-label={label}
+                    min={min}
+                    max={max}
+                    step={step}
+                    className="min-h-[42px] w-full min-w-0 rounded-md bg-transparent px-3 py-2.5 outline-none"
+                    value={collectionOptions[key] / scale}
+                    onChange={(event) =>
+                      setCollectionOptions((current) => ({
+                        ...current,
+                        [key]:
+                          scale === 1
+                            ? Number(event.target.value)
+                            : Math.round(Number(event.target.value) * scale),
+                      }))
+                    }
+                  />
+                  {unit && (
+                    <span className="whitespace-nowrap pr-3 text-slate-500">
+                      {unit}
+                    </span>
+                  )}
+                </span>
+                {key === 'maxObjects' && (
+                  <span className="text-xs text-slate-500">
+                    0 means unlimited. A collection stopped at this limit is
+                    marked incomplete.
+                  </span>
+                )}
               </label>
             ))}
           </div>
-        </details>
-        <p className="text-xs text-gray-500">
-          No secret values are collected. Missing permissions and unavailable
-          data are reported as coverage gaps.
-        </p>
+        </section>
+        <section data-collection-section="snapshot">
+          <label className="flex items-start gap-3 border-b border-slate-200 pb-5">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 shrink-0 accent-blue-600"
+              checked={!skipIdentity}
+              onChange={(event) => setSkipIdentity(!event.target.checked)}
+            />
+            <span className="flex flex-col gap-2">
+              <span>Include Identity</span>
+              <span className="text-xs text-slate-500">
+                Collect entities, groups and aliases to analyze policy
+                assignments.
+              </span>
+              {skipIdentity && (
+                <span className="text-xs text-amber-700">
+                  Identity checks will have incomplete coverage.
+                </span>
+              )}
+            </span>
+          </label>
+          <label className="mt-5 flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 shrink-0 accent-blue-600"
+              checked={!redactPolicySource}
+              onChange={(event) => setRedactPolicySource(!event.target.checked)}
+            />
+            <span className="flex flex-col gap-2">
+              <span>Save full policy source</span>
+              <span className="text-xs text-slate-500">
+                Keep policy definitions for later analysis with updated checks.
+              </span>
+              {redactPolicySource && (
+                <span className="text-xs text-amber-700">
+                  Initial analysis still runs. Matched blocks are retained, but
+                  later analysis will have coverage gaps.
+                </span>
+              )}
+            </span>
+          </label>
+          <p className="mt-6 border-t border-slate-200 pt-5 text-xs text-slate-500">
+            Missing permissions and unavailable data are reported as coverage
+            gaps.
+          </p>
+        </section>
       </AuditRunDialog>
       {error && (
         <p
