@@ -1,11 +1,10 @@
-import { Outlet, useMatch } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useBrandingStore } from '../../stores/brandingStore';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
 export default function Layout() {
   const { branding } = useBrandingStore();
-  const isSecurityAudit = useMatch('/security-audit/*');
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -14,7 +13,7 @@ export default function Layout() {
         <Header />
         <main
           className="flex-1 overflow-y-auto p-6"
-          style={{ backgroundColor: isSecurityAudit ? '#ffffff' : branding.backgroundColor }}
+          style={{ backgroundColor: branding.backgroundColor }}
         >
           <Outlet />
         </main>

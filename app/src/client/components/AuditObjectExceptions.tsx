@@ -373,6 +373,35 @@ export default function AuditObjectExceptions() {
         {query.data?.length ?? 0} exceptions ·{' '}
         {query.data?.filter((e) => e.enabled !== false).length ?? 0} enabled
       </div>
+      <div className="flex flex-wrap gap-3">
+        <label className="flex-1 text-sm">
+          Search
+          <input
+            placeholder="Check, object, namespace, owner or reason"
+            className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+        <label className="text-sm">
+          Status
+          <select
+            className="mt-1 block rounded border p-2"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+          >
+            {['All', 'Enabled', 'Disabled', 'Expired'].map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
@@ -498,35 +527,6 @@ export default function AuditObjectExceptions() {
       {!query.isPending && !query.error && !matches.length && (
         <p className="text-sm text-gray-500">No matching exceptions.</p>
       )}
-      <div className="flex flex-wrap gap-3">
-        <label className="flex-1 text-sm">
-          Search
-          <input
-            placeholder="Check, object, namespace, owner or reason"
-            className="mt-1 block w-full rounded border p-2 placeholder:text-slate-400"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label className="text-sm">
-          Status
-          <select
-            className="mt-1 block rounded border p-2"
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value);
-              setPage(1);
-            }}
-          >
-            {['All', 'Enabled', 'Disabled', 'Expired'].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-      </div>
       <AuditPagination
         page={page}
         total={matches.length}
