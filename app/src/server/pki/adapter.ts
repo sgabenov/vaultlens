@@ -27,6 +27,7 @@ export class PkiAdapter {
     private token: string,
     public namespace = "",
     skipTls = false,
+    private beforeRequest?: () => Promise<void>,
   ) {
     if (namespace) this.namespace = scopePath(namespace);
     this.http = axios.create({
@@ -44,6 +45,7 @@ export class PkiAdapter {
     });
   }
   async request(path: string, method = "GET", data?: unknown): Promise<any> {
+    await this.beforeRequest?.();
     try {
       return (
         await this.http.request({

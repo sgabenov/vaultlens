@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -163,6 +164,9 @@ test("worker persists progress, marks unknown revocation and pauses on lost acce
     serial = parseCertificate(pem).serial;
   let allowed = true,
     reads = 0;
+  let holdNext = false,
+    notifyHeld: () => void = () => {},
+    releaseHeld: () => void = () => {};
   const server = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
     const path = req.url!.split("?")[0];
@@ -180,7 +184,12 @@ test("worker persists progress, marks unknown revocation and pauses on lost acce
       res.end(JSON.stringify({ data: { keys: [serial] } }));
     else if (path.includes("/cert/")) {
       reads++;
-      res.end(JSON.stringify({ data: { certificate: pem } }));
+      if (holdNext) {
+        holdNext = false;
+        releaseHeld = () =>
+          res.end(JSON.stringify({ data: { certificate: pem } }));
+        notifyHeld();
+      } else res.end(JSON.stringify({ data: { certificate: pem } }));
     } else {
       res.statusCode = 404;
       res.end("{}");
@@ -202,7 +211,7 @@ test("worker persists progress, marks unknown revocation and pauses on lost acce
       concurrency: 2,
       requestsPerSecond: 10000,
     };
-    await collectPki(input);
+    await collectPki({ ...input, attempt: store.dispatch(input.id) });
     assert.equal(store.job(input.id)!.status, "partial");
     assert.equal(
       store.job(input.id)!.completed,
@@ -211,20 +220,193 @@ test("worker persists progress, marks unknown revocation and pauses on lost acce
     );
     assert.equal(store.sources([source.id])[0].coverage, "revocation_unknown");
     store.state(input.id, "queued");
-    await collectPki(input);
+    await collectPki({ ...input, attempt: store.dispatch(input.id) });
     assert.equal(reads, 2);
     allowed = false;
     const denied = { ...input, id: store.createJob([source.id]) };
-    await collectPki(denied);
+    await collectPki({ ...denied, attempt: store.dispatch(denied.id) });
     assert.equal(store.job(denied.id)!.status, "paused");
     assert.equal(reads, 2);
     const paused = { ...input, id: store.createJob([source.id]) };
-    store.state(paused.id, "pausing");
-    await collectPki(paused);
+    const attempt = store.dispatch(paused.id);
+    store.pause(paused.id);
+    await collectPki({ ...paused, attempt });
     assert.equal(store.job(paused.id)!.status, "paused");
+    allowed = true;
+    const delayed = { ...input, id: store.createJob([source.id]) };
+    const held = new Promise<void>((resolve) => {
+      notifyHeld = resolve;
+    });
+    holdNext = true;
+    const oldRun = collectPki({
+      ...delayed,
+      attempt: store.dispatch(delayed.id),
+    });
+    await held;
+    store.db
+      .prepare("UPDATE jobs SET updatedAt=? WHERE id=?")
+      .run("2000-01-01", delayed.id);
+    store.recover();
+    store.resume(delayed.id);
+    await collectPki({ ...delayed, attempt: store.dispatch(delayed.id) });
+    const observation = store.db
+      .prepare("SELECT lastSeen FROM certificates WHERE sourceId=?")
+      .get(source.id)!.lastSeen;
+    releaseHeld();
+    await oldRun;
+    assert.equal(
+      store.db
+        .prepare("SELECT lastSeen FROM certificates WHERE sourceId=?")
+        .get(source.id)!.lastSeen,
+      observation,
+    );
+    assert.equal(store.job(delayed.id)!.status, "partial");
+    assert.equal(
+      store.jobDetails(delayed.id, [source.id])!.sources[0].revocationMode,
+      "certificate_metadata",
+    );
   } finally {
+    releaseHeld();
+    server.closeAllConnections();
     await new Promise<void>((r) => server.close(() => r()));
     store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("attempt ownership fences late writers, heartbeats and completion across connections", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pki-lease-")),
+    path = join(dir, "db.sqlite");
+  const old = new PkiStore(path),
+    control = new PkiStore(path),
+    next = new PkiStore(path);
+  try {
+    const source = {
+      id: "source",
+      cluster: "test",
+      namespace: "",
+      accessor: "a",
+      path: "pki",
+      description: "",
+      coverage: "not_collected",
+      lastCollected: null,
+    };
+    control.source(source);
+    const id = control.createJob([source.id]),
+      attempt = control.dispatch(id);
+    assert.equal(old.claim(id, attempt), true);
+    assert.equal(next.claim(id, attempt), false);
+    control.db
+      .prepare("UPDATE jobs SET updatedAt=? WHERE id=?")
+      .run("2000-01-01", id);
+    control.recover();
+    assert.equal(old.heartbeat(id, attempt), 0);
+    control.resume(id);
+    assert.throws(() => control.resume(id), /resumed/);
+    const resumed = control.dispatch(id);
+    assert.equal(next.claim(id, resumed), true);
+    assert.throws(
+      () =>
+        old.transaction(() =>
+          old.source({ ...source, description: "stale overwrite" }),
+        ),
+      /no longer owns/,
+    );
+    old.finish(id, attempt, "completed");
+    assert.equal(control.job(id)!.status, "running");
+    assert.equal(control.sources([source.id])[0].description, "");
+    next.transaction(() =>
+      next.source({ ...source, description: "current writer" }),
+    );
+    control.pause(id);
+    assert.throws(
+      () =>
+        next.transaction(() =>
+          next.source({ ...source, description: "write after pause" }),
+        ),
+      /no longer owns/,
+    );
+    next.finish(id, resumed, "completed");
+    assert.equal(control.job(id)!.status, "paused");
+    assert.equal(control.sources([source.id])[0].description, "current writer");
+    assert.throws(() => control.createJob(["missing-source"]));
+  } finally {
+    old.close();
+    control.close();
+    next.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("job diagnostics are scoped and error samples are bounded", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pki-details-")),
+    s = new PkiStore(join(dir, "db.sqlite"));
+  try {
+    s.source({
+      id: "s",
+      cluster: "test",
+      namespace: "ns",
+      accessor: "a",
+      path: "pki",
+      description: "",
+      coverage: "not_collected",
+      lastCollected: null,
+    });
+    const id = s.createJob(["s"]);
+    s.enqueue(
+      id,
+      "s",
+      Array.from({ length: 30 }, (_, i) => i.toString(16)),
+      null,
+    );
+    s.db
+      .prepare(
+        "UPDATE job_items SET state='failed',error='Vault resource not found',errorCategory='not_found' WHERE jobId=?",
+      )
+      .run(id);
+    const details = s.jobDetails(id, ["s"], 5)!;
+    assert.equal(details.sources[0].failed, 30);
+    assert.equal(details.errors.length, 5);
+    assert.equal(details.errorsTruncated, true);
+    assert.equal(s.jobDetails(id, []), null);
+    assert.equal(s.jobDetails("missing", ["s"]), null);
+    s.close();
+    const reopened = new PkiStore(join(dir, "db.sqlite"));
+    assert.equal(reopened.jobDetails(id, ["s"])!.job.total, 30);
+    reopened.close();
+  } finally {
+    try {
+      s.close();
+    } catch {}
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("schema upgrade retains v1 jobs and refuses an active legacy worker", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pki-upgrade-")),
+    path = join(dir, "db.sqlite");
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE pki_schema(version INTEGER PRIMARY KEY);INSERT INTO pki_schema VALUES(1);
+    CREATE TABLE jobs(id TEXT PRIMARY KEY,sources TEXT NOT NULL,status TEXT NOT NULL,createdAt TEXT NOT NULL,updatedAt TEXT NOT NULL,error TEXT,pid INTEGER);
+    INSERT INTO jobs VALUES('legacy','[]','running','2026-09-13','2026-09-13',NULL,NULL);`);
+  try {
+    assert.throws(() => new PkiStore(path), /Stop legacy PKI workers/);
+    assert.equal(
+      db.prepare("SELECT version FROM pki_schema").get()!.version,
+      1,
+    );
+    db.exec("UPDATE jobs SET status='completed'");
+    const upgraded = new PkiStore(path);
+    assert.equal(upgraded.job("legacy")!.status, "completed");
+    assert.equal(
+      upgraded.db.prepare("SELECT version FROM pki_schema").get()!.version,
+      2,
+    );
+    upgraded.close();
+    db.exec("UPDATE pki_schema SET version=3");
+    assert.throws(() => new PkiStore(path), /Unsupported PKI database schema/);
+  } finally {
+    db.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

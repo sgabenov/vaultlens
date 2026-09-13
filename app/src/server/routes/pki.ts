@@ -12,6 +12,8 @@ import { PkiStore } from "../pki/store.js";
 import { validateQuery } from "../pki/query.js";
 import { launchCollection } from "../pki/runtime.js";
 import type { PkiSource } from "../../shared/pki.js";
+import { collectionSettings } from "../pki/settings.js";
+const limits = collectionSettings();
 const router = Router();
 const dbPath = resolve(
   process.env["VAULTLENS_PKI_DB_PATH"] || "data/pki-certificates.sqlite",
@@ -192,6 +194,23 @@ router.get(
     res.json({ jobs: store().jobs(ctx.sources.map((s) => s.id)) });
   }),
 );
+router.get(
+  "/jobs/:id",
+  wrap((req, res, ctx) => {
+    store().recover();
+    const raw =
+      req.query.errorLimit === undefined ? "20" : String(req.query.errorLimit);
+    if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 100)
+      throw new PkiError(400, "errorLimit must be between 1 and 100");
+    const details = store().jobDetails(
+      String(req.params.id),
+      ctx.sources.map((s) => s.id),
+      Number(raw),
+    );
+    if (!details) throw new PkiError(404, "Job not found");
+    res.json(details);
+  }),
+);
 router.post(
   "/jobs",
   wrap((req, res, ctx) => {
@@ -205,8 +224,7 @@ router.post(
       token: ctx.token,
       namespace,
       skipTls: config.vaultSkipTlsVerify,
-      concurrency: 4,
-      requestsPerSecond: 20,
+      ...limits,
     });
     res.status(202).json({ job: store().job(id) });
   }),
@@ -220,23 +238,12 @@ router.post(
     authorized(job.sources, ctx);
     const action = req.params.action;
     if (action === "pause" && ["queued", "running"].includes(job.status)) {
-      store().state(job.id, "pausing");
+      store().pause(job.id);
     } else if (
       action === "resume" &&
       ["paused", "partial", "interrupted"].includes(job.status)
     ) {
-      try {
-        store().transaction(() => {
-          store().state(job.id, "queued");
-          store()
-            .db.prepare(
-              "UPDATE job_items SET state='pending',error=NULL WHERE jobId=? AND state='failed'",
-            )
-            .run(job.id);
-        });
-      } catch {
-        throw new PkiError(409, "Another collection is active");
-      }
+      store().resume(job.id);
       launchCollection({
         id: job.id,
         dbPath,
@@ -244,8 +251,7 @@ router.post(
         token: ctx.token,
         namespace,
         skipTls: config.vaultSkipTlsVerify,
-        concurrency: 4,
-        requestsPerSecond: 20,
+        ...limits,
       });
     } else
       throw new PkiError(
@@ -265,10 +271,8 @@ router.use((e: unknown, _req: Request, res: Response, _next: NextFunction) => {
     );
     return;
   }
-  res
-    .status(e instanceof PkiError ? e.status : 500)
-    .json({
-      error: e instanceof PkiError ? e.message : "Certificate operation failed",
-    });
+  res.status(e instanceof PkiError ? e.status : 500).json({
+    error: e instanceof PkiError ? e.message : "Certificate operation failed",
+  });
 });
 export default router;

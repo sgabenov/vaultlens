@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import type {
   CertificateRecord,
   PkiJob,
+  PkiJobSource,
+  PkiJobDetails,
   PkiQuery,
   PkiSource,
   Revocation,
@@ -12,7 +14,9 @@ import type {
 import { parseCertificate } from "./certificate.js";
 import { queryKey, whereQuery } from "./query.js";
 import { PkiError } from "./adapter.js";
+export class WorkerStopped extends Error {}
 export class PkiStore {
+  workerAttempt?: { id: string; attempt: number };
   db: DatabaseSync;
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -21,7 +25,7 @@ export class PkiStore {
     this.db
       .exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS pki_schema(version INTEGER PRIMARY KEY);
-      INSERT OR IGNORE INTO pki_schema VALUES(1);
+
       CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY, cluster TEXT NOT NULL, namespace TEXT NOT NULL, accessor TEXT NOT NULL, path TEXT NOT NULL, description TEXT NOT NULL, lastCollected TEXT, coverage TEXT NOT NULL DEFAULT 'not_collected');
       CREATE TABLE IF NOT EXISTS blobs(fingerprint TEXT PRIMARY KEY, der BLOB NOT NULL);
       CREATE TABLE IF NOT EXISTS certificates(id INTEGER PRIMARY KEY, sourceId TEXT NOT NULL REFERENCES sources(id), serial TEXT NOT NULL, fingerprint TEXT NOT NULL REFERENCES blobs(fingerprint), cn TEXT NOT NULL COLLATE NOCASE, subject TEXT NOT NULL, issuer TEXT NOT NULL, notBefore INTEGER NOT NULL, notAfter INTEGER NOT NULL, algorithm TEXT NOT NULL, keySize INTEGER NOT NULL, curve TEXT NOT NULL, type TEXT NOT NULL, revoked TEXT NOT NULL, revocationObservedAt TEXT, firstSeen TEXT NOT NULL, lastSeen TEXT NOT NULL, presence TEXT NOT NULL DEFAULT 'present', eku TEXT NOT NULL, UNIQUE(sourceId,serial));
@@ -36,6 +40,45 @@ export class PkiStore {
       CREATE TABLE IF NOT EXISTS job_items(jobId TEXT NOT NULL REFERENCES jobs(id),sourceId TEXT NOT NULL,serial TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',error TEXT,PRIMARY KEY(jobId,sourceId,serial));
       CREATE INDEX IF NOT EXISTS pending_items ON job_items(jobId,sourceId,state,serial);
     `);
+    try {
+      this.transaction(() => {
+        const version = Number(
+          this.db
+            .prepare("SELECT MAX(version) AS version FROM pki_schema")
+            .get()!.version ?? 1,
+        );
+        if (version > 2) throw new Error("Unsupported PKI database schema");
+        if (version < 2) {
+          if (
+            this.db
+              .prepare(
+                "SELECT 1 FROM jobs WHERE status IN ('queued','running','pausing') LIMIT 1",
+              )
+              .get()
+          )
+            throw new Error(
+              "Stop legacy PKI workers and resolve active jobs before schema upgrade",
+            );
+          this.db
+            .exec(`ALTER TABLE jobs ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE jobs ADD COLUMN concurrency INTEGER;
+          ALTER TABLE jobs ADD COLUMN requestsPerSecond INTEGER;
+          ALTER TABLE job_sources ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
+          ALTER TABLE job_sources ADD COLUMN startedAt TEXT;
+          ALTER TABLE job_sources ADD COLUMN finishedAt TEXT;
+          ALTER TABLE job_sources ADD COLUMN revocationMode TEXT NOT NULL DEFAULT 'unknown';
+          ALTER TABLE job_sources ADD COLUMN revocationError TEXT;
+          ALTER TABLE job_sources ADD COLUMN errorCategory TEXT;
+          UPDATE job_sources SET status='legacy_unknown';
+          ALTER TABLE job_items ADD COLUMN errorCategory TEXT;
+          CREATE INDEX job_errors ON job_items(jobId,sourceId,serial) WHERE error IS NOT NULL;
+          DELETE FROM pki_schema; INSERT INTO pki_schema VALUES(2);`);
+        }
+      });
+    } catch (e) {
+      this.db.close();
+      throw e;
+    }
   }
   close() {
     this.db.close();
@@ -43,12 +86,122 @@ export class PkiStore {
   transaction(fn: () => void) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      if (this.workerAttempt) this.assertWorker();
       fn();
       this.db.exec("COMMIT");
     } catch (e) {
       this.db.exec("ROLLBACK");
       throw e;
     }
+  }
+  assertWorker() {
+    if (!this.workerAttempt) return;
+    const { id, attempt } = this.workerAttempt;
+    const row = this.db
+      .prepare(
+        "SELECT 1 FROM jobs WHERE id=? AND attempt=? AND status='running'",
+      )
+      .get(id, attempt);
+    if (!row) throw new WorkerStopped("Worker no longer owns a running job");
+  }
+  dispatch(id: string, concurrency = 4, requestsPerSecond = 20): number {
+    const row = this.db
+      .prepare(
+        "UPDATE jobs SET attempt=attempt+1,concurrency=?,requestsPerSecond=?,updatedAt=? WHERE id=? AND status='queued' RETURNING attempt",
+      )
+      .get(concurrency, requestsPerSecond, new Date().toISOString(), id);
+    if (!row) throw new PkiError(409, "Job is no longer queued");
+    return Number(row.attempt);
+  }
+  claim(id: string, attempt: number): boolean {
+    const row = this.db
+      .prepare(
+        "UPDATE jobs SET status='running',updatedAt=? WHERE id=? AND attempt=? AND status='queued' RETURNING id",
+      )
+      .get(new Date().toISOString(), id, attempt);
+    if (row) this.workerAttempt = { id, attempt };
+    return !!row;
+  }
+  heartbeat(id: string, attempt: number) {
+    return this.db
+      .prepare(
+        "UPDATE jobs SET updatedAt=? WHERE id=? AND attempt=? AND status IN ('running','pausing')",
+      )
+      .run(new Date().toISOString(), id, attempt).changes;
+  }
+  finish(
+    id: string,
+    attempt: number,
+    status: string,
+    error: string | null = null,
+  ) {
+    this.db
+      .prepare(
+        "UPDATE jobs SET status=CASE WHEN status='pausing' THEN 'paused' ELSE ? END,error=?,updatedAt=? WHERE id=? AND attempt=? AND status IN ('queued','running','pausing')",
+      )
+      .run(status, error, new Date().toISOString(), id, attempt);
+  }
+  pause(id: string) {
+    const changed = this.db
+      .prepare(
+        "UPDATE jobs SET status=CASE WHEN status='queued' THEN 'paused' ELSE 'pausing' END,updatedAt=? WHERE id=? AND status IN ('queued','running')",
+      )
+      .run(new Date().toISOString(), id).changes;
+    if (!changed) throw new PkiError(409, "Job is not active");
+  }
+  resume(id: string) {
+    try {
+      this.transaction(() => {
+        const changed = this.db
+          .prepare(
+            "UPDATE jobs SET status='queued',attempt=attempt+1,error=NULL,updatedAt=? WHERE id=? AND status IN ('paused','partial','interrupted')",
+          )
+          .run(new Date().toISOString(), id).changes;
+        if (!changed) throw new PkiError(409, "Job cannot be resumed");
+        this.db
+          .prepare(
+            "UPDATE job_items SET state='pending',error=NULL,errorCategory=NULL WHERE jobId=? AND state='failed'",
+          )
+          .run(id);
+      });
+    } catch (e) {
+      if (e instanceof PkiError) throw e;
+      throw new PkiError(409, "Another collection is active");
+    }
+  }
+  jobDetails(
+    id: string,
+    authorizedIds: string[],
+    errorLimit = 20,
+  ): PkiJobDetails | null {
+    const job = this.job(id);
+    if (!job || !job.sources.every((source) => authorizedIds.includes(source)))
+      return null;
+    const sources = this.db
+      .prepare(
+        `SELECT js.sourceId,s.path,s.namespace,js.listed,js.status,js.startedAt,js.finishedAt,js.revocationMode,js.revocationError,js.error,js.errorCategory,
+      COUNT(i.serial) AS total,COALESCE(SUM(i.state='done'),0) AS completed,COALESCE(SUM(i.state='failed'),0) AS failed,COALESCE(SUM(i.state='pending'),0) AS pending
+      FROM job_sources js JOIN sources s ON s.id=js.sourceId LEFT JOIN job_items i ON i.jobId=js.jobId AND i.sourceId=js.sourceId
+      WHERE js.jobId=? GROUP BY js.sourceId ORDER BY s.path`,
+      )
+      .all(id) as unknown as PkiJobSource[];
+    const errors = this.db
+      .prepare(
+        "SELECT sourceId,serial,errorCategory,error FROM job_items WHERE jobId=? AND error IS NOT NULL ORDER BY sourceId,serial LIMIT ?",
+      )
+      .all(id, errorLimit + 1) as unknown as PkiJobDetails["errors"];
+    return {
+      job,
+      sources: sources.map((source) => ({
+        ...source,
+        status:
+          source.status === "running" && job.status !== "running"
+            ? job.status
+            : source.status,
+      })),
+      errors: errors.slice(0, errorLimit),
+      errorsTruncated: errors.length > errorLimit,
+    };
   }
   source(source: PkiSource) {
     this.db
@@ -77,6 +230,7 @@ export class PkiStore {
     pem: string,
     revoked: Revocation,
     expectedSerial?: string,
+    afterSave?: () => void,
   ) {
     const c = parseCertificate(pem),
       now = new Date().toISOString();
@@ -118,6 +272,7 @@ export class PkiStore {
         this.db
           .prepare("INSERT OR IGNORE INTO sans VALUES(?,?,?)")
           .run(id, san.type, san.value);
+      afterSave?.();
     });
     return c;
   }
@@ -207,7 +362,7 @@ export class PkiStore {
   recover() {
     this.db
       .prepare(
-        "UPDATE jobs SET status='interrupted',error='Worker heartbeat expired; resume with a valid Vault session' WHERE status IN ('queued','running','pausing') AND updatedAt<?",
+        "UPDATE jobs SET attempt=attempt+1,status='interrupted',error='Worker heartbeat expired; resume with a valid Vault session' WHERE status IN ('queued','running','pausing') AND updatedAt<?",
       )
       .run(new Date(Date.now() - 120000).toISOString());
   }
@@ -275,10 +430,12 @@ export class PkiStore {
         for (const serial of serials.slice(offset, offset + 1000))
           stmt.run(job, source, serial);
       });
-    this.db
-      .prepare(
-        "UPDATE job_sources SET listed=1,revoked=?,error=NULL WHERE jobId=? AND sourceId=?",
-      )
-      .run(revoked ? JSON.stringify(revoked) : null, job, source);
+    this.transaction(() =>
+      this.db
+        .prepare(
+          "UPDATE job_sources SET listed=1,revoked=?,error=NULL WHERE jobId=? AND sourceId=?",
+        )
+        .run(revoked ? JSON.stringify(revoked) : null, job, source),
+    );
   }
 }

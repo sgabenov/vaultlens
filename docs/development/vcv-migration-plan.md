@@ -1,6 +1,6 @@
 # VCV to VaultLens migration plan
 
-Updated: 2026-09-13. Status: initial catalog implemented; stabilization pending.
+Updated: 2026-09-13. Status: initial catalog implemented; backend stabilization in progress.
 
 This is the working backlog for the migration. Use task IDs when discussing work,
 record evidence when closing tasks, and keep this document current in the same
@@ -99,11 +99,13 @@ failure/recovery matrix below.
   source selection and cached IDs. Old identifiers must not authorize a new mount.
 - [ ] JOB-01: Add per-source progress, failure categories and bounded error details
   to the job API/UI; distinguish certificate-read and revocation-evidence failures.
+  Backend complete: `GET /api/pki/jobs/:id?errorLimit=20` exposes source progress,
+  observation mode and sanitized errors. UI integration is pending by user request.
 - [ ] JOB-02: Make pause/resume/retry behavior clear, including rereads needed for
   revocation refresh. Show interrupted jobs and the need for a current session.
 - [ ] JOB-03: Surface single-active-job conflicts and refresh source coverage/counts
   consistently after completion, pause or failure.
-- [ ] JOB-04: Expose validated concurrency/rate limits in deployment configuration;
+- [x] JOB-04: Expose validated concurrency/rate limits in deployment configuration;
   document defaults, bounds, response-size limits and retry/backoff behavior.
 
 Acceptance: a user can identify exactly which sources were scanned, which records
@@ -137,13 +139,17 @@ and uncertainty rather than guessing. Unauthorized scope cannot affect results/c
 - [ ] REL-01: Run a focused recovery matrix: HTTP-server restart during collection,
   worker termination, expired heartbeat, pause/resume, revoked token, 403/429/5xx,
   inaccessible certificate, malformed PEM and partial listing/read failures.
-- [ ] REL-02: Harden ownership of active jobs so a stale worker cannot continue
+- [x] REL-02: Harden ownership of active jobs so a stale worker cannot continue
   writing after another worker has taken over. Verify concurrent start/resume races.
+  Evidence: attempt-guarded transactions, conditional lifecycle updates, two-connection
+  ownership tests and a delayed Vault response from a replaced worker.
 - [ ] REL-03: Complete meaningful automated coverage for authorization on details,
   jobs and export, access changes during export, and worker recovery. Avoid tests
   that only mirror rendering or implementation details.
 - [ ] DB-01: Define schema-upgrade handling and a consistent SQLite backup/restore
   procedure. Document WAL sidecars, file permissions and recovery after failed writes.
+  Partial: transactional v1 -> v2 migration, legacy-worker guard and a consistent
+  pre-upgrade backup verified locally. Full restore/failure-write acceptance remains.
 - [ ] DB-02: Define collection-history and local-retention policy before implementing
   cleanup. Separate pruning job history, deleting local records and Vault tidy.
 - [ ] PERF-01: Repeat scale measurements with realistic DER sizes, SAN distributions,
@@ -197,9 +203,11 @@ expand the read-only migration to include all of them.
 
 ## How to resume and update this plan
 
-Start with **SRC-02 and JOB-01**: source coverage and per-source job diagnostics.
-They make the current collection behavior reviewable before adding more features.
-Then complete the remaining M2 tasks, followed by M3, M4 and M5.
+Current direction: **backend first; UI work deferred** (user instruction).
+Next backend tasks: **SRC-03** (source identity/access changes), **DATA-01**
+(certificate identity conflicts), then the remaining **REL-01/REL-03** failure and
+API coverage. JOB-01 API is ready for a separate UI iteration. Resume the remaining
+M2/M3 UI tasks only when UI work is requested; M5 integration is still pending.
 
 For each task, record:
 
@@ -224,4 +232,5 @@ from the real Vault separate from synthetic fixtures and performance experiments
 | 2026-09-13 | Initial catalog implemented and published to origin | `bdd951b`; M1 complete, stabilization remains |
 | 2026-09-13 | Distinct certificate/audit icons | `38398f9`; browser checked at 18303 |
 | 2026-09-13 | Background AppRole setup and startup fix | `2dad155`; configured status and healthy check after restart |
-| 2026-09-13 | Migration backlog recorded | Next: SRC-02 and JOB-01 |
+| 2026-09-13 | Migration backlog recorded | Initial next tasks: SRC-02 and JOB-01; see updated backend direction above |
+| 2026-09-13 | Backend diagnostics, configurable request limits and worker ownership | JOB-04 / REL-02 complete; JOB-01 API complete, UI pending; six automated tests plus live backend checks |

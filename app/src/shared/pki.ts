@@ -54,6 +54,9 @@ export interface PkiQuery {
 }
 export interface PkiJob {
   id: string;
+  attempt?: number;
+  concurrency?: number | null;
+  requestsPerSecond?: number | null;
   sources: string[];
   status: string;
   createdAt: string;
@@ -62,6 +65,34 @@ export interface PkiJob {
   completed: number;
   failed: number;
   error: string | null;
+}
+export interface PkiJobSource {
+  sourceId: string;
+  path: string;
+  namespace: string;
+  listed: number;
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  revocationMode: string;
+  revocationError: string | null;
+  error: string | null;
+  errorCategory: string | null;
+  total: number;
+  completed: number;
+  failed: number;
+  pending: number;
+}
+export interface PkiJobDetails {
+  job: PkiJob;
+  sources: PkiJobSource[];
+  errors: {
+    sourceId: string;
+    serial: string;
+    errorCategory: string | null;
+    error: string;
+  }[];
+  errorsTruncated: boolean;
 }
 export const pkiSearchFields: Record<
   string,

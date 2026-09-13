@@ -139,3 +139,71 @@ tidy need separate controlled workflows. Localization and an independent login o
 theme are intentionally excluded. Export is a live traversal rather than an atomic
 snapshot: pause collection for a stable export; an interrupted export ends with an
 error record and must be treated as incomplete.
+
+
+## Backend stabilization: diagnostics and attempt ownership
+
+The UI is unchanged in this iteration. `GET /api/pki/jobs/:id?errorLimit=20`
+returns `job`, `sources`, `errors` and `errorsTruncated`. Each source includes its
+mount/namespace, listing state, processing counts, start/finish times, status,
+revocation-evidence mode, revocation fallback reason and categorized failure.
+The error sample contains source ID, serial, category and a sanitized message.
+`errorLimit` must be an integer from 1 to 100 (default 20). Missing jobs and jobs
+containing any unauthorized source return 404. Every request still validates the
+current Vault session and source capabilities. Job-list responses remain compatible.
+
+Source status is per job, not a claim about every certificate issued by the mount.
+A running source in a paused/interrupted job reports the job's current state.
+Sources that were never reached remain pending. Historical jobs migrated from v1
+report `legacy_unknown` for source status because phase/timing evidence was not
+previously recorded. Revocation fallback is distinct from certificate-read failure:
+a denied bulk endpoint can still result in complete coverage through certificate
+metadata; absent metadata remains unknown.
+
+Deployment controls (read at server startup):
+
+| Variable | Default | Accepted integer range |
+| --- | --- | --- |
+| `VAULTLENS_PKI_CONCURRENCY` | 4 | 1–16 |
+| `VAULTLENS_PKI_REQUESTS_PER_SECOND` | 20 | 1–100 |
+
+Invalid settings fail startup rather than silently falling back. Each dispatch
+records its limits in the job. A single rate budget covers every worker HTTP
+request, including discovery, capability checks, certificate reads and retries.
+429/502/503/504 responses retain up to three retries with exponential backoff;
+requests retain the 30-second timeout and 128-MiB response limit. API browsing
+requests are separate from this worker budget.
+
+Each dispatch receives a monotonically increasing attempt number. Only its queued
+attempt can claim a job. Every worker data write checks that attempt and running
+status inside a `BEGIN IMMEDIATE` transaction. Certificate data and queue completion
+commit together. Recovery/resume invalidates old attempts; stale responses,
+heartbeats, completion and process-exit callbacks cannot overwrite the current job.
+Pause blocks further data commits. An already in-flight Vault read may complete,
+but cannot commit after pause or replacement. A queued job can pause immediately.
+Worker exit is detected while its parent is alive; heartbeat recovery remains the
+fallback after HTTP-server restart. Collection still requires a user session to resume.
+
+### Schema v2 upgrade and rollback boundary
+
+Stop the old HTTP service and ensure no legacy worker is active before upgrading.
+Migration refuses queued/running/pausing v1 jobs; after a legacy crash, confirm the
+worker is stopped before explicitly resolving the old job state. Back up the database
+using SQLite's backup API, which includes committed WAL content; do not copy only
+the main SQLite file from a live WAL database. Migration is transactional, retains
+catalog records and job progress, and refuses newer unsupported schema versions.
+
+The local upgrade retained all 2,409 catalog records. Its pre-upgrade backup is
+`/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/backups/pki-before-schema-v2.sqlite`.
+Do not run the old worker against the upgraded database. A rollback requires stopping
+all writers and restoring the matching database backup together with the old build;
+changes collected after the backup will not be present. Full restore and disk-error
+acceptance remain DB-01 follow-up work.
+
+Validation added: stale writer/heartbeat/completion rejection across SQLite
+connections, delayed old Vault response after resume, single claimant, conflicting
+resume, bounded/scoped diagnostics, v1 migration/active-worker rejection and invalid
+limit settings. Live checks also cover HTTP restart during collection, pause/resume,
+a restricted token's diagnostic access, 400 responses for invalid error limits,
+and completion of 800 records with the original 2,409-record catalog preserved.
+Runtime evidence is in `pki-preview/backend-check.json`; it contains no tokens.

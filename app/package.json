@@ -18,7 +18,7 @@
     "preview": "vite preview",
     "audit": "node dist/server/security-audit/cli.js",
     "test:security-audit": "npm run build:server && node --test dist/server/security-audit/engine.test.js",
-    "test:pki": "npm run build:server && node --test dist/server/pki/catalog.test.js"
+    "test:pki": "npm run build:server && node --test dist/server/pki/*.test.js"
   },
   "keywords": [],
   "license": "GPL-3.0-only",
