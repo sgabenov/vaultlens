@@ -1,3 +1,4 @@
+import PkiEnginePage from './PkiEnginePage';
 import { Routes, Route } from 'react-router-dom';
 import SecretsEngineList from '../components/secrets/SecretsEngineList';
 import SecretsList from '../components/secrets/SecretsList';
@@ -9,6 +10,7 @@ export default function SecretsPage() {
   return (
     <Routes>
       <Route index element={<SecretsEngineList />} />
+      <Route path="pki/*" element={<PkiEnginePage />} />
       <Route path="view/*" element={<SecretView />} />
       <Route path="edit/*" element={<SecretEditor />} />
       <Route path="create/*" element={<SecretEditor />} />

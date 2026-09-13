@@ -281,3 +281,15 @@ not part of acceptance because the integrated service remains the desired state.
 Next work: user-directed UI refinement or a separately scoped EXT item. There are
 no remaining prerequisites in the agreed read-only migration; see the acceptance
 report for explicit production qualification limits and unrelated client errors.
+
+## Follow-up: native PKI engine navigation
+
+The user requested a native engine workspace and links from monitoring to the
+actual Vault certificate. See [PKI engine workspace](pki-engine-workspace.md).
+This implements read-only role/issuer/certificate browsing from the broader EXT-04
+area; issuance and lifecycle mutations remain separate work.
+
+Acceptance requires engine-list navigation, issuer/role list and details, role to
+issuer navigation, expired monitoring certificate to its exact mount/serial, return
+to the scoped monitoring query, independent Vault permissions and live verification
+on the common service at 18302.

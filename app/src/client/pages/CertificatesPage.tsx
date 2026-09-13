@@ -1,5 +1,6 @@
+import { pkiEngineUrl } from "../../shared/pkiEngine";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AxiosError } from "axios";
 import * as api from "../lib/api";
 import type {
@@ -505,6 +506,15 @@ export default function CertificatesPage() {
               )}
               <div className="pki-row">
                 <button onClick={downloadPem}>Download PEM</button>
+                <Link
+                  to={pkiEngineUrl(detail.certificate.sourcePath!, {
+                    source: detail.certificate.sourceId,
+                    certificate: detail.certificate.serial,
+                    record: detail.certificate.id,
+                  })}
+                >
+                  Open certificate in PKI engine
+                </Link>
               </div>
               <details>
                 <summary>Public certificate</summary>
@@ -568,7 +578,15 @@ export default function CertificatesPage() {
                       <small>{c.serial}</small>
                     </td>
                     <td>
-                      {c.sourcePath}
+                      <Link
+                        to={pkiEngineUrl(c.sourcePath!, {
+                          source: c.sourceId,
+                          certificate: c.serial,
+                          record: c.id,
+                        })}
+                      >
+                        {c.sourcePath} · View in engine
+                      </Link>
                       <small>{labelType[c.type]}</small>
                     </td>
                     <td>
