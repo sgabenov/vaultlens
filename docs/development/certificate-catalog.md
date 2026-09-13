@@ -1,5 +1,7 @@
 # Certificate catalog: first migration milestone
 
+Implementation backlog and milestone status: [VCV migration plan](vcv-migration-plan.md).
+
 The `/certificates` workspace implements the read-only catalog model inspired by
 Vault Certificate Viewer using VaultLens authentication, navigation and controls.
 The implementation is independent TypeScript code; VCV agent instructions are not
@@ -91,7 +93,7 @@ npm ci
 npm run build
 VAULT_ADDR=http://127.0.0.1:18200 \
 HOST=127.0.0.1 PORT=18303 NODE_ENV=production \
-VAULTLENS_CONFIG_PATH=/absolute/runtime/config.json \
+VAULTLENS_CONFIG_PATH=/absolute/runtime/config \
 VAULTLENS_PKI_DB_PATH=/absolute/runtime/certificates.sqlite \
 node dist/server/server.js
 ```
@@ -105,7 +107,9 @@ system token.
 
 Local feature preview: `http://127.0.0.1:18303/certificates`. Runtime files live in
 `/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/`, outside Git. The stable
-local app on port 18302 remains separate.
+local app on port 18302 remains separate. Background-services AppRole setup has
+been completed for this preview and verified after restart. `VAULTLENS_CONFIG_PATH`
+is a directory containing `config.ini`, not a JSON file.
 
 ## Validation and remaining work
 
