@@ -7,7 +7,9 @@ main PKI lifecycle operations. Vault UI screenshots define the arrangement;
 VaultLens supplies the visual styling (surfaces, borders, controls and brand
 color). The approved configuration mockup uses bordered section cards with integrated
 headings, explanatory captions, aligned property rows and an emphasized edit
-action. Field order, navigation and operation behavior remain unchanged.
+action. The same section cards cover object lists, grouped properties, PEM
+views, Tidy states and operation forms across all seven tabs. Field order,
+navigation and operation behavior remain unchanged.
 
 ## User workflows
 
