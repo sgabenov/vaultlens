@@ -95,8 +95,11 @@ failure/recovery matrix below.
 - [ ] SRC-02: Show source identity, namespace, last successful observation and
   readable coverage explanations. Represent inaccessible/remounted/recreated
   sources without exposing cached metadata to unauthorized sessions.
-- [ ] SRC-03: Exercise remount, disable/recreate and permission changes against
+- [x] SRC-03: Exercise remount, disable/recreate and permission changes against
   source selection and cached IDs. Old identifiers must not authorize a new mount.
+  Backend evidence: identity/access validation before and after each staged batch;
+  tests cover remount, accessor/cluster changes during reads, denied access, namespace
+  identity isolation and resume after remount. UI presentation remains SRC-02.
 - [ ] JOB-01: Add per-source progress, failure categories and bounded error details
   to the job API/UI; distinguish certificate-read and revocation-evidence failures.
   Backend complete: `GET /api/pki/jobs/:id?errorLimit=20` exposes source progress,
@@ -121,8 +124,11 @@ reflected without leaking cached records. No full serial list is sent to the bro
   independent validity and revocation filters. Explain that usage is not a Vault role.
 - [ ] UX-03: Finish native layout/accessibility for narrow screens, keyboard use,
   loading/empty/error states and visible source scope. Record browser acceptance.
-- [ ] DATA-01: Define and implement certificate-identity conflict handling. Never
+- [x] DATA-01: Define and implement certificate-identity conflict handling. Never
   silently replace evidence when a source/serial resolves to another fingerprint.
+  Implemented: retain the original row, preserve conflicting DER and fingerprint
+  history, fail the affected job item and expose bounded evidence in certificate
+  details. Every refresh reads Vault bodies, including when bulk revocation works.
 - [ ] DATA-02: Exercise multiple issuers, issuer rotation, missing issuer access,
   unsupported endpoints and missing revocation metadata. Distinguish observed time
   from current validity; issuer verification is not a complete trust-chain verdict.
@@ -204,10 +210,11 @@ expand the read-only migration to include all of them.
 ## How to resume and update this plan
 
 Current direction: **backend first; UI work deferred** (user instruction).
-Next backend tasks: **SRC-03** (source identity/access changes), **DATA-01**
-(certificate identity conflicts), then the remaining **REL-01/REL-03** failure and
-API coverage. JOB-01 API is ready for a separate UI iteration. Resume the remaining
-M2/M3 UI tasks only when UI work is requested; M5 integration is still pending.
+Next backend tasks: the remaining **REL-01/REL-03** failure and API coverage,
+then **DB-01** backup/restore acceptance. SRC-03 and DATA-01 are complete at the
+backend/API level. JOB-01 API and conflict evidence are ready for a separate UI
+iteration. Resume the remaining M2/M3 UI tasks only when UI work is requested;
+M5 integration is still pending.
 
 For each task, record:
 
@@ -234,3 +241,4 @@ from the real Vault separate from synthetic fixtures and performance experiments
 | 2026-09-13 | Background AppRole setup and startup fix | `2dad155`; configured status and healthy check after restart |
 | 2026-09-13 | Migration backlog recorded | Initial next tasks: SRC-02 and JOB-01; see updated backend direction above |
 | 2026-09-13 | Backend diagnostics, configurable request limits and worker ownership | JOB-04 / REL-02 complete; JOB-01 API complete, UI pending; six automated tests plus live backend checks |
+| 2026-09-13 | Source identity checks and certificate conflict evidence | SRC-03 / DATA-01 backend complete; nine tests, schema v3, live refresh of five existing certificates |

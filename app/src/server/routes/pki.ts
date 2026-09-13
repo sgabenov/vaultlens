@@ -97,6 +97,7 @@ router.get(
     );
     if (!c) throw new PkiError(404, "Certificate not found");
     const pem = store().pem(c.fingerprint);
+    const conflicts = store().conflicts(c.sourceId, c.serial);
     const source = ctx.sources.find((s) => s.id === c.sourceId)!;
     let issuer: { pem: string; subject: string } | null = null,
       issuerState = "unresolved";
@@ -135,7 +136,7 @@ router.get(
     } catch {
       issuerState = "unavailable";
     }
-    res.json({ certificate: c, pem, issuer, issuerState });
+    res.json({ certificate: c, pem, issuer, issuerState, conflicts });
   }),
 );
 router.route("/export").get(wrap(exportRecords)).post(wrap(exportRecords));

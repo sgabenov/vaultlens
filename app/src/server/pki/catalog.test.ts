@@ -400,10 +400,10 @@ test("schema upgrade retains v1 jobs and refuses an active legacy worker", () =>
     assert.equal(upgraded.job("legacy")!.status, "completed");
     assert.equal(
       upgraded.db.prepare("SELECT version FROM pki_schema").get()!.version,
-      2,
+      3,
     );
     upgraded.close();
-    db.exec("UPDATE pki_schema SET version=3");
+    db.exec("UPDATE pki_schema SET version=4");
     assert.throws(() => new PkiStore(path), /Unsupported PKI database schema/);
   } finally {
     db.close();

@@ -73,10 +73,11 @@ Only one host may use this SQLite deployment. The worker survives HTTP-server
 restart; an expired 120-second heartbeat marks a job interrupted on the next jobs
 request. Resume requires a new valid session. There is no unattended token renewal.
 
-When the revoked-serial endpoint is available, existing DER can be reused. When
-that endpoint is denied or unavailable, the worker reads each certificate's
-`revocation_time`; absent revocation evidence remains `unknown`. Resuming in this
-fallback mode rereads completed entries to refresh revocation observations.
+The revoked-serial endpoint provides bulk status when available. When it is denied
+or unavailable, the worker uses each certificate's `revocation_time`; absent evidence
+remains `unknown`. Every collection/resume now rereads certificate bodies to detect
+identity conflicts; DER storage is deduplicated, but it is not proof that Vault's
+current response is unchanged.
 
 Coverage describes stored certificates visible during a collection, not every
 certificate ever issued. `no_store`, expired retention, tidy, concurrent issuance
@@ -207,3 +208,56 @@ limit settings. Live checks also cover HTTP restart during collection, pause/res
 a restricted token's diagnostic access, 400 responses for invalid error limits,
 and completion of 800 records with the original 2,409-record catalog preserved.
 Runtime evidence is in `pki-preview/backend-check.json`; it contains no tokens.
+
+
+## Source identity and certificate conflicts (schema v3)
+
+The worker validates cluster/namespace/accessor identity, mount path and LIST access
+before source listing, after listing, and before/after each certificate batch. Up to
+100 certificate responses are staged without catalog writes, with a 1-MiB response
+limit per certificate request. If the final identity/access check fails, the staged
+batch is discarded and the job pauses with `source_changed` diagnostics. Existing
+records are retained. Resume rediscovers the source path, so a remount preserving
+identity can continue. A recreated mount or different cluster has a different source
+ID and must be selected for a new job; old IDs do not grant access to the new source.
+Namespace contributes to source identity even when mount accessors match.
+
+These checks bound the observation window; Vault does not provide an atomic
+transaction spanning mount discovery, certificate reads and SQLite commits. A change
+after the final Vault check remains a race. Failed/partial observations must not be
+interpreted as an authoritative issuance or deletion history.
+
+All refreshes read certificate bodies even if a DER blob already exists and the bulk
+revocation endpoint is available. This deliberately increases repeat-collection
+requests in that case; the previous cache optimization could conceal a different
+certificate returned under an existing serial.
+
+For a different fingerprint at the same `(sourceId, serial)`, the original certificate
+row, timestamps, SANs and revocation observation remain unchanged. The new public DER
+is stored by fingerprint; `certificate_conflicts` records expected/observed
+fingerprints, first/last observation times, occurrence count and latest job ID.
+Repeated identical conflicts update the same evidence record. The affected queue item
+fails with `identity_conflict` and the source remains partial. No automatic replacement
+or conflict resolution is performed. A response with a mismatched serial is rejected
+before persistence and does not become evidence for the requested serial.
+
+The existing authenticated `GET /api/pki/certificates/:id` response now includes
+`conflicts: { observations, truncated }`, limited to the most recent 20 distinct
+conflicting fingerprint pairs. It exposes public fingerprint/timing evidence, not a
+full additional PEM batch. The same source authorization required for the original
+certificate applies. Conflicting DER remains available in storage for future explicit
+review tooling; the UI is intentionally unchanged. Retention/cleanup remains DB-02.
+
+Schema v3 adds the conflict table. Both v1 and v2 upgrades run transactionally and
+require old workers to be stopped with no active queued/running/pausing jobs. Before
+the local v2 -> v3 upgrade a consistent backup was saved at
+`/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/backups/pki-before-schema-v3.sqlite`.
+The existing 2,409 records were retained. Rollback requires the matching stopped
+service/build and backup, not an old worker writing against the new schema.
+
+Nine tests pass, including in-flight source changes, permission loss, remount resume,
+namespace/source isolation, repeated identity conflict evidence and both migration
+paths. These mutation scenarios use isolated fake Vault fixtures. Live validation
+refreshed five existing certificates across two test mounts, verified the new detail
+response, and retained all 2,409 catalog records. No live mount was replaced or
+certificate reissued for these checks. Evidence: `pki-preview/identity-backend-check.json`.

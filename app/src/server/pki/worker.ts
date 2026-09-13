@@ -1,5 +1,5 @@
-import { PkiStore, WorkerStopped } from "./store.js";
-import { PkiAdapter, PkiError } from "./adapter.js";
+import { PkiStore, WorkerStopped, CertificateConflict } from "./store.js";
+import { PkiAdapter, PkiError, SourceChanged } from "./adapter.js";
 import { normalizeSerial } from "./certificate.js";
 import { setTimeout as delay } from "node:timers/promises";
 export interface WorkerInput {
@@ -14,6 +14,10 @@ export interface WorkerInput {
   requestsPerSecond: number;
 }
 function failure(error: unknown, phase: string) {
+  if (error instanceof SourceChanged)
+    return { category: "source_changed", message: error.message };
+  if (error instanceof CertificateConflict)
+    return { category: "identity_conflict", message: error.message };
   if (error instanceof PkiError)
     return {
       category: [401, 403].includes(error.status)
@@ -96,8 +100,20 @@ export async function collectPki(input: WorkerInput) {
     await request(() => adapter.verifyToken());
     const discovered = await request(() => adapter.discover());
     const available = await request(() => adapter.allowed(discovered));
-    if (!job.sources.every((id) => available.some((s) => s.id === id)))
-      throw new PkiError(403, "Source access or mount identity changed");
+    const missing = job.sources.filter(
+      (id) => !available.some((source) => source.id === id),
+    );
+    if (missing.length) {
+      const error = new SourceChanged();
+      for (const id of missing)
+        sourceUpdate(id, {
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          errorCategory: "source_changed",
+          error: error.message,
+        });
+      throw error;
+    }
     let partial = false;
     for (const id of job.sources) {
       store.assertWorker();
@@ -113,6 +129,7 @@ export async function collectPki(input: WorkerInput) {
       });
       let phase = "revocation_list";
       try {
+        await request(() => adapter.assertSource(source));
         let revoked: string[] | null,
           revocationError: string | null = null;
         try {
@@ -135,12 +152,13 @@ export async function collectPki(input: WorkerInput) {
           .get(job.id, id)!;
         if (!state.listed) {
           const serials = await request(() => adapter.serials(source));
+          await request(() => adapter.assertSource(source));
           store.enqueue(job.id, id, serials, revoked);
         }
         const revokedSet = revoked
           ? new Set(revoked.map(normalizeSerial))
           : null;
-        // Refresh observations on resume, reusing cached DER when bulk status is available.
+        // Refresh every observed body so a reused serial cannot hide behind the DER cache.
         store.transaction(() =>
           store.db
             .prepare(
@@ -152,9 +170,7 @@ export async function collectPki(input: WorkerInput) {
         for (;;) {
           store.assertWorker();
           await request(() => adapter.verifyToken());
-          const stillAllowed = await request(() => adapter.allowed([source]));
-          if (!stillAllowed.length)
-            throw new PkiError(403, "Source access revoked");
+          await request(() => adapter.assertSource(source));
           const batch = store.db
             .prepare(
               "SELECT serial FROM job_items WHERE jobId=? AND sourceId=? AND state='pending' LIMIT 100",
@@ -163,75 +179,79 @@ export async function collectPki(input: WorkerInput) {
           if (!batch.length) break;
           let offset = 0,
             fatal: unknown;
+          const outcomes: Array<{
+            raw: string;
+            observation?: Awaited<ReturnType<PkiAdapter["certificate"]>>;
+            error?: unknown;
+          }> = [];
           await Promise.all(
             Array.from(
               { length: Math.min(input.concurrency, batch.length) },
               async () => {
                 while (offset < batch.length && !fatal) {
                   const raw = String(batch[offset++].serial);
-                  let itemPhase = "certificate_read";
                   try {
-                    store.assertWorker();
-                    const normalized = normalizeSerial(raw);
-                    const existing = store.db
-                      .prepare(
-                        "SELECT fingerprint FROM certificates WHERE sourceId=? AND serial=?",
-                      )
-                      .get(id, normalized);
-                    const observation =
-                      existing && revokedSet
-                        ? {
-                            pem: store.pem(String(existing.fingerprint))!,
-                            revocation: "unknown" as const,
-                          }
-                        : await request(() => adapter.certificate(source, raw));
-                    if (fatal) return;
-                    itemPhase = "certificate_parse";
-                    store.save(
-                      id,
-                      observation.pem,
-                      revokedSet
-                        ? revokedSet.has(normalized)
-                          ? "revoked"
-                          : "not_revoked"
-                        : observation.revocation,
-                      normalized,
-                      () => {
-                        store.db
-                          .prepare(
-                            "UPDATE job_items SET state='done',error=NULL,errorCategory=NULL WHERE jobId=? AND sourceId=? AND serial=?",
-                          )
-                          .run(job.id, id, raw);
-                      },
+                    normalizeSerial(raw);
+                    const observation = await request(() =>
+                      adapter.certificate(source, raw),
                     );
-                  } catch (e) {
+                    if (!fatal) outcomes.push({ raw, observation });
+                  } catch (error) {
                     if (
-                      e instanceof WorkerStopped ||
-                      (e instanceof PkiError && [401, 403].includes(e.status))
+                      error instanceof WorkerStopped ||
+                      (error instanceof PkiError &&
+                        [401, 403].includes(error.status))
                     ) {
-                      fatal = e;
+                      fatal = error;
                       return;
                     }
-                    const error = failure(e, itemPhase);
-                    try {
-                      store.transaction(() =>
-                        store.db
-                          .prepare(
-                            "UPDATE job_items SET state='failed',error=?,errorCategory=? WHERE jobId=? AND sourceId=? AND serial=?",
-                          )
-                          .run(error.message, error.category, job.id, id, raw),
-                      );
-                    } catch (stopped) {
-                      fatal = stopped;
-                      return;
-                    }
-                    partial = true;
+                    outcomes.push({ raw, error });
                   }
                 }
               },
             ),
           );
           if (fatal) throw fatal;
+          // Stage at most 100 bounded responses. Discard them if source identity or access
+          // changed while Vault served the batch; no record is committed before this check.
+          await request(() => adapter.assertSource(source));
+          for (const result of outcomes) {
+            let phase = "certificate_read";
+            try {
+              if (result.error) throw result.error;
+              const normalized = normalizeSerial(result.raw),
+                observation = result.observation!;
+              phase = "certificate_parse";
+              store.save(
+                id,
+                observation.pem,
+                revokedSet
+                  ? revokedSet.has(normalized)
+                    ? "revoked"
+                    : "not_revoked"
+                  : observation.revocation,
+                normalized,
+                () => {
+                  store.db
+                    .prepare(
+                      "UPDATE job_items SET state='done',error=NULL,errorCategory=NULL WHERE jobId=? AND sourceId=? AND serial=?",
+                    )
+                    .run(job.id, id, result.raw);
+                },
+              );
+            } catch (error) {
+              if (error instanceof WorkerStopped) throw error;
+              const detail = failure(error, phase);
+              store.transaction(() =>
+                store.db
+                  .prepare(
+                    "UPDATE job_items SET state='failed',error=?,errorCategory=? WHERE jobId=? AND sourceId=? AND serial=?",
+                  )
+                  .run(detail.message, detail.category, job.id, id, result.raw),
+              );
+              partial = true;
+            }
+          }
         }
         const failed = Number(
           store.db

@@ -15,6 +15,16 @@ import { parseCertificate } from "./certificate.js";
 import { queryKey, whereQuery } from "./query.js";
 import { PkiError } from "./adapter.js";
 export class WorkerStopped extends Error {}
+export class CertificateConflict extends Error {
+  constructor(
+    public expectedFingerprint: string,
+    public observedFingerprint: string,
+  ) {
+    super(
+      `Certificate identity conflict: retained ${expectedFingerprint}; observed ${observedFingerprint}`,
+    );
+  }
+}
 export class PkiStore {
   workerAttempt?: { id: string; attempt: number };
   db: DatabaseSync;
@@ -47,8 +57,8 @@ export class PkiStore {
             .prepare("SELECT MAX(version) AS version FROM pki_schema")
             .get()!.version ?? 1,
         );
-        if (version > 2) throw new Error("Unsupported PKI database schema");
-        if (version < 2) {
+        if (version > 3) throw new Error("Unsupported PKI database schema");
+        if (version < 3) {
           if (
             this.db
               .prepare(
@@ -59,8 +69,9 @@ export class PkiStore {
             throw new Error(
               "Stop legacy PKI workers and resolve active jobs before schema upgrade",
             );
-          this.db
-            .exec(`ALTER TABLE jobs ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0;
+          if (version < 2)
+            this.db
+              .exec(`ALTER TABLE jobs ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE jobs ADD COLUMN concurrency INTEGER;
           ALTER TABLE jobs ADD COLUMN requestsPerSecond INTEGER;
           ALTER TABLE job_sources ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
@@ -73,6 +84,13 @@ export class PkiStore {
           ALTER TABLE job_items ADD COLUMN errorCategory TEXT;
           CREATE INDEX job_errors ON job_items(jobId,sourceId,serial) WHERE error IS NOT NULL;
           DELETE FROM pki_schema; INSERT INTO pki_schema VALUES(2);`);
+          this.db.exec(`CREATE TABLE certificate_conflicts (
+          sourceId TEXT NOT NULL REFERENCES sources(id), serial TEXT NOT NULL,
+          expectedFingerprint TEXT NOT NULL REFERENCES blobs(fingerprint),
+          observedFingerprint TEXT NOT NULL REFERENCES blobs(fingerprint),
+          firstSeen TEXT NOT NULL,lastSeen TEXT NOT NULL,observations INTEGER NOT NULL DEFAULT 1,lastJobId TEXT,
+          PRIMARY KEY(sourceId,serial,expectedFingerprint,observedFingerprint));
+          DELETE FROM pki_schema; INSERT INTO pki_schema VALUES(3);`);
         }
       });
     } catch (e) {
@@ -236,10 +254,38 @@ export class PkiStore {
       now = new Date().toISOString();
     if (expectedSerial !== undefined && c.serial !== expectedSerial)
       throw new Error("Returned certificate serial mismatch");
+    let conflict: CertificateConflict | undefined;
     this.transaction(() => {
       this.db
         .prepare("INSERT OR IGNORE INTO blobs VALUES(?,?)")
         .run(c.fingerprint, c.der);
+      const existing = this.db
+        .prepare(
+          "SELECT fingerprint FROM certificates WHERE sourceId=? AND serial=?",
+        )
+        .get(sourceId, c.serial);
+      if (existing && existing.fingerprint !== c.fingerprint) {
+        conflict = new CertificateConflict(
+          String(existing.fingerprint),
+          c.fingerprint,
+        );
+        this.db
+          .prepare(
+            `INSERT INTO certificate_conflicts(sourceId,serial,expectedFingerprint,observedFingerprint,firstSeen,lastSeen,lastJobId) VALUES(?,?,?,?,?,?,?)
+          ON CONFLICT(sourceId,serial,expectedFingerprint,observedFingerprint) DO UPDATE SET lastSeen=excluded.lastSeen,observations=observations+1,lastJobId=excluded.lastJobId`,
+          )
+          .run(
+            sourceId,
+            c.serial,
+            existing.fingerprint,
+            c.fingerprint,
+            now,
+            now,
+            this.workerAttempt?.id ?? null,
+          );
+        return;
+      }
+
       this.db
         .prepare(
           `INSERT INTO certificates(sourceId,serial,fingerprint,cn,subject,issuer,notBefore,notAfter,algorithm,keySize,curve,type,revoked,revocationObservedAt,firstSeen,lastSeen,eku) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -274,7 +320,19 @@ export class PkiStore {
           .run(id, san.type, san.value);
       afterSave?.();
     });
+    if (conflict) throw conflict;
     return c;
+  }
+  conflicts(sourceId: string, serial: string, limit = 20) {
+    const rows = this.db
+      .prepare(
+        "SELECT expectedFingerprint,observedFingerprint,firstSeen,lastSeen,observations,lastJobId FROM certificate_conflicts WHERE sourceId=? AND serial=? ORDER BY lastSeen DESC,observedFingerprint LIMIT ?",
+      )
+      .all(sourceId, serial, limit + 1);
+    return {
+      observations: rows.slice(0, limit),
+      truncated: rows.length > limit,
+    };
   }
   decorate(row: any): CertificateRecord {
     return {
