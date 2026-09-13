@@ -1290,3 +1290,5 @@ export async function pkiJobAction(id: string, action: 'pause' | 'resume') { ret
 
 export async function pkiJobDetails(id:string) { return (await api.get<import('../../shared/pki').PkiJobDetails>(`/pki/jobs/${encodeURIComponent(id)}`)).data; }
 export async function pkiEngine(mount:string,section='overview',ref?:string,source?:string,offset=0){return (await api.get<import('../../shared/pkiEngine').PkiEngineResult>('/pki-engine',{params:{mount,section,ref,source,offset}})).data;}
+
+export async function pkiEngineAction(input: {mount:string;source:string;action:string;ref?:string;mode?:string;fields:Record<string,unknown>;confirm?:string}) { return (await api.post<import("../../shared/pkiEngine").PkiEngineResult>("/pki-engine",input)).data; }

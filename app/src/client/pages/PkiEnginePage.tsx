@@ -9,36 +9,102 @@ import { AxiosError } from "axios";
 import * as api from "../lib/api";
 import { pkiEngineUrl, type PkiEngineResult } from "../../shared/pkiEngine";
 import type { PkiSource } from "../../shared/pki";
-import "../components/pki/pki.css";
+import { pkiOperations } from "../../shared/pkiOperations";
+import OperationForm from "../components/pki-engine/OperationForm";
+import {
+  fieldLabel,
+  fieldGroup,
+  groupOrder,
+  displayValue,
+  downloadText,
+} from "../components/pki-engine/fields";
+import "../components/pki-engine/pki-engine.css";
+const tabs = [
+  "overview",
+  "roles",
+  "issuers",
+  "keys",
+  "certificates",
+  "tidy",
+  "configuration",
+];
 const errorText = (e: unknown) =>
   e instanceof AxiosError
     ? e.response?.data?.error || e.message
     : e instanceof Error
       ? e.message
       : "Request failed";
-const text = (value: unknown) =>
-  value === null || value === undefined
-    ? "Not set"
-    : typeof value === "object"
-      ? JSON.stringify(value, null, 2)
-      : String(value);
-function Properties({ data }: { data: Record<string, unknown> }) {
+function Properties({
+  data,
+  grouped = false,
+}: {
+  data: Record<string, unknown>;
+  grouped?: boolean;
+}) {
+  const entries = Object.entries(data).filter(
+    ([key]) => !["certificate", "ca_chain"].includes(key),
+  );
   return (
-    <dl className="pki-detail-grid">
-      {Object.entries(data)
-        .filter(([key]) => !["certificate", "ca_chain"].includes(key))
-        .map(([key, value]) => (
-          <div key={key}>
-            <dt>{key.replace(/_/g, " ")}</dt>
-            <dd>{text(value)}</dd>
-          </div>
-        ))}
-    </dl>
+    <>
+      {(grouped ? groupOrder : [""]).map((group) => {
+        const rows = entries.filter(
+          ([key]) => !grouped || fieldGroup(key) === group,
+        );
+        if (!rows.length) return null;
+        return (
+          <section key={group}>
+            {group && <h2>{group}</h2>}
+            <dl className="engine-properties">
+              {rows.map(([key, value]) => (
+                <div key={key}>
+                  <dt>{fieldLabel(key)}</dt>
+                  <dd>{displayValue(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        );
+      })}
+    </>
+  );
+}
+function Pem({ title, value }: { title: string; value: string }) {
+  const [copied, setCopied] = useState(false),
+    [error, setError] = useState("");
+  return (
+    <section>
+      <h2>{title}</h2>
+      <div className="engine-pem-actions">
+        <button
+          onClick={() =>
+            downloadText(value, title.toLowerCase().replace(/ /g, "-") + ".pem")
+          }
+        >
+          Download
+        </button>
+        <button
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(value)
+              .then(() => setCopied(true))
+              .catch(() =>
+                setError(
+                  "Clipboard unavailable; select and copy the PEM below.",
+                ),
+              );
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {error && <p role="alert">{error}</p>}
+      <pre>{value}</pre>
+    </section>
   );
 }
 export default function PkiEnginePage() {
-  const navigate = useNavigate();
-  const mount = useParams()["*"] || "",
+  const navigate = useNavigate(),
+    mount = useParams()["*"] || "",
     [params] = useSearchParams(),
     queryString = params.toString();
   const section = params.get("certificate")
@@ -48,13 +114,17 @@ export default function PkiEnginePage() {
     section === "certificate"
       ? params.get("certificate") || ""
       : params.get("ref") || "";
-  const expected = params.get("source") || undefined,
+  const action = params.get("action") || "",
+    expected = params.get("source") || undefined,
     offset = Number(params.get("offset") || 0);
   const [source, setSource] = useState<PkiSource | null>(null),
     [result, setResult] = useState<PkiEngineResult | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
-    [serial, setSerial] = useState("");
+    [refresh, setRefresh] = useState(0);
+  const [serial, setSerial] = useState(""),
+    [role, setRole] = useState(""),
+    [issuer, setIssuer] = useState("");
   const [cached, setCached] = useState<Awaited<
     ReturnType<typeof api.pkiCertificate>
   > | null>(null);
@@ -65,7 +135,7 @@ export default function PkiEnginePage() {
     setCached(null);
     setError("");
     setLoading(true);
-    setSerial(ref);
+    setSerial("");
     void (async () => {
       try {
         const overview = await api.pkiEngine(
@@ -117,190 +187,388 @@ export default function PkiEnginePage() {
     return () => {
       active = false;
     };
-  }, [mount, queryString]);
+  }, [mount, queryString, refresh]);
   const url = (values: Record<string, string | number | undefined> = {}) =>
     pkiEngineUrl(mount, { source: source?.id || expected, ...values });
+  const act = (name: string, reference = ref) =>
+    url({
+      tab: pkiOperations[name].tab,
+      ref: reference || undefined,
+      action: name,
+      ...(name === "certificate-revoke" ? { certificate: ref } : {}),
+    });
   const cert = result?.certificate ?? cached?.certificate,
     pem = result?.pem ?? cached?.pem;
-  function download() {
-    if (!pem) return;
-    const href = URL.createObjectURL(
-      new Blob([pem], { type: "application/x-pem-file" }),
-    );
-    const a = document.createElement("a");
-    a.href = href;
-    a.download = (cert?.serial || "certificate") + ".pem";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(href), 1000);
-  }
+  const download = () => {
+    if (pem) downloadText(pem, (cert?.serial || "certificate") + ".pem");
+  };
+  const returnUrl =
+    section === "certificate"
+      ? url({ certificate: ref })
+      : url({
+          tab: section,
+          ...(ref && !action.endsWith("delete") ? { ref } : {}),
+        });
+  let initial: Record<string, unknown> | undefined;
+  if (action.startsWith("config-"))
+    initial = result?.data?.["config/" + action.slice(7)] as
+      | Record<string, unknown>
+      | undefined;
+  else if (action === "certificate-revoke") initial = { serial_number: ref };
+  else if (action.endsWith("-save")) initial = result?.data;
+  const title =
+    ref && !action
+      ? section === "roles"
+        ? "PKI Role " + ref
+        : section === "issuers"
+          ? "View Issuer Certificate"
+          : section === "keys"
+            ? "Key " + ref
+            : section === "certificate"
+              ? "Certificate"
+              : mount
+      : mount;
   return (
-    <div className="pki-workspace">
-      <p>
-        <Link to="/secrets">Secrets Engines</Link> /{" "}
-        <Link to={url()}>{mount}</Link>
+    <div className="engine-workspace">
+      <p className="engine-breadcrumb">
+        <Link to="/secrets">Secrets</Link> / <Link to={url()}>{mount}</Link>
+        {ref && (
+          <>
+            {" "}
+            /{" "}
+            <Link
+              to={url({
+                tab: section === "certificate" ? "certificates" : section,
+              })}
+            >
+              {fieldLabel(section === "certificate" ? "certificates" : section)}
+            </Link>{" "}
+            / {ref}
+          </>
+        )}
       </p>
-      <h1>PKI · {mount}</h1>
-      <p className="pki-muted">
-        {source?.namespace || "Root namespace"} ·{" "}
-        {source?.description || "Public key infrastructure"}
-      </p>
-      <nav className="pki-tabs" aria-label="PKI engine sections">
-        {["overview", "issuers", "roles", "certificates"].map((tab) => (
+      <h1>{title}</h1>
+      <nav className="engine-tabs" aria-label="PKI engine sections">
+        {tabs.map((tab) => (
           <Link
             key={tab}
-            aria-current={section === tab ? "page" : undefined}
+            aria-current={
+              (section === "certificate" ? "certificates" : section) === tab
+                ? "page"
+                : undefined
+            }
             to={url({ tab })}
           >
-            {tab[0].toUpperCase() + tab.slice(1)}
+            {fieldLabel(tab)}
           </Link>
         ))}
       </nav>
+      {!action && (
+        <div className="engine-toolbar">
+          {section === "roles" &&
+            (!ref ? (
+              <Link to={act("role-save", "")}>Create role ＋</Link>
+            ) : (
+              <>
+                <Link to={act("role-delete")}>Delete</Link>
+                <Link to={act("issue")}>Generate Certificate</Link>
+                <Link to={act("sign")}>Sign Certificate</Link>
+                <Link to={act("role-save")}>Edit</Link>
+              </>
+            ))}
+          {section === "issuers" &&
+            (!ref ? (
+              <>
+                <Link to={act("issuer-import", "")}>Import ›</Link>
+                <details className="engine-menu">
+                  <summary>Generate ⌄</summary>
+                  <div>
+                    <Link to={act("root-generate", "")}>Root</Link>
+                    <Link to={act("intermediate-generate", "")}>
+                      Intermediate CSR
+                    </Link>
+                    <Link to={act("intermediate-set", "")}>
+                      Import signed intermediate
+                    </Link>
+                  </div>
+                </details>
+              </>
+            ) : (
+              <>
+                <Link to={act("intermediate-sign")}>Sign Intermediate</Link>
+                <Link to={act("issuer-save")}>Configure</Link>
+                <details className="engine-menu">
+                  <summary>More ⌄</summary>
+                  <div>
+                    <Link to={act("issuer-revoke")}>Revoke</Link>
+                    <Link to={act("issuer-delete")}>Delete</Link>
+                  </div>
+                </details>
+              </>
+            ))}
+          {section === "keys" &&
+            (!ref ? (
+              <>
+                <Link to={act("key-import", "")}>Import ⇧</Link>
+                <Link to={act("key-generate", "")}>Generate ＋</Link>
+              </>
+            ) : (
+              <>
+                <Link to={act("key-save")}>Edit</Link>
+                <Link to={act("key-delete")}>Delete</Link>
+              </>
+            ))}
+          {section === "certificate" && (
+            <>
+              <button onClick={download} disabled={!pem}>
+                Download
+              </button>
+              {result?.certificate && (
+                <Link to={act("certificate-revoke")}>Revoke</Link>
+              )}
+            </>
+          )}
+          {section === "tidy" && (
+            <>
+              <Link to={act("config-auto-tidy", "")}>
+                Configure automatic tidy
+              </Link>
+              <Link to={act("tidy-start", "")}>Tidy ›</Link>
+              {(result?.data?.["tidy-status"] as Record<string, unknown>)
+                ?.state === "Running" && (
+                <Link to={act("tidy-cancel", "")}>Cancel tidy</Link>
+              )}
+            </>
+          )}
+          {section === "configuration" && (
+            <>
+              <Link to={act("root-delete", "")}>Delete all issuers</Link>
+              <a href="#engine-config-edit">Edit configuration ›</a>
+            </>
+          )}
+        </div>
+      )}
       {loading && <p role="status">Reading PKI engine…</p>}
       {error && (
-        <div className="pki-error" role="alert">
+        <div className="engine-error" role="alert">
           {error}
           {cached && (
             <p>
-              The monitoring observation is shown below. It is not a successful
-              live Vault read.
+              The retained monitoring observation is shown below. The live Vault
+              read failed.
             </p>
           )}
         </div>
       )}
-      {section === "overview" && source && (
-        <section className="pki-box">
-          <h2>Engine overview</h2>
-          <Properties
-            data={{
-              mount: source.path,
-              namespace: source.namespace || "root",
-              cluster: source.cluster,
-              accessor: source.accessor,
+      {action.startsWith("config-") &&
+        result?.errors?.["config/" + action.slice(7)] && (
+          <p className="engine-error" role="alert">
+            {result.errors["config/" + action.slice(7)]}
+          </p>
+        )}
+      {action &&
+        source &&
+        !loading &&
+        !(error && action.endsWith("-save") && ref) &&
+        !result?.errors?.["config/" + action.slice(7)] && (
+          <OperationForm
+            key={mount + queryString}
+            action={action}
+            mount={mount}
+            source={source.id}
+            reference={ref}
+            initial={initial}
+            cancel={returnUrl}
+            onSaved={() => {
+              navigate(returnUrl);
+              setRefresh((v) => v + 1);
             }}
           />
-          <p>
-            Browse issuers, role definitions and stored certificate serials
-            using your current Vault session. Each operation uses its own Vault
-            permissions.
-          </p>
-          <Link to={"/certificates?mount=" + encodeURIComponent(mount)}>
-            Open certificate monitoring for this mount
-          </Link>
-        </section>
-      )}
-      {section === "certificates" && (
-        <form
-          className="pki-box"
-          action={url()}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (serial.trim()) navigate(url({ certificate: serial.trim() }));
-          }}
-        >
-          <label>
-            Open certificate by serial{" "}
-            <input
-              aria-label="Certificate serial"
-              value={serial}
-              onChange={(e) => setSerial(e.target.value)}
-              placeholder="Serial number"
-            />
-          </label>{" "}
-          <button type="submit" disabled={!serial.trim()}>
-            Open certificate
-          </button>
-          <p className="pki-muted">
-            Vault lists stored serials only. Certificates issued with no_store,
-            or removed by tidy, may still have a retained monitoring
-            observation.
-          </p>
-          <Link to={"/certificates?mount=" + encodeURIComponent(mount)}>
-            Search monitored certificates
-          </Link>
-        </form>
-      )}
-      {["roles", "issuers"].includes(section) && (
-        <form
-          className="pki-box"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (serial.trim())
-              navigate(url({ tab: section, ref: serial.trim() }));
-          }}
-        >
-          <label>
-            Open {section === "roles" ? "role by name" : "issuer by name or ID"}{" "}
-            <input
-              aria-label="PKI object reference"
-              value={serial}
-              onChange={(e) => setSerial(e.target.value)}
-            />
-          </label>{" "}
-          <button type="submit" disabled={!serial.trim()}>
-            Open {section === "roles" ? "role" : "issuer"}
-          </button>
-        </form>
-      )}
-      {result?.items && (
-        <section className="pki-box">
-          <h2>
-            {section[0].toUpperCase() + section.slice(1)} · {result.total}
-          </h2>
-          {result.notice && <p role="status">{result.notice}</p>}
-          {!result.items.length && <p>No entries returned.</p>}
-          <div className="pki-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>{section === "certificates" ? "Serial" : "Name / ID"}</th>
-                  {section === "issuers" && <th>Issuer information</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link
-                        to={
-                          section === "certificates"
-                            ? url({ certificate: item.id })
-                            : url({ tab: section, ref: item.id })
-                        }
-                      >
-                        {item.id}
-                      </Link>
-                    </td>
-                    {section === "issuers" && <td>{text(item.info)}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="pki-row pki-spread">
-            {offset > 0 && (
-              <Link
-                to={url({ tab: section, offset: Math.max(0, offset - 50) })}
-              >
-                Previous
+        )}
+      {!action && section === "overview" && source && (
+        <div className="engine-overview">
+          {["issuers", "roles"].map((kind) => (
+            <section className="engine-card" key={kind}>
+              <Link className="engine-card-link" to={url({ tab: kind })}>
+                View {kind} ›
               </Link>
-            )}
-            {result.nextOffset !== null && result.nextOffset !== undefined && (
-              <Link to={url({ tab: section, offset: result.nextOffset })}>
-                Next
-              </Link>
-            )}
-          </div>
-        </section>
-      )}
-      {result?.data && (
-        <section className="pki-box">
-          <h2>
-            {section === "roles" ? "Role" : "Issuer"} · {ref}
-          </h2>
-          {section === "roles" && (
-            <>
+              <h2>{fieldLabel(kind)}</h2>
               <p>
-                Configured issuer:{" "}
+                {kind === "issuers"
+                  ? "Root and intermediate certificate authorities in this PKI mount."
+                  : "Roles configured to generate certificates in this PKI mount."}
+              </p>
+              <strong className="engine-count">
+                {result?.data?.[kind] === null
+                  ? "Unavailable"
+                  : String(result?.data?.[kind] ?? "…")}
+              </strong>
+            </section>
+          ))}
+          <section className="engine-card">
+            <h2>Issue certificate</h2>
+            <p>Choose a role to generate a certificate.</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                navigate(act("issue", role));
+              }}
+            >
+              <input
+                list="engine-role-options"
+                aria-label="Role"
+                placeholder="Type to find a role…"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              />
+              <button disabled={!role.trim()}>Issue</button>
+            </form>
+          </section>
+          <section className="engine-card">
+            <h2>View certificate</h2>
+            <p>Enter a serial number to view its certificate.</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                navigate(url({ certificate: serial.trim() }));
+              }}
+            >
+              <input
+                aria-label="Certificate serial number"
+                placeholder="33:a3:…"
+                value={serial}
+                onChange={(e) => setSerial(e.target.value)}
+              />
+              <button disabled={!serial.trim()}>View</button>
+            </form>
+          </section>
+          <section className="engine-card">
+            <h2>View issuer</h2>
+            <p>Enter an issuer name or ID to view its details.</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                navigate(url({ tab: "issuers", ref: issuer.trim() }));
+              }}
+            >
+              <input
+                list="engine-issuer-options"
+                aria-label="Issuer name or ID"
+                placeholder="Type to find an issuer…"
+                value={issuer}
+                onChange={(e) => setIssuer(e.target.value)}
+              />
+              <button disabled={!issuer.trim()}>View</button>
+            </form>
+          </section>
+          <datalist id="engine-role-options">
+            {((result?.data?.rolesOptions as string[]) || []).map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          <datalist id="engine-issuer-options">
+            {((result?.data?.issuersOptions as string[]) || []).map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </div>
+      )}
+      {!action && result?.items && (
+        <section>
+          {section === "keys" && (
+            <p className="engine-list-description">
+              Keys are used by issuers to sign certificates. This list shows key
+              metadata; private key material remains in Vault.
+            </p>
+          )}
+          {result.notice && <p className="engine-empty">{result.notice}</p>}
+          {result.items.map((item) => {
+            const info =
+              item.info && typeof item.info === "object"
+                ? (item.info as Record<string, unknown>)
+                : {};
+            const target =
+              section === "certificates"
+                ? url({ certificate: item.id })
+                : url({ tab: section, ref: item.id });
+            return (
+              <div className="engine-list-row" key={item.id}>
+                <div>
+                  <Link to={target}>
+                    {String(info.issuer_name || info.key_name || item.id)}
+                  </Link>
+                  {section === "issuers" && (
+                    <p className="engine-list-meta">
+                      {info.is_default === true && (
+                        <span className="engine-badge">default issuer</span>
+                      )}
+                      {!!info.ca_type && (
+                        <span className="engine-badge">
+                          {String(info.ca_type)}
+                        </span>
+                      )}
+                      {String(info.serial_number || "")}{" "}
+                      {String(info.common_name || "")}
+                    </p>
+                  )}
+                </div>
+                <details className="engine-menu">
+                  <summary aria-label={"Manage " + item.id}>···</summary>
+                  <div>
+                    <Link to={target}>
+                      View{" "}
+                      {section === "certificates"
+                        ? "certificate"
+                        : section.slice(0, -1)}
+                    </Link>
+                    {section === "roles" && (
+                      <>
+                        <Link to={act("issue", item.id)}>
+                          Generate Certificate
+                        </Link>
+                        <Link to={act("role-save", item.id)}>Edit</Link>
+                      </>
+                    )}
+                  </div>
+                </details>
+              </div>
+            );
+          })}
+          <div className="engine-pagination">
+            <span>
+              {result.total ? offset + 1 : 0}–
+              {Math.min(offset + 50, result.total || 0)} of {result.total || 0}
+            </span>
+            <button
+              disabled={!offset}
+              onClick={() =>
+                navigate(
+                  url({ tab: section, offset: Math.max(0, offset - 50) }),
+                )
+              }
+            >
+              ‹
+            </button>
+            <span aria-current="page">{Math.floor(offset / 50) + 1}</span>
+            <button
+              disabled={result.nextOffset == null}
+              onClick={() =>
+                navigate(url({ tab: section, offset: result.nextOffset! }))
+              }
+            >
+              ›
+            </button>
+          </div>
+        </section>
+      )}
+      {!action &&
+        ref &&
+        result?.data &&
+        ["roles", "issuers", "keys"].includes(section) && (
+          <section>
+            {section === "roles" && (
+              <p className="engine-notice">
+                Issuer:{" "}
                 <Link
                   to={url({
                     tab: "issuers",
@@ -309,30 +577,112 @@ export default function PkiEnginePage() {
                 >
                   {String(result.data.issuer_ref || "default")}
                 </Link>
+                . This is the current role configuration; it does not establish
+                the role used for previously issued certificates.
               </p>
-              <p className="pki-muted">
-                This is the current role configuration. It does not prove which
-                existing certificates were issued through this role.
+            )}
+            {typeof result.data.certificate === "string" && (
+              <Pem title="Certificate" value={result.data.certificate} />
+            )}
+            {Array.isArray(result.data.ca_chain) && (
+              <Pem title="CA chain" value={result.data.ca_chain.join("\n")} />
+            )}
+            <Properties data={result.data} grouped={section === "roles"} />
+            {section === "issuers" &&
+              typeof result.data.key_id === "string" && (
+                <Link to={url({ tab: "keys", ref: result.data.key_id })}>
+                  View signing key
+                </Link>
+              )}
+          </section>
+        )}
+      {!action && section === "configuration" && result && (
+        <div id="engine-config-edit">
+          {(
+            [
+              ["cluster", "Cluster Config"],
+              ["acme", "ACME Config"],
+              ["urls", "Global URLs"],
+              ["crl", "Certificate Revocation List (CRL) and OCSP"],
+              ["issuers", "Default issuer"],
+            ] as const
+          ).map(([key, title]) => (
+            <section className="engine-config-section" key={key}>
+              <Link className="engine-card-link" to={act("config-" + key, "")}>
+                Edit
+              </Link>
+              <h2>{title}</h2>
+              {result.errors?.["config/" + key] ? (
+                <p className="engine-notice">
+                  {result.errors["config/" + key]}
+                </p>
+              ) : (
+                <Properties
+                  data={
+                    (result.data?.["config/" + key] as Record<
+                      string,
+                      unknown
+                    >) || {}
+                  }
+                />
+              )}
+            </section>
+          ))}
+          <details className="engine-config-section">
+            <summary>Show mount configuration</summary>
+            {result.errors?.mount ? (
+              <p>{result.errors.mount}</p>
+            ) : (
+              <Properties
+                data={(result.data?.mount as Record<string, unknown>) || {}}
+              />
+            )}
+          </details>
+        </div>
+      )}
+      {!action && section === "tidy" && result && (
+        <section>
+          {result.errors?.["tidy-status"] ? (
+            <p className="engine-notice">{result.errors["tidy-status"]}</p>
+          ) : !(result.data?.["tidy-status"] as Record<string, unknown>)
+              ?.time_started ? (
+            <div className="engine-empty">
+              <h2>Tidy status unavailable</h2>
+              <p>
+                The next tidy operation will provide status information here.
               </p>
+              <Link to={act("tidy-start", "")}>Tidy ›</Link>
+            </div>
+          ) : (
+            <>
+              <h2>Tidy status</h2>
+              <Properties
+                data={result.data?.["tidy-status"] as Record<string, unknown>}
+              />
+              <button onClick={() => setRefresh((v) => v + 1)}>
+                Refresh status
+              </button>
             </>
           )}
-          <Properties data={result.data} />
-          {typeof result.data.certificate === "string" && (
-            <details>
-              <summary>Issuer certificate PEM</summary>
-              <pre>{result.data.certificate}</pre>
-            </details>
-          )}
-          {Array.isArray(result.data.ca_chain) && (
-            <details>
-              <summary>CA chain</summary>
-              <pre>{result.data.ca_chain.join("\n")}</pre>
-            </details>
-          )}
+          <details className="engine-config-section">
+            <summary>Automatic tidy configuration</summary>
+            {result.errors?.["config/auto-tidy"] ? (
+              <p>{result.errors["config/auto-tidy"]}</p>
+            ) : (
+              <Properties
+                data={
+                  (result.data?.["config/auto-tidy"] as Record<
+                    string,
+                    unknown
+                  >) || {}
+                }
+              />
+            )}
+          </details>
         </section>
       )}
-      {section === "certificate" && cert && (
-        <section className="pki-box pki-detail">
+      {!action && section === "certificate" && cert && (
+        <section className="engine-section engine-detail">
           <h2>{cert.cn || cert.serial}</h2>
           <p>
             <strong>
@@ -348,7 +698,7 @@ export default function PkiEnginePage() {
             cached &&
             result.certificate.fingerprint !==
               cached.certificate.fingerprint && (
-              <p className="pki-error">
+              <p className="engine-error">
                 Identity conflict: the live certificate differs from the
                 retained monitoring observation. The original observation has
                 not been replaced.
@@ -376,11 +726,11 @@ export default function PkiEnginePage() {
               </Link>
             </p>
           )}
-          <p className="pki-muted">
+          <p className="engine-muted">
             Issuer evidence: {result?.issuerState ?? cached?.issuerState}.
             Signature verification is not a complete trust-chain verdict.
           </p>
-          <div className="pki-row">
+          <div className="engine-inline">
             <button onClick={download}>Download PEM</button>
             <Link
               to={

@@ -282,14 +282,19 @@ Next work: user-directed UI refinement or a separately scoped EXT item. There ar
 no remaining prerequisites in the agreed read-only migration; see the acceptance
 report for explicit production qualification limits and unrelated client errors.
 
-## Follow-up: native PKI engine navigation
+## Follow-up: native PKI engine workspace
 
-The user requested a native engine workspace and links from monitoring to the
-actual Vault certificate. See [PKI engine workspace](pki-engine-workspace.md).
-This implements read-only role/issuer/certificate browsing from the broader EXT-04
-area; issuance and lifecycle mutations remain separate work.
+The user expanded the engine request to follow Vault UI 1.21.4, including its
+main lifecycle actions. This scope is separate from the completed read-only
+monitoring catalog. See [PKI engine workspace](pki-engine-workspace.md) for the
+workflow matrix, API boundaries, acceptance evidence and advanced exclusions.
 
-Acceptance requires engine-list navigation, issuer/role list and details, role to
-issuer navigation, expired monitoring certificate to its exact mount/serial, return
-to the scoped monitoring query, independent Vault permissions and live verification
-on the common service at 18302.
+- [x] Native seven-tab navigation: Overview, Roles, Issuers, Keys, Certificates,
+  Tidy and Configuration, using a dedicated engine stylesheet.
+- [x] Monitoring → exact engine certificate links with retained observation and
+  source identity; current issuer configuration and verified signing issuer links.
+- [x] Allowlisted user-token operations for roles, issuance/signing/revocation,
+  issuers, keys, configuration and tidy; CSRF and destructive confirmation.
+- [x] Scoped API tests and 28 live acceptance scenarios on disposable mounts.
+- [ ] Final browser form/readback acceptance and common-runtime refresh.
+- [ ] Publish feature and develop updates to origin; keep main/upstream unchanged.

@@ -61,7 +61,8 @@ export default function Header() {
     SECRET_MODES.has(rawSegments[1]);
 
   // segments used for display — strip the mode word (edit/create/merge/view)
-  const segments = isSecretMode
+  const isPkiEngine = rawSegments[0] === 'pki' && rawSegments[1] === 'engines' && rawSegments.length > 2;
+  const segments = isPkiEngine ? ['secrets', rawSegments.slice(2).join('/')] : isSecretMode
     ? [rawSegments[0], ...rawSegments.slice(2)]
     : rawSegments;
 
@@ -71,6 +72,7 @@ export default function Header() {
   // - Last segment in edit/create/merge → /secrets/view/<full-path> (exit edit mode)
   // - Last segment in view → non-clickable (handled by isLastButClickable below)
   function segmentPath(index: number): string {
+    if(isPkiEngine) return index===0 ? '/secrets' : location.pathname;
     if (isSecretMode) {
       if (index === 0) return '/secrets';
       // Reconstruct using the original secret path segments (rawSegments[2..])

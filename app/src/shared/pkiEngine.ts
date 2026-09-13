@@ -7,7 +7,7 @@ export function pkiEngineUrl(
   for (const [key, value] of Object.entries(values))
     if (value !== undefined) params.set(key, String(value));
   return (
-    "/secrets/pki/" +
+    "/pki/engines/" +
     mount
       .replace(/^\/+|\/+$/g, "")
       .split("/")
@@ -18,6 +18,9 @@ export function pkiEngineUrl(
 }
 export interface PkiEngineResult {
   source: PkiSource;
+  errors?: Record<string, string>;
+  warnings?: string[];
+  action?: string;
   items?: { id: string; info: unknown }[];
   total?: number;
   nextOffset?: number | null;
