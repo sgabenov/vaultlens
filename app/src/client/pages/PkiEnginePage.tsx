@@ -21,6 +21,15 @@ import {
   downloadText,
 } from "../components/pki-engine/fields";
 import "../components/pki-engine/pki-engine.css";
+const configDescriptions: Record<string, string> = {
+  "Cluster Config": "Paths used for cluster and certificate distribution.",
+  "ACME Config": "Automated certificate enrollment.",
+  "Global URLs": "Endpoints published in issued certificates.",
+  "Certificate Revocation List (CRL)":
+    "Revocation list generation and refresh.",
+  "Online Certificate Status Protocol (OCSP)": "Certificate status responder.",
+  "Default issuer": "Issuer used when a request does not specify one.",
+};
 const tabs = [
   "overview",
   "roles",
@@ -348,11 +357,14 @@ export default function PkiEnginePage() {
           )}
           {section === "configuration" && (
             <>
-              <Link to={act("root-delete", "")}>Delete all issuers</Link>
+              <Link className="engine-danger-link" to={act("root-delete", "")}>
+                Delete all issuers
+              </Link>
               <Link
+                className="engine-primary"
                 to={url({ tab: "configuration", action: "configuration-edit" })}
               >
-                Edit configuration ›
+                Edit configuration
               </Link>
             </>
           )}
@@ -719,13 +731,19 @@ export default function PkiEnginePage() {
             );
             return (
               <section className="engine-config-section" key={title}>
-                <Link
-                  className="engine-card-link"
-                  to={act("config-" + key, "")}
-                >
-                  Edit
-                </Link>
-                <h2>{title}</h2>
+                <header className="engine-section-header">
+                  <div>
+                    <h2>{title}</h2>
+                    <p>{configDescriptions[title]}</p>
+                  </div>
+                  <Link
+                    className="engine-section-edit"
+                    to={act("config-" + key, "")}
+                    aria-label={"Edit " + title}
+                  >
+                    Edit
+                  </Link>
+                </header>
                 {result.errors?.["config/" + key] ? (
                   <p className="engine-notice">
                     {result.errors["config/" + key]}

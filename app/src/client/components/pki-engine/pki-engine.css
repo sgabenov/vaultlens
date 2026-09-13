@@ -50,20 +50,37 @@
 }
 .engine-toolbar {
   min-height: 48px;
-  padding: 8px 16px;
+  padding: 16px 0 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 24px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 10px;
+  background: transparent;
 }
 .engine-toolbar > a,
 .engine-toolbar button,
 .engine-toolbar summary {
   font-size: 13px;
-  color: inherit;
-  font-weight: 600;
+  font-weight: 500;
+}
+.engine-toolbar > a,
+.engine-toolbar summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #202632;
+}
+.engine-toolbar > .engine-danger-link {
+  color: #b43d44;
+  border-color: transparent;
+  background: transparent;
+}
+.engine-toolbar > a:hover,
+.engine-toolbar summary:hover {
+  background: #f8f9fb;
 }
 .engine-overview {
   display: grid;
@@ -73,7 +90,7 @@
 }
 .engine-card {
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: 10px;
   padding: 20px;
   background: #fff;
   min-height: 150px;
@@ -248,10 +265,74 @@
   overflow-wrap: anywhere;
 }
 .engine-config-section {
-  margin: 32px 0;
+  margin: 0 0 20px;
+  border: 1px solid #e5e8ee;
+  border-radius: 10px;
+  background: #fff;
 }
-.engine-config-section > .engine-card-link {
-  margin-top: 8px;
+.engine-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 20px;
+  border-bottom: 1px solid #e5e8ee;
+}
+.engine-section-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.engine-section-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #697383;
+}
+.engine-section-edit {
+  flex-shrink: 0;
+  padding: 5px 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.engine-config-section .engine-properties {
+  margin: 0;
+  padding: 0 20px;
+  border-top: 0;
+  border-radius: 10px;
+}
+.engine-config-section .engine-properties > div {
+  grid-template-columns: minmax(180px, 42%) minmax(0, 1fr);
+  gap: 20px;
+  padding: 13px 0;
+}
+.engine-config-section .engine-properties > div:last-child {
+  border-bottom: 0;
+}
+.engine-config-section .engine-properties dt {
+  font-weight: 400;
+  color: #697383;
+}
+.engine-config-section > details {
+  border-top: 1px solid #e5e8ee;
+  background: #f8f9fb;
+  border-radius: 0 0 10px 10px;
+}
+.engine-config-section > details > summary,
+details.engine-config-section > summary {
+  padding: 14px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #697383;
+}
+details.engine-config-section[open] > summary {
+  border-bottom: 1px solid #e5e8ee;
+}
+details.engine-config-section > .engine-form {
+  padding: 0 20px 20px;
+}
+.engine-config-section > .engine-notice,
+.engine-config-section > .engine-error {
+  margin: 16px 20px;
 }
 .engine-empty {
   padding: 48px 24px;
@@ -345,7 +426,8 @@
     flex-wrap: wrap;
     gap: 14px;
   }
-  .engine-properties > div {
+  .engine-properties > div,
+  .engine-config-section .engine-properties > div {
     grid-template-columns: 1fr;
     gap: 8px;
   }
@@ -408,7 +490,7 @@
   margin-top: 4px;
 }
 
-/* Match VaultLens surfaces and interaction states without changing geometry. */
+/* Shared VaultLens surfaces and interaction states. */
 .engine-list-row,
 .engine-properties,
 .engine-pagination {
