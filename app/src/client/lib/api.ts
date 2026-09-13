@@ -1289,3 +1289,4 @@ export async function pkiCollect(sources: string[]) { return (await api.post('/p
 export async function pkiJobAction(id: string, action: 'pause' | 'resume') { return (await api.post(`/pki/jobs/${encodeURIComponent(id)}/${action}`)).data; }
 
 export async function pkiJobDetails(id:string) { return (await api.get<import('../../shared/pki').PkiJobDetails>(`/pki/jobs/${encodeURIComponent(id)}`)).data; }
+export async function pkiEngine(mount:string,section='overview',ref?:string,source?:string,offset=0){return (await api.get<import('../../shared/pkiEngine').PkiEngineResult>('/pki-engine',{params:{mount,section,ref,source,offset}})).data;}

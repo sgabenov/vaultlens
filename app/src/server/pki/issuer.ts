@@ -41,7 +41,7 @@ export async function findIssuer(
       const ca = new X509Certificate(certificate);
       if (matches(ca))
         return {
-          issuer: { pem: certificate as string, subject: ca.subject },
+          issuer: { pem: certificate as string, subject: ca.subject, ref },
           issuerState: "verified",
         };
     } catch {
