@@ -1,5 +1,6 @@
 import { retryQuery } from './lib/requestBackoff';
 import AuditWorkspace from './components/AuditWorkspace';
+import CertificatesPage from './pages/CertificatesPage';
 import AuditReportsPage from './pages/AuditReportsPage';
 import AuditRunsPage from './pages/AuditRunsPage';
 import AuditSourcesPage from './pages/AuditSourcesPage';
@@ -261,6 +262,7 @@ function AppRoutes() {
         <Route path="/tools/share" element={<ShareSecretPage />} />
         <Route path="/tools/generator" element={<SecretGeneratorPage />} />
       </Route>
+      <Route path="/certificates" element={<ProtectedRoute><Layout /></ProtectedRoute>}><Route index element={<CertificatesPage />} /></Route>
       {/* Read-only audit does not need background-service provisioning. */}
       <Route path="/security-audit" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route element={<AuditWorkspace />}>
