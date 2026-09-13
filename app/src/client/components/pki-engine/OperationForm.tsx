@@ -103,7 +103,11 @@ export default function OperationForm({
             and will be cleared when you leave this form.
           </p>
         )}
-        {Object.entries(response.data || {}).map(([key, value]) => (
+        {Object.entries(
+          action.endsWith("-save") || action.startsWith("config-")
+            ? {}
+            : response.data || {},
+        ).map(([key, value]) => (
           <div key={key} className="engine-result-field">
             <h3>{fieldLabel(key)}</h3>
             {typeof value === "string" &&
