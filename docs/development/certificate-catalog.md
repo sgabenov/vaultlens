@@ -133,13 +133,10 @@ The production build and PKI tests pass. The repository-wide client type check
 has existing failures outside this module (auth-method config, graphs, secret
 generator, analytics/dashboard, sharing/setup and Vault store).
 
-Next milestones: connection/namespace UX, richer job coverage/error inspection,
-collection history and retention, realistic cold-cache/concurrent load tests,
-PKI roles/issuer configuration, issuance provenance and analytics. Bulk revoke and
-tidy need separate controlled workflows. Localization and an independent login or
-theme are intentionally excluded. Export is a live traversal rather than an atomic
-snapshot: pause collection for a stable export; an interrupted export ends with an
-error record and must be treated as incomplete.
+The read-only migration backlog and acceptance evidence are tracked in
+[Migration plan](vcv-migration-plan.md). Multiple connections, issuance provenance,
+analytics and PKI lifecycle mutations remain separate extensions.
+Export now uses a consistent SQLite read snapshot, described below.
 
 
 ## Backend stabilization: diagnostics and attempt ownership
@@ -198,7 +195,7 @@ The local upgrade retained all 2,409 catalog records. Its pre-upgrade backup is
 `/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/backups/pki-before-schema-v2.sqlite`.
 Do not run the old worker against the upgraded database. A rollback requires stopping
 all writers and restoring the matching database backup together with the old build;
-changes collected after the backup will not be present. Full restore and disk-error
+changes collected after the backup will not be present. Historical follow-up: full restore and disk-error
 acceptance remain DB-01 follow-up work.
 
 Validation added: stale writer/heartbeat/completion rejection across SQLite
@@ -261,3 +258,66 @@ paths. These mutation scenarios use isolated fake Vault fixtures. Live validatio
 refreshed five existing certificates across two test mounts, verified the new detail
 response, and retained all 2,409 catalog records. No live mount was replaced or
 certificate reissued for these checks. Evidence: `pki-preview/identity-backend-check.json`.
+
+
+## Snapshot export and issuer evidence
+
+NDJSON export pins one SQLite read transaction and one validity timestamp. The
+first line is `kind: coverage` with `consistency: snapshot`; the last successful
+line is `kind: complete` with the record count. Consumers must require this trailer.
+An error line, missing trailer or disconnected download means incomplete output.
+The current session and mount access are checked before each 200-record page.
+A slow client gets at most two minutes; disconnects release the snapshot. WAL
+writers can continue, but long exports retain WAL pages until their snapshot ends.
+Export contains public metadata, not private keys. Snapshot consistency is local:
+Vault does not provide an atomic snapshot across its individual LIST/GET calls.
+
+Signing-CA discovery tries up to 100 issuers and continues past an inaccessible or
+unrelated candidate. Older mounts can use the default CA endpoint. `verified`
+means the candidate CA signed this certificate, not that its complete trust chain
+is trusted. Missing revocation metadata remains unknown.
+
+## Selection and collection history
+
+Selected source IDs belong to the current browser tab (`sessionStorage`), not the
+deployment. Explicit URL filters take precedence. Every restoration intersects IDs
+with live Vault access, and logout clears the preference. Invalid URL controls are
+rejected; old responses cannot replace a newer query. A selection does not grant
+access and does not delete cached records. Collection details show per-source
+progress, revocation evidence and at most 20 certificate errors by default.
+
+Retention is deliberately **retain until an explicit operator decision**. No
+scheduled deletion of certificates, conflict blobs, jobs or job items is enabled.
+The jobs API lists the latest 100 authorized jobs; older rows remain stored.
+Refresh rereads completed certificates as well as failed/pending work. Missing
+records are retained as unobserved after a complete observation. Local pruning,
+collection-history pruning and Vault tidy are three distinct future operations;
+none is implied by deselection, expiry or loss of access. Monitor disk space and
+reserve space for the database, WAL and at least one full backup.
+
+## Backup, restore and failed writes
+
+After `npm run build:server`, use these commands from `app`:
+
+```sh
+node dist/server/pki/maintenance.js backup /absolute/live.sqlite /absolute/new-backup.sqlite
+node dist/server/pki/maintenance.js restore /absolute/new-backup.sqlite /absolute/new-restored.sqlite
+```
+
+Both commands create a new destination exclusively and refuse to overwrite an
+existing file. `VACUUM INTO` includes committed WAL contents and produces a compact,
+consistent image. Integrity, foreign keys and schema version are checked before
+the file is published with mode `0600`. The destination directory should be private.
+Never copy a live `.sqlite` file without its committed WAL state.
+
+Restore into a new path, stop the HTTP server and all PKI workers, switch
+`VAULTLENS_PKI_DB_PATH`, then start the matching build. Retain the old database and
+build for rollback. An interrupted old job requires a new authorized session to
+resume; no worker token is stored in SQLite. Downgrades require the matching older
+schema backup. A failed transaction rolls back certificate and queue changes;
+failed copies never replace a working destination. Fix storage capacity/permissions
+before resuming. Physical disk-full and hardware-failure injection are not part of
+the local acceptance test; constraint failures and corrupt input are tested.
+
+Acceptance restored a live 2,409-certificate, three-job snapshot into a separate
+file and passed integrity checks. Runtime evidence stays outside Git.

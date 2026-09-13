@@ -5,7 +5,7 @@ import {
   type NextFunction,
 } from "express";
 import { resolve } from "node:path";
-import { X509Certificate } from "node:crypto";
+import { findIssuer } from "../pki/issuer.js";
 import { config } from "../config/index.js";
 import { PkiAdapter, PkiError } from "../pki/adapter.js";
 import { PkiStore } from "../pki/store.js";
@@ -99,43 +99,7 @@ router.get(
     const pem = store().pem(c.fingerprint);
     const conflicts = store().conflicts(c.sourceId, c.serial);
     const source = ctx.sources.find((s) => s.id === c.sourceId)!;
-    let issuer: { pem: string; subject: string } | null = null,
-      issuerState = "unresolved";
-    try {
-      const leaf = new X509Certificate(pem!);
-      if (leaf.ca && leaf.checkIssued(leaf) && leaf.verify(leaf.publicKey)) {
-        issuer = { pem: pem!, subject: leaf.subject };
-        issuerState = "verified";
-      } else {
-        let candidates: string[] = [];
-        try {
-          candidates =
-            (await ctx.adapter.request(source.path + "/issuers", "LIST")).data
-              .keys ?? [];
-        } catch {}
-        // Limit interactive lookup. Never claim mount-default CA is the signer without verifying.
-        if (candidates.length > 100) issuerState = "too_many_issuers";
-        else
-          for (const ref of candidates.length ? candidates : ["default"]) {
-            const cert =
-              ref === "default"
-                ? await ctx.adapter.pem(source, "ca")
-                : (
-                    await ctx.adapter.request(
-                      source.path + "/issuer/" + encodeURIComponent(ref),
-                    )
-                  ).data.certificate;
-            const ca = new X509Certificate(cert);
-            if (leaf.checkIssued(ca) && leaf.verify(ca.publicKey)) {
-              issuer = { pem: cert, subject: ca.subject };
-              issuerState = "verified";
-              break;
-            }
-          }
-      }
-    } catch {
-      issuerState = "unavailable";
-    }
+    const { issuer, issuerState } = await findIssuer(pem!, source, ctx.adapter);
     res.json({ certificate: c, pem, issuer, issuerState, conflicts });
   }),
 );
@@ -156,37 +120,70 @@ async function exportRecords(req: Request, res: Response, ctx: Context) {
     "Content-Disposition",
     'attachment; filename="certificates.ndjson"',
   );
-  res.write(
-    JSON.stringify({
-      kind: "coverage",
-      sources: store().sources(query.sources),
-      exportedAt: new Date().toISOString(),
-    }) + "\n",
-  );
-  while (!res.destroyed) {
-    // Recheck the session and source entitlement between streamed pages.
-    await ctx.adapter.verifyToken();
-    const current = await ctx.adapter.allowed(await ctx.adapter.discover());
-    if (!query.sources.every((id) => current.some((s) => s.id === id)))
-      throw new PkiError(403, "Source access changed during export");
-    const page = store().query(query, false);
-    for (const certificate of page.certificates) {
-      if (res.destroyed) return;
-      if (!res.write(JSON.stringify(certificate) + "\n"))
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            res.off("drain", done);
-            res.off("close", done);
-            resolve();
-          };
-          res.once("drain", done);
-          res.once("close", done);
-        });
+  const snapshot = new PkiStore(dbPath);
+  const exportedAt = new Date().toISOString();
+  let closed = false,
+    count = 0;
+  const release = () => {
+    if (closed) return;
+    closed = true;
+    try {
+      if (snapshot.db.isTransaction) snapshot.db.exec("ROLLBACK");
+    } finally {
+      snapshot.close();
     }
-    if (!page.nextCursor) break;
-    query.cursor = page.nextCursor;
+  };
+  const timeout = setTimeout(() => res.destroy(), 120000);
+  const onClose = () => {
+    clearTimeout(timeout);
+    release();
+  };
+  res.once("close", onClose);
+  try {
+    snapshot.db.exec("BEGIN");
+    // Pin the snapshot before streaming; concurrent WAL writers can still commit.
+    const coverage = snapshot.sources(query.sources);
+    res.write(
+      JSON.stringify({
+        kind: "coverage",
+        consistency: "snapshot",
+        sources: coverage,
+        exportedAt,
+      }) + "\n",
+    );
+    while (!res.destroyed) {
+      await ctx.adapter.verifyToken();
+      const current = await ctx.adapter.allowed(await ctx.adapter.discover());
+      if (
+        !query.sources.every((id) => current.some((source) => source.id === id))
+      )
+        throw new PkiError(403, "Source access changed during export");
+      if (res.destroyed) return;
+      const page = snapshot.query(query, false, Date.parse(exportedAt));
+      for (const certificate of page.certificates) {
+        if (res.destroyed) return;
+        if (!res.write(JSON.stringify(certificate) + "\n"))
+          await new Promise<void>((resolve) => {
+            const done = () => {
+              res.off("drain", done);
+              res.off("close", done);
+              resolve();
+            };
+            res.once("drain", done);
+            res.once("close", done);
+          });
+        count++;
+      }
+      if (!page.nextCursor) break;
+      query.cursor = page.nextCursor;
+    }
+    if (!res.destroyed)
+      res.end(JSON.stringify({ kind: "complete", count, exportedAt }) + "\n");
+  } finally {
+    clearTimeout(timeout);
+    res.off("close", onClose);
+    release();
   }
-  res.end();
 }
 router.get(
   "/jobs",

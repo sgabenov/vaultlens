@@ -108,6 +108,16 @@ export function whereQuery(query: PkiQuery, now = Date.now()) {
             : ["notBefore", "notAfter"].includes(c.field)
               ? Date.parse(c.value)
               : c.value;
+    // Hex identifiers are normalized before storage and search. Binary comparisons
+    // use their indexes; NOCASE would force full scans of the binary indexes.
+    if (["serial", "fingerprint"].includes(c.field)) {
+      if (c.operator === "prefix") {
+        params.push(value, String(value) + "g");
+        return `(c.${c.field}>=? AND c.${c.field}<?)`;
+      }
+      params.push(value);
+      return `c.${c.field}=?`;
+    }
     const san = c.field.startsWith("san_");
     const column = san ? "s.value" : "c." + c.field;
     if (san) params.push(c.field.slice(4));
@@ -120,7 +130,7 @@ export function whereQuery(query: PkiQuery, now = Date.now()) {
     params.push(value);
     const expression = `${column} ${op} ? COLLATE NOCASE${op === "LIKE" ? " ESCAPE '\\'" : ""}`;
     return san
-      ? `EXISTS (SELECT 1 FROM sans s WHERE s.certificateId=c.id AND s.type=? AND ${expression})`
+      ? `c.id IN (SELECT s.certificateId FROM sans s WHERE s.type=? AND ${expression})`
       : expression;
   });
   if (conditions.length)

@@ -366,8 +366,8 @@ export class PkiStore {
       "\n-----END CERTIFICATE-----\n"
     );
   }
-  query(query: PkiQuery, count = true) {
-    const base = whereQuery(query);
+  query(query: PkiQuery, count = true, now = Date.now()) {
+    const base = whereQuery(query, now);
     let sql = base.sql;
     const params = [...base.params],
       key = queryKey(query);

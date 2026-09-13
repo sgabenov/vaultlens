@@ -9,9 +9,18 @@ import type {
   PkiQuery,
   PkiSource,
 } from "../../shared/pki";
-import { pkiSearchFields } from "../../shared/pki";
+import { restorePkiQuery, pkiSelectionKey } from "../../shared/pkiSelection";
+import CollectionProgress from "../components/pki/CollectionProgress";
 import CertificateSearch from "../components/pki/CertificateSearch";
 import "../components/pki/pki.css";
+const coverageText: Record<string, string> = {
+  complete: "All listed certificates read; revocation evidence available.",
+  partial:
+    "Some listing or certificate reads failed. The catalog is incomplete.",
+  revocation_unknown:
+    "Listed certificates read; some revocation evidence is unavailable.",
+  not_collected: "No completed observation yet.",
+};
 const emptyCondition: PkiCondition = {
   field: "cn",
   operator: "contains",
@@ -73,7 +82,10 @@ export default function CertificatesPage() {
   > | null>(null);
   const generation = useRef(0),
     detailGeneration = useRef(0);
-  const initialParams = useRef(params.toString());
+  const [expandedJob, setExpandedJob] = useState<string | null>(null),
+    [actionBusy, setActionBusy] = useState(false);
+  const filterParams = params.toString();
+  const canSaveSelection = useRef(false);
   async function run(q: PkiQuery) {
     const gen = ++generation.current;
     setBusy(true);
@@ -81,8 +93,14 @@ export default function CertificatesPage() {
     setDetail(null);
     detailGeneration.current++;
     try {
-      const r = await api.pkiQuery(q);
+      const [r, scope] = await Promise.all([api.pkiQuery(q), api.pkiSources()]);
       if (gen !== generation.current) return;
+      setSources(scope.sources);
+      setSelected((ids) =>
+        ids.filter((id) => scope.sources.some((s) => s.id === id)),
+      );
+      if (q.sources.some((id) => !scope.sources.some((s) => s.id === id)))
+        throw new Error("Source access changed. Apply the current selection.");
       setRows(r.certificates);
       setTotal(r.total);
       setNext(r.nextCursor);
@@ -90,6 +108,7 @@ export default function CertificatesPage() {
     } catch (e) {
       if (gen === generation.current) {
         setError(message(e));
+        setQuery(null);
         setRows([]);
         setTotal(0);
         setNext(null);
@@ -100,56 +119,33 @@ export default function CertificatesPage() {
   }
   useEffect(() => {
     let cancelled = false;
+    canSaveSelection.current = false;
+    setCursors([undefined]);
+    setReady(false);
+    setRows([]);
+    setQuery(null);
+    setDetail(null);
+    setNext(null);
+    setTotal(0);
     void api
       .pkiSources()
       .then((r) => {
         if (cancelled) return;
         setSources(r.sources);
-        const p = new URLSearchParams(initialParams.current);
-        const scoped = p.get("mount");
-        let restored: Partial<PkiQuery> = {};
+        let saved: unknown;
         try {
-          const raw = p.get("filter");
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-              restored = parsed;
-          }
+          saved = JSON.parse(sessionStorage.getItem(pkiSelectionKey) || "null");
         } catch {
-          /* Invalid shared query falls back to the source picker. */
+          /* Browser storage may be unavailable. */
         }
-        const ids = Array.isArray(restored.sources)
-          ? r.sources
-              .filter((s) => restored.sources!.includes(s.id))
-              .map((s) => s.id)
-          : r.sources
-              .filter((s) => !scoped || s.path === scoped.replace(/\/$/, ""))
-              .map((s) => s.id);
-        setSelected(ids);
+        const q = restorePkiQuery(
+          new URLSearchParams(filterParams),
+          r.sources,
+          saved,
+        );
+        canSaveSelection.current = true;
+        setSelected(q.sources);
         setReady(true);
-        const q: PkiQuery = {
-          sources: ids,
-          conditions: [],
-          match: "all",
-          sort: "notAfter",
-          direction: "asc",
-          limit: 50,
-          ...restored,
-        };
-        q.sources = ids;
-        q.cursor = undefined;
-        // Server validates the shared search. Do not use arbitrary URL fields to render controls.
-        if (
-          !Array.isArray(q.conditions) ||
-          !q.conditions.every(
-            (c) =>
-              c &&
-              Object.prototype.hasOwnProperty.call(pkiSearchFields, c.field) &&
-              pkiSearchFields[c.field].operators.includes(c.operator) &&
-              typeof c.value === "string",
-          )
-        )
-          q.conditions = [];
         setConditions(
           q.conditions.length ? q.conditions : [{ ...emptyCondition }],
         );
@@ -171,19 +167,64 @@ export default function CertificatesPage() {
       generation.current++;
       detailGeneration.current++;
     };
-  }, []);
+  }, [filterParams]);
+  useEffect(() => {
+    if (ready && canSaveSelection.current) {
+      try {
+        sessionStorage.setItem(pkiSelectionKey, JSON.stringify(selected));
+      } catch {
+        /* Selection still works without storage. */
+      }
+    }
+  }, [selected, ready]);
+  function acceptSources(nextSources: PkiSource[]) {
+    setSources(nextSources);
+    setSelected((ids) =>
+      ids.filter((id) => nextSources.some((s) => s.id === id)),
+    );
+    if (query?.sources.some((id) => !nextSources.some((s) => s.id === id))) {
+      generation.current++;
+      detailGeneration.current++;
+      setRows([]);
+      setQuery(null);
+      setDetail(null);
+      setNext(null);
+      setTotal(0);
+      setBusy(false);
+      setError(
+        "Source access changed. Apply the current authorized selection.",
+      );
+    }
+  }
   useEffect(() => {
     if (tab !== "jobs") return;
-    let active = true;
+    let active = true,
+      loading = false;
     const load = () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || loading) return;
+      loading = true;
       void api
         .pkiJobs()
         .then((r) => {
-          if (active) setJobs(r.jobs);
+          if (active) {
+            setJobs(r.jobs);
+            void api
+              .pkiSources()
+              .then((s) => {
+                if (active) acceptSources(s.sources);
+              })
+              .catch(() => {});
+          }
         })
         .catch((e) => {
-          if (active) setError(message(e));
+          if (active) {
+            setError(message(e));
+            setJobs([]);
+            setExpandedJob(null);
+          }
+        })
+        .finally(() => {
+          loading = false;
         });
     };
     load();
@@ -206,8 +247,11 @@ export default function CertificatesPage() {
       limit: 50,
     };
     setCursors([undefined]);
-    setParams({ filter: JSON.stringify(q) }, { replace: true });
-    void run(q);
+    const encoded = new URLSearchParams({
+      filter: JSON.stringify(q),
+    }).toString();
+    if (encoded === filterParams) void run(q);
+    else setParams({ filter: JSON.stringify(q) });
   }
   async function collect() {
     setBusy(true);
@@ -218,6 +262,7 @@ export default function CertificatesPage() {
       setJobs((await api.pkiJobs()).jobs);
     } catch (e) {
       setError(message(e));
+      if (e instanceof AxiosError && e.response?.status === 409) setTab("jobs");
     } finally {
       setBusy(false);
     }
@@ -233,11 +278,14 @@ export default function CertificatesPage() {
     }
   }
   async function jobAction(id: string, action: "pause" | "resume") {
+    setActionBusy(true);
     try {
       await api.pkiJobAction(id, action);
       setJobs((await api.pkiJobs()).jobs);
     } catch (e) {
       setError(message(e));
+    } finally {
+      setActionBusy(false);
     }
   }
   function downloadPem() {
@@ -264,7 +312,7 @@ export default function CertificatesPage() {
     if (!ready || tab === "jobs") return;
     void api
       .pkiSources()
-      .then((r) => setSources(r.sources))
+      .then((r) => acceptSources(r.sources))
       .catch((e) => setError(message(e)));
   }, [tab, ready]);
   return (
@@ -291,6 +339,7 @@ export default function CertificatesPage() {
         ].map(([id, label]) => (
           <button
             key={id}
+            aria-current={tab === id ? "page" : undefined}
             className={tab === id ? "selected" : ""}
             onClick={() => setTab(id)}
           >
@@ -307,13 +356,16 @@ export default function CertificatesPage() {
         <>
           <div className="pki-row pki-spread">
             <span className="pki-muted">
-              {selected.length} sources selected ·{" "}
+              {query?.sources.length ?? selected.length} sources in result scope
+              ·{" "}
               {
                 sources.filter(
-                  (s) => selected.includes(s.id) && s.coverage === "complete",
+                  (s) =>
+                    (query?.sources ?? selected).includes(s.id) &&
+                    s.coverage === "complete",
                 ).length
               }{" "}
-              completely collected
+              completely collected at last observation
             </span>
             <button
               disabled={busy || !query}
@@ -327,7 +379,7 @@ export default function CertificatesPage() {
               Sources · {selected.length}
             </button>
             <label>
-              Type{" "}
+              Usage type{" "}
               <select value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="">All types</option>
                 {Object.entries(labelType).map(([v, l]) => (
@@ -362,6 +414,10 @@ export default function CertificatesPage() {
               </select>
             </label>
           </div>
+          <p className="pki-muted">
+            Usage describes X.509 extensions, not a Vault role. Change filters
+            or sort, then press Search. Dates use UTC midnight.
+          </p>
           <CertificateSearch
             conditions={conditions}
             onChange={setConditions}
@@ -404,6 +460,10 @@ export default function CertificatesPage() {
                   ],
                   ["Source presence", detail.certificate.presence],
                   ["Last observed", detail.certificate.lastSeen],
+                  [
+                    "Revocation observed",
+                    detail.certificate.revocationObservedAt || "Unknown",
+                  ],
                   ["Revocation", labelRevocation[detail.certificate.revoked]],
                   [
                     "SAN",
@@ -418,6 +478,31 @@ export default function CertificatesPage() {
                   </div>
                 ))}
               </dl>
+              <p className="pki-muted">
+                Signing CA verification checks this certificate signature, not
+                the complete trust chain. Validity is calculated now; revocation
+                reflects the last observation.
+              </p>
+              {!!detail.conflicts?.observations.length && (
+                <div role="status" className="pki-error">
+                  <strong>Certificate identity conflict</strong>
+                  <p>
+                    The original certificate is retained. Vault returned
+                    different content for this source and serial.
+                  </p>
+                  {detail.conflicts.observations.map((c) => (
+                    <p key={c.observedFingerprint}>
+                      <code>{c.observedFingerprint}</code>
+                      <br />
+                      {c.observations} observations · {c.firstSeen} to{" "}
+                      {c.lastSeen}
+                    </p>
+                  ))}
+                  {detail.conflicts.truncated && (
+                    <p>Only the first 20 conflicts are shown.</p>
+                  )}
+                </div>
+              )}
               <div className="pki-row">
                 <button onClick={downloadPem}>Download PEM</button>
               </div>
@@ -458,6 +543,11 @@ export default function CertificatesPage() {
               </button>
             </div>
           </div>
+          <p className="pki-muted">
+            Export uses the applied search and a consistent snapshot. A complete
+            download ends with a completion record; interrupted exports are
+            incomplete. Maximum download duration: two minutes.
+          </p>
           <div className="pki-box pki-table">
             <table>
               <thead>
@@ -545,7 +635,10 @@ export default function CertificatesPage() {
             <h2>Authorized PKI sources</h2>
             <p className="pki-muted">
               Selection changes the view and the next collection scope. Stored
-              records remain in the catalog.
+              records remain in the catalog. Selection is saved for this browser
+              tab and checked against current access. A complete observation
+              covers stored, listed certificates only; no_store certificates are
+              absent.
             </p>
             <div className="pki-table">
               <table>
@@ -577,8 +670,22 @@ export default function CertificatesPage() {
                       <td>
                         {s.path}
                         <small>{s.namespace || "root namespace"}</small>
+                        <details>
+                          <summary>Source identity</summary>
+                          <small>
+                            Cluster: {s.cluster}
+                            <br />
+                            Accessor: {s.accessor}
+                          </small>
+                        </details>
                       </td>
-                      <td>{s.coverage.replace(/_/g, " ")}</td>
+                      <td>
+                        {s.coverage.replace(/_/g, " ")}
+                        <small>
+                          {coverageText[s.coverage] ||
+                            "Observation incomplete; inspect the collection job."}
+                        </small>
+                      </td>
                       <td>
                         {s.certificateCount ?? 0}
                         <small>{s.lastCollected || "Never collected"}</small>
@@ -606,7 +713,7 @@ export default function CertificatesPage() {
               onClick={() =>
                 void api
                   .pkiSources()
-                  .then((r) => setSources(r.sources))
+                  .then((r) => acceptSources(r.sources))
                   .catch((e) => setError(message(e)))
               }
             >
@@ -619,7 +726,10 @@ export default function CertificatesPage() {
         <>
           <p className="pki-muted pki-controls">
             Collections run in a separate process. Resume uses your current
-            Vault session.
+            Vault session. Resume retries failed and pending items and rereads
+            completed certificates to refresh revocation and identity evidence.
+            Pausing finishes at a safe request boundary. Only one collection can
+            be active.
           </p>
           {jobs.map((j) => (
             <section className="pki-box" key={j.id}>
@@ -638,17 +748,34 @@ export default function CertificatesPage() {
               </p>
               {j.error && <p className="pki-muted">{j.error}</p>}
               <div className="pki-row">
+                <button
+                  aria-expanded={expandedJob === j.id}
+                  onClick={() =>
+                    setExpandedJob(expandedJob === j.id ? null : j.id)
+                  }
+                >
+                  Source progress and errors
+                </button>
                 {["queued", "running"].includes(j.status) && (
-                  <button onClick={() => void jobAction(j.id, "pause")}>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => void jobAction(j.id, "pause")}
+                  >
                     Pause
                   </button>
                 )}
                 {["paused", "partial", "interrupted"].includes(j.status) && (
-                  <button onClick={() => void jobAction(j.id, "resume")}>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => void jobAction(j.id, "resume")}
+                  >
                     Resume
                   </button>
                 )}
               </div>
+              {expandedJob === j.id && (
+                <CollectionProgress id={j.id} updatedAt={j.updatedAt} />
+              )}
             </section>
           ))}
           {!jobs.length && (

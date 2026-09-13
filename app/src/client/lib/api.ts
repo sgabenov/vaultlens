@@ -1283,7 +1283,9 @@ export async function toggleAuditException(id: string, enabled: boolean) {
 // PKI catalog shares the VaultLens session and CSRF transport.
 export async function pkiSources() { return (await api.get<{ sources: import('../../shared/pki').PkiSource[]; namespace: string }>('/pki/sources')).data; }
 export async function pkiQuery(query: import('../../shared/pki').PkiQuery) { return (await api.post<{ certificates: import('../../shared/pki').CertificateRecord[]; total: number; nextCursor: string | null }>('/pki/query', query)).data; }
-export async function pkiCertificate(id: number) { return (await api.get<{ certificate: import('../../shared/pki').CertificateRecord; pem: string; issuer: { pem: string; subject: string } | null; issuerState: string }>(`/pki/certificates/${id}`)).data; }
+export async function pkiCertificate(id: number) { return (await api.get<{ certificate: import('../../shared/pki').CertificateRecord; pem: string; issuer: { pem: string; subject: string } | null; issuerState: string; conflicts: { observations: {observedFingerprint:string;firstSeen:string;lastSeen:string;observations:number}[]; truncated: boolean } }>(`/pki/certificates/${id}`)).data; }
 export async function pkiJobs() { return (await api.get<{ jobs: import('../../shared/pki').PkiJob[] }>('/pki/jobs')).data; }
 export async function pkiCollect(sources: string[]) { return (await api.post('/pki/jobs', { sources })).data; }
 export async function pkiJobAction(id: string, action: 'pause' | 'resume') { return (await api.post(`/pki/jobs/${encodeURIComponent(id)}/${action}`)).data; }
+
+export async function pkiJobDetails(id:string) { return (await api.get<import('../../shared/pki').PkiJobDetails>(`/pki/jobs/${encodeURIComponent(id)}`)).data; }

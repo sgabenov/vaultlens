@@ -1,6 +1,6 @@
 # VCV to VaultLens migration plan
 
-Updated: 2026-09-13. Status: initial catalog implemented; backend stabilization in progress.
+Updated: 2026-09-13. Status: M2–M4 accepted for the local read-only catalog; integration in progress.
 
 This is the working backlog for the migration. Use task IDs when discussing work,
 record evidence when closing tasks, and keep this document current in the same
@@ -87,12 +87,12 @@ source isolation and revoked-session rejection passed; browser search/details an
 export were exercised. These are initial checks, not acceptance of the pending
 failure/recovery matrix below.
 
-## M2 — Sources and collection visibility (next)
+## M2 — Sources and collection visibility (complete)
 
-- [ ] SRC-01: Define and implement persistence of selected sources, distinct from
+- [x] SRC-01: Define and implement persistence of selected sources, distinct from
   mount authorization and retention. Document whether a saved selection belongs
   to the browser/user or deployment; do not silently introduce a global setting.
-- [ ] SRC-02: Show source identity, namespace, last successful observation and
+- [x] SRC-02: Show source identity, namespace, last successful observation and
   readable coverage explanations. Represent inaccessible/remounted/recreated
   sources without exposing cached metadata to unauthorized sessions.
 - [x] SRC-03: Exercise remount, disable/recreate and permission changes against
@@ -100,13 +100,13 @@ failure/recovery matrix below.
   Backend evidence: identity/access validation before and after each staged batch;
   tests cover remount, accessor/cluster changes during reads, denied access, namespace
   identity isolation and resume after remount. UI presentation remains SRC-02.
-- [ ] JOB-01: Add per-source progress, failure categories and bounded error details
+- [x] JOB-01: Add per-source progress, failure categories and bounded error details
   to the job API/UI; distinguish certificate-read and revocation-evidence failures.
   Backend complete: `GET /api/pki/jobs/:id?errorLimit=20` exposes source progress,
-  observation mode and sanitized errors. UI integration is pending by user request.
-- [ ] JOB-02: Make pause/resume/retry behavior clear, including rereads needed for
+  observation mode and sanitized errors. Native per-source progress/error UI is now connected.
+- [x] JOB-02: Make pause/resume/retry behavior clear, including rereads needed for
   revocation refresh. Show interrupted jobs and the need for a current session.
-- [ ] JOB-03: Surface single-active-job conflicts and refresh source coverage/counts
+- [x] JOB-03: Surface single-active-job conflicts and refresh source coverage/counts
   consistently after completion, pause or failure.
 - [x] JOB-04: Expose validated concurrency/rate limits in deployment configuration;
   document defaults, bounds, response-size limits and retry/backoff behavior.
@@ -117,22 +117,22 @@ reflected without leaking cached records. No full serial list is sent to the bro
 
 ## M3 — Search and certificate data quality
 
-- [ ] UX-01: Check shared-query restoration, malformed URLs, source changes,
+- [x] UX-01: Check shared-query restoration, malformed URLs, source changes,
   clear/search behavior, paging and stale in-flight responses as one user flow.
-- [ ] UX-02: Validate CN vs each SAN type; exact/prefix/contains matching; serial and
+- [x] UX-02: Validate CN vs each SAN type; exact/prefix/contains matching; serial and
   fingerprint formatting; date boundaries; CA/client/server/both/unknown usage;
   independent validity and revocation filters. Explain that usage is not a Vault role.
-- [ ] UX-03: Finish native layout/accessibility for narrow screens, keyboard use,
+- [x] UX-03: Finish native layout/accessibility for narrow screens, keyboard use,
   loading/empty/error states and visible source scope. Record browser acceptance.
 - [x] DATA-01: Define and implement certificate-identity conflict handling. Never
   silently replace evidence when a source/serial resolves to another fingerprint.
   Implemented: retain the original row, preserve conflicting DER and fingerprint
   history, fail the affected job item and expose bounded evidence in certificate
   details. Every refresh reads Vault bodies, including when bulk revocation works.
-- [ ] DATA-02: Exercise multiple issuers, issuer rotation, missing issuer access,
+- [x] DATA-02: Exercise multiple issuers, issuer rotation, missing issuer access,
   unsupported endpoints and missing revocation metadata. Distinguish observed time
   from current validity; issuer verification is not a complete trust-chain verdict.
-- [ ] DATA-03: Make export consistency explicit in UI; test interrupted downloads,
+- [x] DATA-03: Make export consistency explicit in UI; test interrupted downloads,
   permission loss and concurrent collection. Choose and document whether to retain
   live traversal or add a stable snapshot mode before declaring export complete.
 
@@ -142,26 +142,26 @@ and uncertainty rather than guessing. Unauthorized scope cannot affect results/c
 
 ## M4 — Reliability, storage and scale
 
-- [ ] REL-01: Run a focused recovery matrix: HTTP-server restart during collection,
+- [x] REL-01: Run a focused recovery matrix: HTTP-server restart during collection,
   worker termination, expired heartbeat, pause/resume, revoked token, 403/429/5xx,
   inaccessible certificate, malformed PEM and partial listing/read failures.
 - [x] REL-02: Harden ownership of active jobs so a stale worker cannot continue
   writing after another worker has taken over. Verify concurrent start/resume races.
   Evidence: attempt-guarded transactions, conditional lifecycle updates, two-connection
   ownership tests and a delayed Vault response from a replaced worker.
-- [ ] REL-03: Complete meaningful automated coverage for authorization on details,
+- [x] REL-03: Complete meaningful automated coverage for authorization on details,
   jobs and export, access changes during export, and worker recovery. Avoid tests
   that only mirror rendering or implementation details.
-- [ ] DB-01: Define schema-upgrade handling and a consistent SQLite backup/restore
+- [x] DB-01: Define schema-upgrade handling and a consistent SQLite backup/restore
   procedure. Document WAL sidecars, file permissions and recovery after failed writes.
-  Partial: transactional v1 -> v2 migration, legacy-worker guard and a consistent
-  pre-upgrade backup verified locally. Full restore/failure-write acceptance remains.
-- [ ] DB-02: Define collection-history and local-retention policy before implementing
+  Transactional migrations, legacy-worker guard, exclusive snapshot copy, integrity
+  validation and a real 2,409-record restore passed. See acceptance limits below.
+- [x] DB-02: Define collection-history and local-retention policy before implementing
   cleanup. Separate pruning job history, deleting local records and Vault tidy.
-- [ ] PERF-01: Repeat scale measurements with realistic DER sizes, SAN distributions,
+- [x] PERF-01: Repeat scale measurements with realistic DER sizes, SAN distributions,
   cold/warm cache, concurrent reads/collection and representative search predicates.
   Record latency, RSS, disk size and collection throughput with a reproducible script.
-- [ ] PERF-02: Investigate slow query plans and long synchronous database work;
+- [x] PERF-02: Investigate slow query plans and long synchronous database work;
   establish acceptable local responsiveness and resource budgets from measurements.
 
 Acceptance: progress survives supported failures, only the authorized active worker
@@ -209,12 +209,11 @@ expand the read-only migration to include all of them.
 
 ## How to resume and update this plan
 
-Current direction: **backend first; UI work deferred** (user instruction).
-Next backend tasks: the remaining **REL-01/REL-03** failure and API coverage,
-then **DB-01** backup/restore acceptance. SRC-03 and DATA-01 are complete at the
-backend/API level. JOB-01 API and conflict evidence are ready for a separate UI
-iteration. Resume the remaining M2/M3 UI tasks only when UI work is requested;
-M5 integration is still pending.
+Current direction: complete the agreed read-only migration continuously (latest
+user instruction). M2–M4 evidence and explicit verification limits are recorded in
+[Acceptance report](pki-acceptance-2026-09-13.md). The remaining work is M5:
+merge into develop, activate the common runtime and verify/publish origin.
+The former backend-only pause is superseded for this delivery.
 
 For each task, record:
 
@@ -242,3 +241,7 @@ from the real Vault separate from synthetic fixtures and performance experiments
 | 2026-09-13 | Migration backlog recorded | Initial next tasks: SRC-02 and JOB-01; see updated backend direction above |
 | 2026-09-13 | Backend diagnostics, configurable request limits and worker ownership | JOB-04 / REL-02 complete; JOB-01 API complete, UI pending; six automated tests plus live backend checks |
 | 2026-09-13 | Source identity checks and certificate conflict evidence | SRC-03 / DATA-01 backend complete; nine tests, schema v3, live refresh of five existing certificates |
+
+M2–M4 acceptance: see [dated report](pki-acceptance-2026-09-13.md). Benchmarks
+separate fresh SQLite connections from OS cold-cache claims. Retention is explicit
+retain-until-operator-decision; no pruning or Vault tidy is enabled.
