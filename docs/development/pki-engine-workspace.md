@@ -5,7 +5,9 @@ UI 1.21.4. It is separate from the collected, indexed Certificates monitoring
 catalog. The user expanded the initial read-only navigation request to include
 main PKI lifecycle operations. Vault UI screenshots define the arrangement;
 VaultLens supplies the visual styling (surfaces, borders, controls and brand
-color). Styling changes preserve the existing element placement and dimensions.
+color). The approved configuration mockup uses bordered section cards with integrated
+headings, explanatory captions, aligned property rows and an emphasized edit
+action. Field order, navigation and operation behavior remain unchanged.
 
 ## User workflows
 
