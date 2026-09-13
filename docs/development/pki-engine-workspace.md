@@ -89,6 +89,8 @@ role `issuer_ref` is current configuration, not historical issuance evidence.
   `/Users/gabenov.s/Documents/Projects/VaultLens/integration-2026-09-13/`.
 - Existing test mounts and the 2,409-record monitoring catalog were not mutated by
   the acceptance scenarios. Test-only mounts are removed after visual acceptance.
+- Browser acceptance verified role/configuration save and readback, all seven tabs,
+  exact monitoring links and the downloaded certificate fingerprint.
 - Build passes. Full client type checking still reports ten pre-existing errors
   outside the PKI changes; the engine components add no type errors.
 

@@ -296,5 +296,12 @@ workflow matrix, API boundaries, acceptance evidence and advanced exclusions.
 - [x] Allowlisted user-token operations for roles, issuance/signing/revocation,
   issuers, keys, configuration and tidy; CSRF and destructive confirmation.
 - [x] Scoped API tests and 28 live acceptance scenarios on disposable mounts.
-- [ ] Final browser form/readback acceptance and common-runtime refresh.
-- [ ] Publish feature and develop updates to origin; keep main/upstream unchanged.
+- [x] Final browser form/readback acceptance and common-runtime refresh on port 18302.
+- [x] Publish feature and develop updates to origin; keep main/upstream unchanged.
+
+Browser acceptance verified all seven tabs, role and cluster configuration edits
+with live readback, monitoring-to-engine navigation for the exact expired
+`app.lab.invalid` certificate, its verified issuer link, and a downloaded PEM
+whose serial and SHA-256 fingerprint match the live detail. Both disposable
+acceptance mounts were removed. Main PKI operations are implemented; advanced
+cross-signing wizards and enterprise managed-key setup remain separate scope.
