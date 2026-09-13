@@ -3,7 +3,9 @@
 The PKI workspace under Secrets Engines follows the seven-tab structure of Vault
 UI 1.21.4. It is separate from the collected, indexed Certificates monitoring
 catalog. The user expanded the initial read-only navigation request to include
-main PKI lifecycle operations and supplied screenshots as the visual reference.
+main PKI lifecycle operations. Vault UI screenshots define the arrangement;
+VaultLens supplies the visual styling (surfaces, borders, controls and brand
+color). Styling changes preserve the existing element placement and dimensions.
 
 ## User workflows
 
