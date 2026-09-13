@@ -288,7 +288,8 @@ progress, revocation evidence and at most 20 certificate errors by default.
 
 Retention is deliberately **retain until an explicit operator decision**. No
 scheduled deletion of certificates, conflict blobs, jobs or job items is enabled.
-The jobs API lists the latest 100 authorized jobs; older rows remain stored.
+The jobs API considers the latest 100 jobs and returns only authorized scopes;
+older rows remain stored.
 Refresh rereads completed certificates as well as failed/pending work. Missing
 records are retained as unobserved after a complete observation. Local pruning,
 collection-history pruning and Vault tidy are three distinct future operations;

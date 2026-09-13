@@ -1,6 +1,6 @@
 # VCV to VaultLens migration plan
 
-Updated: 2026-09-13. Status: M2–M4 accepted for the local read-only catalog; integration in progress.
+Updated: 2026-09-13. Status: M1–M5 complete for the local read-only catalog.
 
 This is the working backlog for the migration. Use task IDs when discussing work,
 record evidence when closing tasks, and keep this document current in the same
@@ -39,9 +39,10 @@ handling rather than embedding VCV or copying its separate application stack.
 | Feature checkout | `/Users/gabenov.s/git/github/sgabenov/vaultlens-vcv` |
 | Integration checkout | `/Users/gabenov.s/git/github/sgabenov/vaultlens` |
 | Reference source | `/Users/gabenov.s/git/github/vcv` |
-| Feature preview | `http://127.0.0.1:18303/certificates` |
-| Existing local integration service | `http://127.0.0.1:18302/` |
-| Feature configuration and data | `/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/` |
+| Former feature preview | `18303` stopped after integration; retained for deliberate isolated testing |
+| Default integrated local service | `http://127.0.0.1:18302/certificates` |
+| Integrated catalog | `/Users/gabenov.s/Documents/Projects/VaultLens/vaultlens/certificates.sqlite` |
+| Archived preview configuration and evidence | `/Users/gabenov.s/Documents/Projects/VaultLens/pki-preview/` |
 
 Delivery flow: feature commits -> `origin/feature/vault-certificate-viewer` ->
 validated merge into `develop` -> rebuild/restart the common local service ->
@@ -173,17 +174,17 @@ The existing synthetic run (2–333 ms per tested query) is preliminary evidence
 
 Depends on M2–M4 acceptance, or an explicit narrower pilot scope recorded here.
 
-- [ ] INT-01: Review the completed checklist and explicitly list any accepted gaps.
+- [x] INT-01: Review the completed checklist and explicitly list any accepted gaps.
   Resolve or separately track the existing client-wide type-check failures outside
   PKI; do not describe a successful bundle build as a clean global type check.
-- [ ] INT-02: Merge the reviewed feature into `develop`, resolving conflicts with
+- [x] INT-02: Merge the reviewed feature into `develop`, resolving conflicts with
   the other local modules. Keep the feature history and migration documentation.
-- [ ] INT-03: Prepare the integration runtime and database placement, back up current
+- [x] INT-03: Prepare the integration runtime and database placement, back up current
   configuration, and record the previous executable/build and rollback command.
-- [ ] INT-04: Build and restart the service on `18302`; verify branch/build identity,
+- [x] INT-04: Build and restart the service on `18302`; verify branch/build identity,
   AppRole startup, navigation, authorized collection/search/export and audit-module
   navigation. Avoid duplicate collection workers or competing scheduled jobs.
-- [ ] INT-05: Publish the integration result to `origin`, update this plan and record
+- [x] INT-05: Publish the integration result to `origin`, update this plan and record
   which service is the default. Decide whether the `18303` preview should stay running.
 
 Acceptance: the user sees the same validated PKI module at `18302`, runtime data
@@ -211,8 +212,8 @@ expand the read-only migration to include all of them.
 
 Current direction: complete the agreed read-only migration continuously (latest
 user instruction). M2–M4 evidence and explicit verification limits are recorded in
-[Acceptance report](pki-acceptance-2026-09-13.md). The remaining work is M5:
-merge into develop, activate the common runtime and verify/publish origin.
+[Acceptance report](pki-acceptance-2026-09-13.md). M5 is complete: develop serves the common runtime on 18302; source and integration
+branches are published to origin. The preview on 18303 is stopped.
 The former backend-only pause is superseded for this delivery.
 
 For each task, record:
@@ -245,3 +246,38 @@ from the real Vault separate from synthetic fixtures and performance experiments
 M2–M4 acceptance: see [dated report](pki-acceptance-2026-09-13.md). Benchmarks
 separate fresh SQLite connections from OS cold-cache claims. Retention is explicit
 retain-until-operator-decision; no pruning or Vault tidy is enabled.
+
+
+## Integration handoff
+
+Feature implementation: `1b5916b`; first integration merge: `b44d286`.
+Documentation completion commits follow those revisions. Both branches are on
+origin. `main` and upstream remain unchanged.
+
+Default URL: <http://127.0.0.1:18302/certificates>. The integrated service uses
+`vaultlens/certificates.sqlite` under the Documents runtime. Existing audit storage
+and AppRole configuration are retained. Browser checks verified Certificates,
+Security Audit with saved results, and `/setup` redirecting to `/app`.
+Post-integration collection refreshed five certificates without failure; snapshot
+export contained 2,409 certificate records plus coverage and completion lines.
+The served client asset hash matches the integration build.
+
+Recovery files and live evidence:
+`/Users/gabenov.s/Documents/Projects/VaultLens/integration-2026-09-13/`.
+It contains the previous compiled build, private configuration copy, consistent
+pre-integration audit backup, acceptance JSON and the rollback script.
+Pause any active PKI collection before rollback, then run:
+
+```sh
+python3 /Users/gabenov.s/Documents/Projects/VaultLens/integration-2026-09-13/rollback.py
+```
+
+Rollback restores the previous executable/configuration and keeps current audit
+and PKI databases intact. It does not rewrite branch history. Database rollback,
+if needed, is a separate operation using the documented consistent snapshots.
+The rollback script has been inspected and syntax-checked; executing rollback was
+not part of acceptance because the integrated service remains the desired state.
+
+Next work: user-directed UI refinement or a separately scoped EXT item. There are
+no remaining prerequisites in the agreed read-only migration; see the acceptance
+report for explicit production qualification limits and unrelated client errors.

@@ -51,3 +51,14 @@ Local budgets for this dataset: identifier lookup under 250 ms, repeated ordinar
 - The global client type check has ten existing errors outside PKI. Track separately: `AuthMethodConfig.tsx` field type; missing dagre declarations; `secretGenerator.ts` string-array argument and ES library target; Analytics/Dashboard/Vault store policy result types; ShareSecret configuration default; SystemTokenSetup promise and response types. PKI introduces no reported client type error.
 - The 5.23 MB client bundle and existing Vite externalization/deprecation warnings remain. A bundle build is not a clean global type check.
 - Additional connections, issuance provenance, analytics, lifecycle changes, main promotion and upstream publication are outside this catalog delivery.
+
+
+## Integrated runtime
+
+On `develop`, the common service at `18302` serves the matching client asset
+`index-CW9CtLw_.js`. AppRole status and health checks passed after restart; `/setup`
+redirected to `/app`. A fresh five-certificate collection completed with zero
+failures. The full snapshot export contained 2,409 records and its completion
+trailer. The existing Security Audit page showed 194 saved findings in 59 groups.
+No new audit collection was started. The `18303` preview is stopped to avoid
+competing background service instances. Rollback instructions are in the plan.
