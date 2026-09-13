@@ -1292,3 +1292,7 @@ export async function pkiJobDetails(id:string) { return (await api.get<import('.
 export async function pkiEngine(mount:string,section='overview',ref?:string,source?:string,offset=0){return (await api.get<import('../../shared/pkiEngine').PkiEngineResult>('/pki-engine',{params:{mount,section,ref,source,offset}})).data;}
 
 export async function pkiEngineAction(input: {mount:string;source:string;action:string;ref?:string;mode?:string;fields:Record<string,unknown>;confirm?:string}) { return (await api.post<import("../../shared/pkiEngine").PkiEngineResult>("/pki-engine",input)).data; }
+
+export async function pkiEngineLookup(mount:string,source:string,section:'roles'|'issuers',query:string,signal:AbortSignal) {
+  return (await api.get<import('../../shared/pkiEngine').PkiEngineResult>('/pki-engine',{params:{mount,source,section,lookup:true,query},signal})).data;
+}

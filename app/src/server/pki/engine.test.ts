@@ -52,7 +52,7 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
       if (denyRoles) {
         res.statusCode = 403;
         res.end("{}");
-      } else res.end('{"data":{"keys":["server"]}}');
+      } else res.end(JSON.stringify({data:{keys:["server", ...Array.from({length:110}, (_, i) => "role-" + i), "tail-role"]}}));
     } else if (path === "/v1/team/pki/roles/server") {
       if (replace) accessor = "b";
       res.end('{"data":{"issuer_ref":"issuer-a","allowed_domains":["test"]}}');
@@ -98,6 +98,13 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
     const root = (await (await get()).json()) as any;
     assert.equal(root.source.path, "team/pki");
     assert.equal((await get("&section=roles")).status, 200);
+    const lookup = await (await get("&section=roles&lookup=true&query=TAIL-ROLE")).json() as any;
+    assert.deepEqual(lookup.items.map((item:any) => item.id), ["tail-role"]);
+    assert.equal(lookup.total, 1);
+    const emptyLookup = await (await get("&section=roles&lookup=true&query=missing")).json() as any;
+    assert.equal(emptyLookup.total, 0);
+    const issuerLookup = await (await get("&section=issuers&lookup=true&query=ca")).json() as any;
+    assert.equal(issuerLookup.items[0].id, "issuer-a");
     assert.equal((await get("&section=roles&ref=server")).status, 200);
     assert.equal(calls.includes("/v1/sys/capabilities-self"), false);
     assert.equal((await get("&section=issuers")).status, 200);
@@ -114,6 +121,7 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
     denyCertificate = false;
     denyRoles = true;
     assert.equal((await get("&section=roles")).status, 403);
+    assert.equal((await get("&section=roles&lookup=true&query=server")).status, 403);
     denyRoles = false;
     assert.equal((await get("&section=roles&ref=..%2Fsecret")).status, 400);
     assert.equal((await get("&section=unsupported")).status, 400);

@@ -225,11 +225,31 @@ pkiEngineRouter
               data.keys.some((k) => typeof k !== "string")
             )
               throw new PkiError(502, "Invalid PKI list response");
-            const keys = data.keys as string[];
+            const lookup = req.query.lookup === "true";
+            const query = String(req.query.query || "")
+              .trim()
+              .toLowerCase();
+            if (
+              lookup &&
+              (!["roles", "issuers"].includes(section) || query.length > 256)
+            )
+              throw new PkiError(400, "Invalid PKI lookup");
+            const keys = (data.keys as string[]).filter((id) => {
+              if (!lookup || !query) return true;
+              const info = data.key_info?.[id];
+              const name =
+                info && typeof info === "object"
+                  ? (info as Record<string, unknown>).issuer_name
+                  : "";
+              return (
+                id.toLowerCase().includes(query) ||
+                (typeof name === "string" && name.toLowerCase().includes(query))
+              );
+            });
             const items = keys
               .slice(offset, offset + 50)
               .map((id) => ({ id, info: data.key_info?.[id] ?? null }));
-            if (section === "issuers") {
+            if (section === "issuers" && !lookup) {
               for (let start = 0; start < items.length; start += 4) {
                 await Promise.all(
                   items.slice(start, start + 4).map(async (item) => {
