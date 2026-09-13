@@ -82,6 +82,30 @@ export function downloadText(value: string, filename: string) {
   const a = document.createElement("a");
   a.href = href;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+export function propertyValue(key: string, value: unknown) {
+  if (
+    typeof value === "number" &&
+    /(^ttl$|_ttl$|_duration$|_buffer$)/.test(key)
+  ) {
+    for (const [seconds, unit] of [
+      [2592000, "month"],
+      [86400, "day"],
+      [3600, "hour"],
+      [60, "minute"],
+      [1, "second"],
+    ] as const) {
+      if (value >= seconds && value % seconds === 0) {
+        const n = value / seconds;
+        return `${n} ${unit}${n === 1 ? "" : "s"}`;
+      }
+    }
+    return `${value} seconds`;
+  }
+  return displayValue(value);
 }

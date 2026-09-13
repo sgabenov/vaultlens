@@ -16,6 +16,7 @@ import {
   fieldGroup,
   groupOrder,
   displayValue,
+  propertyValue,
   downloadText,
 } from "../components/pki-engine/fields";
 import "../components/pki-engine/pki-engine.css";
@@ -58,7 +59,7 @@ function Properties({
               {rows.map(([key, value]) => (
                 <div key={key}>
                   <dt>{fieldLabel(key)}</dt>
-                  <dd>{displayValue(value)}</dd>
+                  <dd>{propertyValue(key, value)}</dd>
                 </div>
               ))}
             </dl>
@@ -343,7 +344,11 @@ export default function PkiEnginePage() {
           {section === "configuration" && (
             <>
               <Link to={act("root-delete", "")}>Delete all issuers</Link>
-              <a href="#engine-config-edit">Edit configuration ›</a>
+              <Link
+                to={url({ tab: "configuration", action: "configuration-edit" })}
+              >
+                Edit configuration ›
+              </Link>
             </>
           )}
         </div>
@@ -367,6 +372,7 @@ export default function PkiEnginePage() {
           </p>
         )}
       {action &&
+        action !== "configuration-edit" &&
         source &&
         !loading &&
         !(error && action.endsWith("-save") && ref) &&
@@ -385,6 +391,38 @@ export default function PkiEnginePage() {
             }}
           />
         )}
+      {action === "configuration-edit" && source && result && !loading && (
+        <section>
+          <h2>Edit configuration</h2>
+          <p>Save each configuration section separately.</p>
+          {["cluster", "acme", "urls", "crl", "issuers"].map((key) => (
+            <details
+              className="engine-config-section"
+              key={key}
+              open={key === "cluster"}
+            >
+              <summary>
+                {pkiOperations["config-" + key].title.replace(/^Save /, "")}
+              </summary>
+              {result.errors?.["config/" + key] ? (
+                <p className="engine-error">{result.errors["config/" + key]}</p>
+              ) : (
+                <OperationForm
+                  action={"config-" + key}
+                  mount={mount}
+                  source={source.id}
+                  reference=""
+                  initial={
+                    result.data?.["config/" + key] as Record<string, unknown>
+                  }
+                  cancel={url({ tab: "configuration" })}
+                  onSaved={() => navigate(url({ tab: "configuration" }))}
+                />
+              )}
+            </details>
+          ))}
+        </section>
+      )}
       {!action && section === "overview" && source && (
         <div className="engine-overview">
           {["issuers", "roles"].map((kind) => (
@@ -600,34 +638,112 @@ export default function PkiEnginePage() {
         <div id="engine-config-edit">
           {(
             [
-              ["cluster", "Cluster Config"],
-              ["acme", "ACME Config"],
-              ["urls", "Global URLs"],
-              ["crl", "Certificate Revocation List (CRL) and OCSP"],
-              ["issuers", "Default issuer"],
-            ] as const
-          ).map(([key, title]) => (
-            <section className="engine-config-section" key={key}>
-              <Link className="engine-card-link" to={act("config-" + key, "")}>
-                Edit
-              </Link>
-              <h2>{title}</h2>
-              {result.errors?.["config/" + key] ? (
-                <p className="engine-notice">
-                  {result.errors["config/" + key]}
-                </p>
-              ) : (
-                <Properties
-                  data={
-                    (result.data?.["config/" + key] as Record<
-                      string,
-                      unknown
-                    >) || {}
-                  }
-                />
-              )}
-            </section>
-          ))}
+              ["cluster", "Cluster Config", ["path", "aia_path"]],
+              [
+                "acme",
+                "ACME Config",
+                [
+                  "enabled",
+                  "default_directory_policy",
+                  "allowed_roles",
+                  "allow_role_ext_key_usage",
+                  "allowed_issuers",
+                  "eab_policy",
+                  "dns_resolver",
+                  "max_ttl",
+                ],
+              ],
+              [
+                "urls",
+                "Global URLs",
+                [
+                  "issuing_certificates",
+                  "crl_distribution_points",
+                  "ocsp_servers",
+                ],
+              ],
+              [
+                "crl",
+                "Certificate Revocation List (CRL)",
+                ["disable", "expiry", "auto_rebuild", "enable_delta"],
+              ],
+              [
+                "crl",
+                "Online Certificate Status Protocol (OCSP)",
+                ["ocsp_disable", "ocsp_expiry"],
+              ],
+              [
+                "issuers",
+                "Default issuer",
+                ["default", "default_follows_latest_issuer"],
+              ],
+            ] as [string, string, string[]][]
+          ).map(([key, title, fields]) => {
+            const data =
+              (result.data?.["config/" + key] as Record<string, unknown>) || {};
+            const shown = Object.fromEntries(
+              fields.map((field) => [
+                field === "disable"
+                  ? "CRL building"
+                  : field === "ocsp_disable"
+                    ? "Responder APIs"
+                    : field === "enabled" && key === "acme"
+                      ? "ACME enabled"
+                      : field,
+                field === "disable" || field === "ocsp_disable"
+                  ? data[field] === undefined
+                    ? "Unavailable"
+                    : data[field]
+                      ? "Disabled"
+                      : "Enabled"
+                  : data[field],
+              ]),
+            );
+            const extra = Object.fromEntries(
+              Object.entries(data).filter(
+                ([field]) =>
+                  !fields.includes(field) &&
+                  !(
+                    key === "crl" &&
+                    [
+                      "ocsp_disable",
+                      "ocsp_expiry",
+                      "disable",
+                      "expiry",
+                      "auto_rebuild",
+                      "enable_delta",
+                    ].includes(field)
+                  ),
+              ),
+            );
+            return (
+              <section className="engine-config-section" key={title}>
+                <Link
+                  className="engine-card-link"
+                  to={act("config-" + key, "")}
+                >
+                  Edit
+                </Link>
+                <h2>{title}</h2>
+                {result.errors?.["config/" + key] ? (
+                  <p className="engine-notice">
+                    {result.errors["config/" + key]}
+                  </p>
+                ) : (
+                  <>
+                    <Properties data={shown} />
+                    {Object.keys(extra).length > 0 &&
+                      !title.includes("OCSP") && (
+                        <details>
+                          <summary>Additional settings</summary>
+                          <Properties data={extra} />
+                        </details>
+                      )}
+                  </>
+                )}
+              </section>
+            );
+          })}
           <details className="engine-config-section">
             <summary>Show mount configuration</summary>
             {result.errors?.mount ? (
