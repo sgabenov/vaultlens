@@ -96,3 +96,18 @@ role `issuer_ref` is current configuration, not historical issuance evidence.
 
 Development uses `feature/vault-certificate-viewer`, integration uses `develop`,
 and publication is to origin only. The common local runtime is port 18302.
+
+### Role and issuer picker regression (2026-09-13)
+
+Replaced native `datalist` suggestions with an explicit searchable combobox.
+Click/focus opens the list; mouse, arrows, Enter and Escape control selection.
+Lookups filter the full authorized role/issuer list before applying a 50-result
+response limit, so entries beyond the previous 100-option preview remain findable.
+Requests are debounced and cancelled when obsolete. Empty results and denied LIST
+access are distinguished, while known references can still be entered manually.
+
+Verified in Chrome using the existing user session: `bounded` selection by mouse
+and keyboard, transition to its issuance form, issuer selection/detail navigation,
+and actual certificate issuance through the UI on a disposable mount. The mount
+was removed afterward. The scoped engine API test also covers matches beyond the
+first 100 roles, issuer-name filtering, empty results and permission denial.
