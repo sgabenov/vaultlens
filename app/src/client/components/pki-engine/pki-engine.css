@@ -528,3 +528,154 @@ details.engine-config-section > .engine-form {
 .engine-workspace textarea {
   accent-color: var(--brand-primary, #1563ff);
 }
+
+/* Consistent section cards across PKI lists, details and operations. */
+.engine-object-list,
+.engine-property-group,
+.engine-pem-panel,
+.engine-detail-panel,
+.engine-workspace > .engine-form,
+.engine-operation-result {
+  background: #fff;
+  border: 1px solid #e5e8ee;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+.engine-object-list .engine-section-header {
+  border-radius: 10px 10px 0 0;
+}
+.engine-object-list .engine-list-row {
+  padding: 16px 20px;
+}
+.engine-object-list .engine-list-description {
+  padding: 14px 20px;
+  background: #f8f9fb;
+  color: #697383;
+  font-size: 13px;
+}
+.engine-object-list .engine-pagination {
+  border-radius: 0 0 10px 10px;
+  color: #697383;
+}
+.engine-list-meta {
+  line-height: 1.8;
+}
+.engine-menu > div {
+  border-color: #e5e8ee;
+  box-shadow: 0 6px 18px #20263214;
+}
+.engine-property-group > h2 {
+  margin: 0;
+  padding: 17px 20px;
+  border-bottom: 1px solid #e5e8ee;
+  font-size: 15px;
+}
+.engine-property-group .engine-properties {
+  margin: 0;
+  padding: 0 20px;
+  border-top: 0;
+  border-radius: 10px;
+}
+.engine-property-group .engine-properties > div {
+  padding: 13px 0;
+  grid-template-columns: minmax(180px, 42%) minmax(0, 1fr);
+  gap: 20px;
+}
+.engine-property-group .engine-properties > div:last-child {
+  border-bottom: 0;
+}
+.engine-property-group .engine-properties dt {
+  color: #697383;
+  font-weight: 400;
+}
+.engine-config-section .engine-property-group,
+.engine-detail-panel .engine-property-group {
+  border: 0;
+  margin-bottom: 0;
+}
+.engine-pem-panel,
+.engine-detail-panel,
+.engine-workspace > .engine-form,
+.engine-operation-result {
+  padding: 20px;
+}
+.engine-workspace > .engine-form,
+.engine-workspace > .engine-operation-result {
+  margin-top: 24px;
+}
+.engine-pem-panel > h2,
+.engine-detail-panel > h2,
+.engine-form > h2,
+.engine-operation-result > h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+.engine-form legend {
+  font-size: 15px;
+  color: #202632;
+}
+.engine-form-actions {
+  padding-top: 16px;
+  border-top: 1px solid #e5e8ee;
+}
+.engine-detail-panel .engine-property-group .engine-properties {
+  padding: 0;
+}
+.engine-detail-panel > details {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e8ee;
+}
+.engine-detail-panel summary {
+  cursor: pointer;
+  color: #697383;
+  font-size: 13px;
+}
+.engine-empty {
+  background: #fff;
+  border: 1px solid #e5e8ee;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+.engine-object-list .engine-empty {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+.engine-empty .engine-primary {
+  display: inline-block;
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.engine-status-header {
+  background: #fff;
+  border: 1px solid #e5e8ee;
+  border-radius: 10px 10px 0 0;
+}
+.engine-status-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.engine-status-header + .engine-property-group {
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+}
+.engine-card h2 {
+  font-size: 15px;
+}
+.engine-card p {
+  color: #697383;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .engine-property-group .engine-properties > div {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .engine-inline,
+  .engine-form-actions,
+  .engine-pem-actions {
+    flex-wrap: wrap;
+  }
+}

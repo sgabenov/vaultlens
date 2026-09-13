@@ -63,7 +63,7 @@ function Properties({
         );
         if (!rows.length) return null;
         return (
-          <section key={group}>
+          <section className="engine-property-group" key={group}>
             {group && <h2>{group}</h2>}
             <dl className="engine-properties">
               {rows.map(([key, value]) => (
@@ -83,7 +83,7 @@ function Pem({ title, value }: { title: string; value: string }) {
   const [copied, setCopied] = useState(false),
     [error, setError] = useState("");
   return (
-    <section>
+    <section className="engine-pem-panel">
       <h2>{title}</h2>
       <div className="engine-pem-actions">
         <button
@@ -282,7 +282,7 @@ export default function PkiEnginePage() {
         <div className="engine-toolbar">
           {section === "roles" &&
             (!ref ? (
-              <Link to={act("role-save", "")}>Create role ＋</Link>
+              <Link className="engine-primary" to={act("role-save", "")}>Create role ＋</Link>
             ) : (
               <>
                 <Link to={act("role-delete")}>Delete</Link>
@@ -325,7 +325,7 @@ export default function PkiEnginePage() {
             (!ref ? (
               <>
                 <Link to={act("key-import", "")}>Import ⇧</Link>
-                <Link to={act("key-generate", "")}>Generate ＋</Link>
+                <Link className="engine-primary" to={act("key-generate", "")}>Generate ＋</Link>
               </>
             ) : (
               <>
@@ -348,7 +348,7 @@ export default function PkiEnginePage() {
               <Link to={act("config-auto-tidy", "")}>
                 Configure automatic tidy
               </Link>
-              <Link to={act("tidy-start", "")}>Tidy ›</Link>
+              <Link className="engine-primary" to={act("tidy-start", "")}>Tidy ›</Link>
               {(result?.data?.["tidy-status"] as Record<string, unknown>)
                 ?.state === "Running" && (
                 <Link to={act("tidy-cancel", "")}>Cancel tidy</Link>
@@ -479,7 +479,7 @@ export default function PkiEnginePage() {
                 value={role}
                 onChange={setRole}
               />
-              <button disabled={!role.trim()}>Issue</button>
+              <button className="engine-primary" disabled={!role.trim()}>Issue</button>
             </form>
           </section>
           <section className="engine-card">
@@ -525,7 +525,16 @@ export default function PkiEnginePage() {
         </div>
       )}
       {!action && result?.items && (
-        <section>
+        <section className="engine-object-list">
+          <header className="engine-section-header">
+            <div>
+              <h2>{fieldLabel(section)}</h2>
+              <p>{section === "roles" ? "Roles configured to issue certificates in this mount."
+                : section === "issuers" ? "Root and intermediate certificate authorities."
+                : section === "keys" ? "Signing key metadata for this mount."
+                : "Certificates stored in this PKI mount."}</p>
+            </div>
+          </header>
           {section === "keys" && (
             <p className="engine-list-description">
               Keys are used by issuers to sign certificates. This list shows key
@@ -786,11 +795,11 @@ export default function PkiEnginePage() {
               <p>
                 The next tidy operation will provide status information here.
               </p>
-              <Link to={act("tidy-start", "")}>Tidy ›</Link>
+              <Link className="engine-primary" to={act("tidy-start", "")}>Tidy ›</Link>
             </div>
           ) : (
             <>
-              <h2>Tidy status</h2>
+              <div className="engine-section-header engine-status-header"><h2>Tidy status</h2></div>
               <Properties
                 data={result.data?.["tidy-status"] as Record<string, unknown>}
               />
@@ -817,7 +826,7 @@ export default function PkiEnginePage() {
         </section>
       )}
       {!action && section === "certificate" && cert && (
-        <section className="engine-section engine-detail">
+        <section className="engine-section engine-detail engine-detail-panel">
           <h2>{cert.cn || cert.serial}</h2>
           <p>
             <strong>
