@@ -351,3 +351,60 @@ main:has(.engine-workspace) {
     gap: 8px;
   }
 }
+.engine-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.engine-picker-input {
+  display: flex;
+  position: relative;
+}
+.engine-picker-input input {
+  padding-right: 36px;
+}
+.engine-workspace .engine-picker-input button {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  border: 0;
+  background: transparent;
+}
+.engine-picker-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #cdd0d7;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px #0002;
+  max-height: 260px;
+  overflow: auto;
+}
+.engine-picker-panel [role="status"],
+.engine-picker-panel [role="alert"] {
+  padding: 12px;
+  font-size: 13px;
+}
+.engine-workspace .engine-picker-panel [role="option"] {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+.engine-picker-panel [role="option"][aria-selected="true"] {
+  background: #edf2ff;
+  color: #184bd1;
+}
+.engine-picker-panel small {
+  display: block;
+  color: #737985;
+  margin-top: 4px;
+}

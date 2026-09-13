@@ -10,6 +10,7 @@ import * as api from "../lib/api";
 import { pkiEngineUrl, type PkiEngineResult } from "../../shared/pkiEngine";
 import type { PkiSource } from "../../shared/pki";
 import { pkiOperations } from "../../shared/pkiOperations";
+import ObjectPicker from "../components/pki-engine/ObjectPicker";
 import OperationForm from "../components/pki-engine/OperationForm";
 import {
   fieldLabel,
@@ -126,6 +127,10 @@ export default function PkiEnginePage() {
   const [serial, setSerial] = useState(""),
     [role, setRole] = useState(""),
     [issuer, setIssuer] = useState("");
+  useEffect(() => {
+    setRole("");
+    setIssuer("");
+  }, [mount, expected]);
   const [cached, setCached] = useState<Awaited<
     ReturnType<typeof api.pkiCertificate>
   > | null>(null);
@@ -449,15 +454,18 @@ export default function PkiEnginePage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                navigate(act("issue", role));
+                if (role.trim()) navigate(act("issue", role.trim()));
               }}
             >
-              <input
-                list="engine-role-options"
-                aria-label="Role"
+              <ObjectPicker
+                key={mount + source.id + "roles"}
+                mount={mount}
+                source={source.id}
+                kind="roles"
+                label="Role"
                 placeholder="Type to find a role…"
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={setRole}
               />
               <button disabled={!role.trim()}>Issue</button>
             </form>
@@ -489,26 +497,19 @@ export default function PkiEnginePage() {
                 navigate(url({ tab: "issuers", ref: issuer.trim() }));
               }}
             >
-              <input
-                list="engine-issuer-options"
-                aria-label="Issuer name or ID"
+              <ObjectPicker
+                key={mount + source.id + "issuers"}
+                mount={mount}
+                source={source.id}
+                kind="issuers"
+                label="Issuer name or ID"
                 placeholder="Type to find an issuer…"
                 value={issuer}
-                onChange={(e) => setIssuer(e.target.value)}
+                onChange={setIssuer}
               />
               <button disabled={!issuer.trim()}>View</button>
             </form>
           </section>
-          <datalist id="engine-role-options">
-            {((result?.data?.rolesOptions as string[]) || []).map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-          <datalist id="engine-issuer-options">
-            {((result?.data?.issuersOptions as string[]) || []).map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
       )}
       {!action && result?.items && (
