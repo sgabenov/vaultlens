@@ -1,14 +1,11 @@
-main:has(.engine-workspace) {
-  background: white !important;
-}
 .engine-workspace a {
-  color: var(--brand-primary, #4169ff);
+  color: var(--brand-primary, #1563ff);
 }
 .engine-workspace {
   max-width: 1040px;
   margin: 0 auto;
   padding: 24px 24px 64px;
-  color: var(--text-primary, #34373d);
+  color: #1f2937;
 }
 .engine-workspace h1 {
   font-size: 24px;
@@ -26,7 +23,7 @@ main:has(.engine-workspace) {
   margin: 16px 0 8px;
 }
 .engine-breadcrumb {
-  color: var(--text-secondary, #737985);
+  color: #6b7280;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -35,12 +32,12 @@ main:has(.engine-workspace) {
 }
 .engine-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border-color, #d7d9df);
+  border-bottom: 1px solid #e5e7eb;
   gap: 0;
   overflow-x: auto;
 }
 .engine-tabs a {
-  color: var(--text-secondary, #737985);
+  color: #6b7280;
   padding: 13px 12px;
   font-size: 14px;
   font-weight: 600;
@@ -48,8 +45,8 @@ main:has(.engine-workspace) {
   border-bottom: 2px solid transparent;
 }
 .engine-tabs a[aria-current="page"] {
-  color: var(--accent-color, #4169ff);
-  border-color: var(--accent-color, #4169ff);
+  color: var(--brand-primary, #1563ff);
+  border-color: var(--brand-primary, #1563ff);
 }
 .engine-toolbar {
   min-height: 48px;
@@ -58,8 +55,8 @@ main:has(.engine-workspace) {
   align-items: center;
   justify-content: flex-end;
   gap: 24px;
-  background: var(--bg-secondary, #f7f7f8);
-  border-bottom: 1px solid var(--border-color, #d7d9df);
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
 }
 .engine-toolbar > a,
 .engine-toolbar button,
@@ -75,10 +72,10 @@ main:has(.engine-workspace) {
   margin-top: 24px;
 }
 .engine-card {
-  border: 1px solid var(--border-color, #dedfe3);
-  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   padding: 20px;
-  box-shadow: 0 2px 3px #0000000a;
+  background: #fff;
   min-height: 150px;
 }
 .engine-card h2 {
@@ -86,7 +83,7 @@ main:has(.engine-workspace) {
   margin: 0 0 6px;
 }
 .engine-card p {
-  color: var(--text-secondary, #737985);
+  color: #6b7280;
   font-size: 13px;
   margin: 0 0 20px;
 }
@@ -107,10 +104,10 @@ main:has(.engine-workspace) {
 .engine-workspace input,
 .engine-workspace select,
 .engine-workspace textarea {
-  background: var(--bg-primary, #fff);
+  background: #fff;
   color: inherit;
-  border: 1px solid var(--border-color, #cdd0d7);
-  border-radius: 3px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
   padding: 8px 10px;
   font: inherit;
   min-width: 0;
@@ -119,14 +116,15 @@ main:has(.engine-workspace) {
 .engine-workspace input:focus,
 .engine-workspace select:focus,
 .engine-workspace textarea:focus {
-  outline: 2px solid #496aff70;
-  outline-offset: 1px;
+  border-color: var(--brand-primary, #1563ff);
+  outline: 1px solid var(--brand-primary, #1563ff);
+  outline-offset: 0;
 }
 .engine-workspace button {
-  border: 1px solid var(--border-color, #d3d6dd);
-  background: var(--bg-primary, #fff);
+  border: 1px solid #e5e7eb;
+  background: #fff;
   color: inherit;
-  border-radius: 3px;
+  border-radius: 6px;
   padding: 7px 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -137,18 +135,18 @@ main:has(.engine-workspace) {
   cursor: default;
 }
 .engine-workspace .engine-primary {
-  background: #4169ff;
+  background: var(--brand-primary, #1563ff);
   color: white;
-  border-color: #4169ff;
+  border-color: var(--brand-primary, #1563ff);
 }
 .engine-workspace .engine-danger {
-  background: #b52c3b;
+  background: #dc2626;
   color: white;
-  border-color: #b52c3b;
+  border-color: #dc2626;
 }
 .engine-list-row {
   min-height: 66px;
-  border-bottom: 1px solid var(--border-color, #d7d9df);
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -159,14 +157,14 @@ main:has(.engine-workspace) {
   min-width: 0;
 }
 .engine-list-row > div > a {
-  color: inherit;
+  color: var(--brand-primary, #1563ff);
   font-size: 14px;
   font-weight: 600;
-  text-decoration: underline;
+  text-decoration: none;
   overflow-wrap: anywhere;
 }
 .engine-list-meta {
-  color: var(--text-secondary, #737985);
+  color: #6b7280;
   font-size: 12px;
   margin: 10px 0 0;
   overflow-wrap: anywhere;
@@ -174,9 +172,9 @@ main:has(.engine-workspace) {
 .engine-badge {
   display: inline-block;
   padding: 4px 7px;
-  background: var(--bg-secondary, #eeeef0);
+  background: #f9fafb;
   margin-right: 12px;
-  border-radius: 2px;
+  border-radius: 9999px;
 }
 .engine-menu {
   position: relative;
@@ -188,8 +186,8 @@ main:has(.engine-workspace) {
   padding: 4px 7px;
 }
 .engine-list-row .engine-menu summary {
-  border: 1px solid var(--border-color, #d7d9df);
-  border-radius: 3px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
 }
 .engine-menu > div {
   position: absolute;
@@ -197,8 +195,8 @@ main:has(.engine-workspace) {
   top: 100%;
   z-index: 10;
   min-width: 210px;
-  background: var(--bg-primary, #fff);
-  border: 1px solid var(--border-color, #ddd);
+  background: #fff;
+  border: 1px solid #e5e7eb;
   box-shadow: 0 4px 12px #0002;
   padding: 6px;
 }
@@ -219,26 +217,26 @@ main:has(.engine-workspace) {
   padding: 4px;
 }
 .engine-pagination [aria-current] {
-  color: #4169ff;
-  border-bottom: 2px solid #4169ff;
+  color: var(--brand-primary, #1563ff);
+  border-bottom: 2px solid var(--brand-primary, #1563ff);
   padding: 6px;
 }
 .engine-list-description {
   font-size: 14px;
   padding: 12px 4px;
   margin: 0;
-  border-bottom: 1px solid var(--border-color, #d7d9df);
+  border-bottom: 1px solid #e5e7eb;
 }
 .engine-properties {
   margin: 0 0 24px;
-  border-top: 1px solid var(--border-color, #d7d9df);
+  border-top: 1px solid #e5e7eb;
 }
 .engine-properties > div {
   display: grid;
   grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
   gap: 24px;
   padding: 18px 0;
-  border-bottom: 1px solid var(--border-color, #d7d9df);
+  border-bottom: 1px solid #e5e7eb;
   font-size: 14px;
 }
 .engine-properties dt {
@@ -258,8 +256,8 @@ main:has(.engine-workspace) {
 .engine-empty {
   padding: 48px 24px;
   text-align: center;
-  background: var(--bg-secondary, #f8f8fa);
-  color: var(--text-secondary, #848b98);
+  background: #f9fafb;
+  color: #6b7280;
 }
 .engine-empty h2 {
   margin: 0 0 12px;
@@ -272,21 +270,22 @@ main:has(.engine-workspace) {
 .engine-notice {
   padding: 14px 16px;
   margin: 20px 0;
-  border: 1px solid #bfcaf1;
-  border-radius: 3px;
-  background: #738cff0c;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 14px;
 }
 .engine-error {
-  border-color: #e8a8b0;
-  color: #ba3343;
-  background: #ed526508;
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fef2f2;
 }
 .engine-workspace pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: var(--bg-secondary, #f5f6f8);
-  border: 1px solid var(--border-color, #ddd);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   padding: 16px;
   max-height: 420px;
   overflow: auto;
@@ -310,7 +309,7 @@ main:has(.engine-workspace) {
 .engine-form legend {
   font-size: 18px;
   font-weight: 600;
-  border-bottom: 1px solid var(--border-color, #ddd);
+  border-bottom: 1px solid #e5e7eb;
   width: 100%;
   padding-bottom: 12px;
   margin-bottom: 18px;
@@ -333,7 +332,7 @@ main:has(.engine-workspace) {
   overflow-wrap: anywhere;
 }
 .engine-muted {
-  color: var(--text-secondary, #737985);
+  color: #6b7280;
 }
 @media (max-width: 760px) {
   .engine-workspace {
@@ -378,8 +377,8 @@ main:has(.engine-workspace) {
   left: 0;
   right: 0;
   background: white;
-  border: 1px solid #cdd0d7;
-  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
   box-shadow: 0 4px 12px #0002;
   max-height: 260px;
   overflow: auto;
@@ -400,11 +399,50 @@ main:has(.engine-workspace) {
   padding: 10px 12px;
 }
 .engine-picker-panel [role="option"][aria-selected="true"] {
-  background: #edf2ff;
-  color: #184bd1;
+  background: #eff6ff;
+  color: var(--brand-primary, #1563ff);
 }
 .engine-picker-panel small {
   display: block;
-  color: #737985;
+  color: #6b7280;
   margin-top: 4px;
+}
+
+/* Match VaultLens surfaces and interaction states without changing geometry. */
+.engine-list-row,
+.engine-properties,
+.engine-pagination {
+  background: #fff;
+}
+.engine-menu > div,
+.engine-workspace pre,
+.engine-empty {
+  border-radius: 6px;
+}
+.engine-workspace button:hover:not(:disabled),
+.engine-menu summary:hover,
+.engine-menu a:hover,
+.engine-list-row:hover {
+  background: #f9fafb;
+}
+.engine-workspace .engine-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-primary, #1563ff), black 15%);
+}
+.engine-workspace .engine-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.engine-workspace button:focus-visible,
+.engine-workspace a:focus-visible,
+.engine-menu summary:focus-visible {
+  outline: 2px solid var(--brand-primary, #1563ff);
+  outline-offset: 2px;
+}
+.engine-workspace input::placeholder,
+.engine-workspace textarea::placeholder {
+  color: #9ca3af;
+}
+.engine-workspace input,
+.engine-workspace select,
+.engine-workspace textarea {
+  accent-color: var(--brand-primary, #1563ff);
 }
