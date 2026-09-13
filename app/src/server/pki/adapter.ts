@@ -57,6 +57,7 @@ export class PkiAdapter {
     method = "GET",
     data?: unknown,
     maxContentLength?: number,
+    validationDetails = false,
   ): Promise<any> {
     await this.beforeRequest?.();
     try {
@@ -71,6 +72,17 @@ export class PkiAdapter {
       ).data;
     } catch (e) {
       const status = axios.isAxiosError(e) ? (e.response?.status ?? 503) : 503;
+      if (validationDetails && status === 400 && axios.isAxiosError(e)) {
+        const errors = e.response?.data?.errors;
+        if (
+          Array.isArray(errors) &&
+          errors.every((item) => typeof item === "string")
+        ) {
+          const message = errors.join("; ").slice(0, 1500);
+          if (!/-----BEGIN|PRIVATE KEY/.test(message))
+            throw new PkiError(400, message);
+        }
+      }
       throw new PkiError(
         status,
         status === 403 || status === 401

@@ -83,6 +83,7 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
   await new Promise<void>((r) => vault.listen(0, "127.0.0.1", r));
   process.env.VAULT_ADDR = `http://127.0.0.1:${(vault.address() as { port: number }).port}`;
   const app = express();
+  app.use(express.json());
   app.use("/engine", (await import("../routes/pkiEngine.js")).default);
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", r));
@@ -115,8 +116,45 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
     assert.equal((await get("&section=roles")).status, 403);
     denyRoles = false;
     assert.equal((await get("&section=roles&ref=..%2Fsecret")).status, 400);
-    assert.equal((await get("&section=keys")).status, 400);
+    assert.equal((await get("&section=unsupported")).status, 400);
     assert.equal((await get("&source=old")).status, 409);
+    const post = (body: Record<string, unknown>, token = "fixture") =>
+      fetch(base, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({
+          mount: "team/pki",
+          source: root.source.id,
+          action: "role-save",
+          ref: "server",
+          fields: { allowed_domains: ["test"] },
+          ...body,
+        }),
+      });
+    assert.equal((await post({})).status, 200);
+    assert.equal((await post({}, "expired")).status, 403);
+    assert.equal((await post({ source: "old" })).status, 409);
+    assert.equal((await post({ ref: "../sys" })).status, 400);
+    assert.equal((await post({ action: "toString" })).status, 400);
+    assert.equal((await post({ fields: { unknown: true } })).status, 400);
+    assert.equal(
+      (await post({ fields: { allow_any_name: "true" } })).status,
+      400,
+    );
+    assert.equal(
+      (await post({ action: "role-delete", fields: {} })).status,
+      400,
+    );
+    assert.equal(
+      (await post({ action: "role-delete", fields: {}, confirm: "team/pki" }))
+        .status,
+      200,
+    );
+    assert.equal((await get("&section=keys")).status, 200);
+    assert.equal((await get("&section=configuration")).status, 200);
     replace = true;
     assert.equal(
       (await get("&section=roles&ref=server&source=" + root.source.id)).status,
@@ -128,7 +166,7 @@ test("PKI engine reads roles without certificate LIST, scopes references and fen
         source: "a",
         record: 2,
       }),
-      /^\/secrets\/pki\/team\/pki\?certificate=01%3Aff&source=a&record=2$/,
+      /^\/pki\/engines\/team\/pki\?certificate=01%3Aff&source=a&record=2$/,
     );
   } finally {
     server.closeAllConnections();

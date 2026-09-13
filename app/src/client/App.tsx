@@ -1,3 +1,4 @@
+import PkiEnginePage from './pages/PkiEnginePage';
 import { retryQuery } from './lib/requestBackoff';
 import AuditWorkspace from './components/AuditWorkspace';
 import CertificatesPage from './pages/CertificatesPage';
@@ -240,6 +241,7 @@ function AppRoutes() {
       >
         <Route path="/app" element={<DashboardPage />} />
         <Route path="/secrets/*" element={<SecretsPage />} />
+        <Route path="/pki/engines/*" element={<PkiEnginePage />} />
         <Route path="/policies/*" element={<PoliciesPage />} />
         <Route path="/access/auth-methods/*" element={<AuthMethodsPage />} />
         <Route path="/access/entities/*" element={<IdentityPage type="entities" />} />
