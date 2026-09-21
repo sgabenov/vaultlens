@@ -218,18 +218,18 @@
 }
 
 .pki-search-panel { margin: 16px 0; background: white; border: 1px solid #e5e7eb; border-radius: 12px; }
-.pki-search-scope { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 16px 24px; background: #f7f7f9; border-radius: 12px 12px 0 0; border-bottom: 1px solid #e5e7eb; }
+.pki-search-scope { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 16px 24px; background: white; border-radius: 12px 12px 0 0; border-bottom: 1px solid #eeeff3; }
 .pki-search-scope > label, .pki-source-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #6b7181; min-width: 0; }
 .pki-search-scope select { width: 100%; color: #25272b; }
 .pki-source-picker { position: relative; }
-.pki-source-picker summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: white; border: 1px solid #dfe3e8; border-radius: 6px; padding: 8px 11px; font-size: 14px; color: #25272b; cursor: pointer; list-style: none; }
+.pki-source-picker summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: color-mix(in srgb, var(--brand-primary) 8%, white); border: 1px solid transparent; border-radius: 6px; padding: 8px 11px; font-size: 14px; color: var(--brand-primary); cursor: pointer; list-style: none; }
 .pki-source-picker summary::-webkit-details-marker { display: none; }
 .pki-source-options { position: absolute; top: calc(100% + 6px); left: 0; z-index: 10; width: max-content; min-width: 100%; max-width: min(400px, 75vw); max-height: 300px; overflow: auto; padding: 10px; background: white; border: 1px solid #dfe3e8; border-radius: 8px; box-shadow: 0 8px 24px rgb(16 24 40 / 12%); }
 .pki-source-options label { display: flex; align-items: center; gap: 8px; padding: 7px 4px; color: #25272b; overflow-wrap: anywhere; }
 .pki-search-body { padding: 20px 24px; }
 .pki-search-body > .pki-row > label { font-size: 12px; color: #6b7181; }
 .pki-search-body > .pki-row > label select { font-size: 12px; padding: 5px 8px; }
-.pki-search-conditions { padding: 12px; margin-top: 16px; background: #f7f7f9; border-radius: 8px; }
+.pki-search-conditions { padding: 12px; margin-top: 16px; background: white; border-radius: 8px; }
 .pki-search-conditions .pki-condition { margin: 0 0 10px; }
 .pki-workspace .pki-add-condition { border-color: transparent; background: transparent; color: var(--brand-primary); padding-left: 0; }
 .pki-search-footer { margin-top: 16px; }
