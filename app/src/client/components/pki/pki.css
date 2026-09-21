@@ -142,6 +142,72 @@
 .pki-detail {
   border-left: 3px solid var(--brand-primary);
 }
+.pki-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px 0; }
+.pki-pagination label, .pki-pagination-pages { display: flex; align-items: center; gap: 8px; }
+.pki-pagination label { font-size: 13px; color: #667085; }
+.pki-pagination-pages { flex-wrap: wrap; }
+.pki-pagination-pages button { min-width: 38px; }
+.pki-pagination-pages button[aria-current="page"] { background: var(--brand-primary); border-color: var(--brand-primary); color: white; }
+.pki-page-previous { display: flex; transform: rotate(90deg); }
+.pki-page-next { display: flex; transform: rotate(-90deg); }
+.pki-workspace .pki-selection-cell { width: 42px; padding-right: 4px; }
+.pki-workspace .pki-selection-cell input { width: 16px; height: 16px; padding: 0; accent-color: var(--brand-primary); cursor: pointer; }
+.pki-selected-row { background: color-mix(in srgb, var(--brand-primary) 5%, white); }
+.pki-selection-dock { background: white; border-top: 1px solid #dfe3e8; padding: 12px 24px; }
+.pki-batch-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; }
+.pki-batch-bar strong { font-size: 14px; font-weight: 600; }
+.pki-batch-bar .pki-muted { display: block; margin-top: 3px; font-size: 12px; }
+.pki-batch-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pki-batch-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.pki-batch-action-divider { width: 1px; height: 22px; margin: 0 4px; background: #e3e6ed; }
+.pki-batch-selection-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #9ca3af; }
+.pki-workspace .pki-batch-selection-tools button { padding: 2px 0; background: transparent; border: 0; border-radius: 2px; color: #666d78; font-size: 12px; }
+.pki-workspace .pki-batch-selection-tools button:hover:not(:disabled) { color: var(--brand-primary); text-decoration: underline; }
+.pki-workspace .pki-batch-danger { background: #b42332; border-color: #b42332; color: white; }
+@media (max-width: 760px) {
+  .pki-selection-dock { padding: 12px 16px; }
+  .pki-batch-actions { gap: 6px; }
+  .pki-batch-actions button { font-size: 12px; padding: 7px 9px; }
+}
+.pki-batch-preview { max-height: 340px; overflow: auto; margin: 16px 0; border: 1px solid #e5e7eb; border-radius: 6px; }
+.pki-batch-preview table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pki-batch-preview th, .pki-batch-preview td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eeeff3; overflow-wrap: anywhere; }
+.pki-batch-preview th { position: sticky; top: 0; background: #f8f9fb; font-weight: 500; }
+.pki-batch-preview small { display: block; color: #697383; }
+.pki-batch-confirm { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; margin: 16px 0; }
+.pki-certificate-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: white;
+  color: #25272b;
+  box-shadow: 0 24px 80px rgb(16 24 40 / 20%);
+}
+.pki-certificate-dialog::backdrop { background: rgb(16 24 40 / 28%); backdrop-filter: blur(3px); }
+.pki-certificate-dialog-content { padding: 24px; }
+.pki-certificate-dialog header { padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+.pki-certificate-summary { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; margin: 20px 0; }
+.pki-certificate-summary aside { background: #f8f9fb; border-radius: 8px; padding: 18px; }
+.pki-certificate-summary aside dt { margin-top: 22px; }
+.pki-certificate-summary dt { font-size: 12px; color: #667085; }
+.pki-certificate-summary dd { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+.pki-certificate-summary h3 { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 16px; }
+.pki-certificate-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid #eeeff3; }
+.pki-certificate-facts dd { margin: 0; }
+.pki-certificate-dialog summary { cursor: pointer; font-size: 13px; padding: 12px 0; }
+.pki-certificate-dialog .pki-row { flex-wrap: wrap; }
+.pki-certificate-dialog .pki-muted { margin: 16px 0; }
+.pki-certificate-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; }
+.pki-certificate-technical { border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+@media (max-width: 640px) {
+  .pki-certificate-dialog-content { padding: 16px; }
+  .pki-certificate-summary { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .pki-certificate-facts > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
 .pki-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -224,6 +290,9 @@
 .pki-source-picker { position: relative; }
 .pki-source-picker summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: color-mix(in srgb, var(--brand-primary) 8%, white); border: 1px solid transparent; border-radius: 6px; padding: 8px 11px; font-size: 14px; color: var(--brand-primary); cursor: pointer; list-style: none; }
 .pki-source-picker summary::-webkit-details-marker { display: none; }
+.pki-source-picker summary { min-height: 38px; line-height: 20px; }
+.pki-source-picker summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pki-source-picker summary:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
 .pki-source-options { position: absolute; top: calc(100% + 6px); left: 0; z-index: 10; width: max-content; min-width: 100%; max-width: min(400px, 75vw); max-height: 300px; overflow: auto; padding: 10px; background: white; border: 1px solid #dfe3e8; border-radius: 8px; box-shadow: 0 8px 24px rgb(16 24 40 / 12%); }
 .pki-source-options label { display: flex; align-items: center; gap: 8px; padding: 7px 4px; color: #25272b; overflow-wrap: anywhere; }
 .pki-search-body { padding: 20px 24px; }

@@ -51,6 +51,10 @@ export function validateQuery(raw: any): PkiQuery {
       throw new PkiError(400, "Invalid " + field);
   }
   const limit = raw.limit ?? 50;
+  if (raw.offset !== undefined && (!Number.isSafeInteger(raw.offset) || raw.offset < 0))
+    throw new PkiError(400, "Invalid page offset");
+  if (raw.cursor && raw.offset)
+    throw new PkiError(400, "Use either a cursor or a page offset");
   if (!Number.isInteger(limit) || limit < 1 || limit > 200)
     throw new PkiError(400, "Page size must be between 1 and 200");
   if (
@@ -140,6 +144,6 @@ export function whereQuery(query: PkiQuery, now = Date.now()) {
   return { sql: clauses.map((c) => "(" + c + ")").join(" AND "), params };
 }
 export function queryKey(q: PkiQuery) {
-  const { cursor, ...rest } = q;
+  const { cursor, offset, ...rest } = q;
   return createHash("sha256").update(JSON.stringify(rest)).digest("hex");
 }

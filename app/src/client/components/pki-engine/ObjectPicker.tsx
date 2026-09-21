@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { pkiEngineLookup } from "../../lib/api";
 import type { PkiEngineResult } from "../../../shared/pkiEngine";
+import DropdownChevron from "../common/DropdownChevron";
 
 /** Live, bounded PKI lookup; known references still work without LIST permission. */
 export default function ObjectPicker({
@@ -71,6 +72,7 @@ export default function ObjectPicker({
         <input
           ref={input}
           role="combobox"
+          className="ui-dropdown-control"
           aria-label={label}
           aria-autocomplete="list"
           aria-expanded={open}
@@ -125,7 +127,7 @@ export default function ObjectPicker({
             setOpen(!open);
           }}
         >
-          ⌄
+          <DropdownChevron />
         </button>
       </div>
       {open && (

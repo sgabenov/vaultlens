@@ -1,6 +1,7 @@
 ﻿import { useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRef, useState, useEffect } from 'react';
+import DropdownChevron from '../common/DropdownChevron';
 import WhatsNewModal, { hasUnseenRelease } from '../common/WhatsNewModal';
 
 const LABELS: Record<string, string> = {
@@ -123,6 +124,7 @@ export default function Header() {
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen((o) => !o)}
+              aria-expanded={dropdownOpen}
               className="relative flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-200 transition-colors"
             >
               {unseenRelease && (
@@ -135,9 +137,7 @@ export default function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
               </svg>
               {tokenInfo.display_name}
-              <svg className={`h-3 w-3 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
+              <DropdownChevron />
             </button>
 
             {dropdownOpen && (

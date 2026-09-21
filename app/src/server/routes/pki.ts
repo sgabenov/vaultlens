@@ -13,6 +13,8 @@ import { validateQuery } from "../pki/query.js";
 import { launchCollection } from "../pki/runtime.js";
 import type { PkiSource } from "../../shared/pki.js";
 import { collectionSettings } from "../pki/settings.js";
+import { batchAction, batchRefs, batchRef, previewBatch, executeBatchItem } from "../pki/batch.js";
+import { pkiBatchLimit, type PkiBatchRef } from "../../shared/pkiBatch.js";
 const limits = collectionSettings();
 const router = Router();
 const dbPath = resolve(
@@ -22,7 +24,7 @@ const namespace = process.env["VAULTLENS_PKI_NAMESPACE"] || "";
 // A deployment is bound to its configured Vault/namespace; requests cannot inject a target URL.
 let instance: PkiStore | undefined;
 const store = () => (instance ??= new PkiStore(dbPath));
-type Context = { adapter: PkiAdapter; token: string; sources: PkiSource[] };
+type Context = { adapter: PkiAdapter; token: string; sources: PkiSource[]; admin: boolean };
 const contexts = new WeakMap<Request, Context>();
 router.use(async (req: Request, res: Response, next: NextFunction) => {
   res.setHeader("Cache-Control", "no-store");
@@ -38,10 +40,12 @@ router.use(async (req: Request, res: Response, next: NextFunction) => {
       namespace,
       config.vaultSkipTlsVerify,
     );
-    await adapter.verifyToken();
+    const tokenInfo = await adapter.verifyToken();
+    const policies = [...(tokenInfo?.policies ?? []), ...(tokenInfo?.identity_policies ?? [])];
+    const admin = policies.includes("root") || policies.includes("vaultlens-admin");
     const sources = await adapter.allowed(await adapter.discover());
     for (const source of sources) store().source(source);
-    contexts.set(req, { adapter, token, sources });
+    contexts.set(req, { adapter, token, sources, admin });
     next();
   } catch (e) {
     next(e);
@@ -85,6 +89,30 @@ router.post(
     res.json(store().query(query));
   }),
 );
+router.post("/selection", wrap((req, res, ctx) => {
+  const query = validateQuery({ ...req.body, limit: 200, offset: undefined, cursor: undefined });
+  query.sources = authorized(query.sources, ctx);
+  const certificates: PkiBatchRef[] = [];
+  const now = Date.now();
+  store().transaction(() => {
+    do {
+      const page = store().query(query, false, now);
+      certificates.push(...page.certificates.map(batchRef));
+      if (certificates.length > pkiBatchLimit) throw new PkiError(400, "Select up to 10,000 certificates; narrow the search first");
+      query.cursor = page.nextCursor ?? undefined;
+    } while (query.cursor);
+  });
+  res.json({ certificates });
+}));
+router.post("/batch/preview", wrap(async (req, res, ctx) => {
+  res.json({ items: await previewBatch(store(), ctx.adapter, ctx.sources, ctx.admin, batchAction(req.body?.action), batchRefs(req.body?.certificates)) });
+}));
+router.post("/batch/item", wrap(async (req, res, ctx) => {
+  const action = batchAction(req.body?.action);
+  if (action !== "export" && req.body?.confirm !== action) throw new PkiError(400, "Confirm the batch action");
+  const [ref] = batchRefs([req.body?.certificate]);
+  res.json(await executeBatchItem(store(), ctx.adapter, ctx.sources, ctx.admin, action, ref));
+}));
 router.get(
   "/certificates/:id",
   wrap(async (req, res, ctx) => {
@@ -113,7 +141,7 @@ async function exportRecords(req: Request, res: Response, ctx: Context) {
       throw new PkiError(400, "Invalid export query");
     }
   }
-  const query = validateQuery({ ...raw, limit: 200, cursor: undefined });
+  const query = validateQuery({ ...raw, limit: 200, cursor: undefined, offset: undefined });
   query.sources = authorized(query.sources, ctx);
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader(

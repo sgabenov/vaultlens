@@ -15,6 +15,11 @@ import { restorePkiQuery, pkiSelectionKey } from "../../shared/pkiSelection";
 import CertificateOverview from "../components/pki/CertificateOverview";
 import CollectionProgress from "../components/pki/CollectionProgress";
 import CertificateSearch from "../components/pki/CertificateSearch";
+import CertificateDialog from "../components/pki/CertificateDialog";
+import CertificatePagination from "../components/pki/CertificatePagination";
+import CertificateBatchControls from "../components/pki/CertificateBatchControls";
+import { pkiBatchLimit, type PkiBatchRef } from "../../shared/pkiBatch";
+import DropdownChevron from "../components/common/DropdownChevron";
 import "../components/pki/pki.css";
 const coverageText: Record<string, string> = {
   complete: "All listed certificates read; revocation evidence available.",
@@ -40,6 +45,12 @@ const labelRevocation: Record<string, string> = {
   revoked: "Revoked",
   not_revoked: "Not revoked",
   unknown: "Unknown",
+};
+const labelUsage: Record<string, string> = {
+  "1.3.6.1.5.5.7.3.1": "Server authentication",
+  "1.3.6.1.5.5.7.3.2": "Client authentication",
+  "1.3.6.1.5.5.7.3.3": "Code signing",
+  "1.3.6.1.5.5.7.3.4": "Email protection",
 };
 const message = (e: unknown) =>
   e instanceof AxiosError
@@ -74,8 +85,8 @@ export default function CertificatesPage() {
   const [summary, setSummary] = useState<PkiSummary | null>(null);
   const [rows, setRows] = useState<CertificateRecord[]>([]),
     [total, setTotal] = useState(0),
-    [next, setNext] = useState<string | null>(null),
-    [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(50);
   const [query, setQuery] = useState<PkiQuery | null>(null),
     [jobs, setJobs] = useState<PkiJob[]>([]),
     [error, setError] = useState(""),
@@ -88,8 +99,36 @@ export default function CertificatesPage() {
     detailGeneration = useRef(0);
   const [expandedJob, setExpandedJob] = useState<string | null>(null),
     [actionBusy, setActionBusy] = useState(false);
+  const [checkedCertificates, setCheckedCertificates] = useState<Map<number, PkiBatchRef>>(new Map());
+  const selectionScope = query ? JSON.stringify({ sources: query.sources, conditions: query.conditions, match: query.match, type: query.type, validity: query.validity, revocation: query.revocation, sort: query.sort, direction: query.direction }) : "";
+  useEffect(() => { setCheckedCertificates(new Map()); }, [selectionScope]);
+  function selectCertificates(certificates: CertificateRecord[], checked: boolean) {
+    const next = new Map(checkedCertificates);
+    for (const c of certificates) {
+      if (checked) next.set(c.id, { id: c.id, sourceId: c.sourceId, fingerprint: c.fingerprint, serial: c.serial, cn: c.cn, sourcePath: c.sourcePath });
+      else next.delete(c.id);
+    }
+    if (next.size > pkiBatchLimit) { setError("Select up to 10,000 certificates; narrow the search first"); return; }
+    setCheckedCertificates(next);
+  }
+  const checkedOnPage = rows.filter(c => checkedCertificates.has(c.id)).length;
   const filterParams = params.toString();
   const canSaveSelection = useRef(false);
+  const sourcePicker = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    function dismissSourcePicker(event: PointerEvent | FocusEvent) {
+      const picker = sourcePicker.current;
+      if (picker?.open && event.target instanceof Node && !picker.contains(event.target)) {
+        picker.open = false;
+      }
+    }
+    document.addEventListener("pointerdown", dismissSourcePicker, true);
+    document.addEventListener("focusin", dismissSourcePicker);
+    return () => {
+      document.removeEventListener("pointerdown", dismissSourcePicker, true);
+      document.removeEventListener("focusin", dismissSourcePicker);
+    };
+  }, []);
   async function run(q: PkiQuery) {
     const gen = ++generation.current;
     setBusy(true);
@@ -106,10 +145,15 @@ export default function CertificatesPage() {
       );
       if (q.sources.some((id) => !scope.sources.some((s) => s.id === id)))
         throw new Error("Source access changed. Apply the current selection.");
+      if ((q.offset ?? 0) > 0 && (q.offset ?? 0) >= r.total) {
+        void run({ ...q, offset: Math.max(0, Math.ceil(r.total / q.limit) - 1) * q.limit });
+        return;
+      }
       setSummary(r.summary);
       setRows(r.certificates);
       setTotal(r.total);
-      setNext(r.nextCursor);
+      setPage(Math.floor((q.offset ?? 0) / q.limit) + 1);
+      setPageSize(q.limit);
       setQuery(q);
     } catch (e) {
       if (gen === generation.current) {
@@ -118,7 +162,7 @@ export default function CertificatesPage() {
         setSummary(null);
       setRows([]);
         setTotal(0);
-        setNext(null);
+
       }
     } finally {
       if (gen === generation.current) setBusy(false);
@@ -127,12 +171,12 @@ export default function CertificatesPage() {
   useEffect(() => {
     let cancelled = false;
     canSaveSelection.current = false;
-    setCursors([undefined]);
+    setPage(1);
     setReady(false);
     setRows([]);
     setQuery(null);
     setDetail(null);
-    setNext(null);
+
     setTotal(0);
     void api
       .pkiSources()
@@ -196,7 +240,7 @@ export default function CertificatesPage() {
       setRows([]);
       setQuery(null);
       setDetail(null);
-      setNext(null);
+
       setTotal(0);
       setBusy(false);
       setError(
@@ -252,9 +296,9 @@ export default function CertificatesPage() {
       revocation: revoked,
       sort,
       direction: "asc",
-      limit: 50,
+      limit: pageSize,
     };
-    setCursors([undefined]);
+    setPage(1);
     const encoded = new URLSearchParams({
       filter: JSON.stringify(q),
     }).toString();
@@ -387,8 +431,17 @@ export default function CertificatesPage() {
             scope={<div className="pki-search-scope">
               <div className="pki-source-field">
                 <span>Sources</span>
-                <details className="pki-source-picker">
-                  <summary>{selected.length === sources.length ? `All ${sources.length} sources` : `${selected.length} sources selected`} <span aria-hidden="true">⌄</span></summary>
+                <details className="pki-source-picker" ref={sourcePicker} onKeyDown={(event) => {
+                  if (event.key === "Escape" && event.currentTarget.open) {
+                    event.preventDefault();
+                    event.currentTarget.open = false;
+                    event.currentTarget.querySelector("summary")?.focus();
+                  }
+                }}>
+                  <summary className="ui-dropdown-control">
+                    <span>{selected.length === sources.length ? `All ${sources.length} sources` : `${selected.length} sources selected`}</span>
+                    <DropdownChevron />
+                  </summary>
                   <div className="pki-source-options">
                     <label><input type="checkbox" checked={!!sources.length && selected.length === sources.length} onChange={(e) => setSelected(e.target.checked ? sources.map(s => s.id) : [])} />All authorized sources</label>
                     {sources.map(source => <label key={source.id}><input type="checkbox" checked={selected.includes(source.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, source.id] : selected.filter(id => id !== source.id))} />{source.path}{source.namespace ? ` · ${source.namespace}` : ""}</label>)}
@@ -447,21 +500,32 @@ export default function CertificatesPage() {
             disabled={busy || !ready}
           />
           {detail && (
-            <section
-              className="pki-box pki-detail"
-              aria-label="Certificate details"
-            >
-              <div className="pki-row pki-spread">
-                <h2>{detail.certificate.cn || detail.certificate.serial}</h2>
-                <button
-                  onClick={() => {
+            <CertificateDialog onClose={() => {
                     setDetail(null);
                     detailGeneration.current++;
-                  }}
-                >
-                  Close
-                </button>
+                  }}>
+              <div className="pki-certificate-summary">
+                <aside>
+                  <span className={`pki-badge ${detail.certificate.notAfter <= Date.now() ? "expired" : ""}`}>{validity(detail.certificate)}</span>
+                  <dl>
+                    <dt>Valid from</dt><dd>{new Date(detail.certificate.notBefore).toISOString().replace("T", " ").replace(".000Z", " UTC")}</dd>
+                    <dt>Expires at</dt><dd>{new Date(detail.certificate.notAfter).toISOString().replace("T", " ").replace(".000Z", " UTC")}</dd>
+                    <dt>Revocation</dt><dd>{labelRevocation[detail.certificate.revoked]}</dd>
+                  </dl>
+                </aside>
+                <div>
+                  <h3>{detail.certificate.cn || detail.certificate.serial}</h3>
+                  <dl className="pki-certificate-facts">
+                    <div><dt>Source</dt><dd>{detail.certificate.sourcePath || detail.certificate.sourceId}</dd></div>
+                    <div><dt>Certificate type</dt><dd>{labelType[detail.certificate.type]}</dd></div>
+                    <div><dt>Issuer</dt><dd>{detail.certificate.issuer}</dd></div>
+                    <div><dt>Usage</dt><dd>{detail.certificate.eku.map(oid => labelUsage[oid] || oid).join(", ") || "Not specified"}</dd></div>
+                    <div><dt>SAN</dt><dd>{detail.certificate.sans.map(s => `${s.type}: ${s.value}`).join("\n") || "None"}</dd></div>
+                  </dl>
+                </div>
               </div>
+              <details className="pki-certificate-technical">
+                <summary>Technical details</summary>
               <dl className="pki-detail-grid">
                 {[
                   ["Serial", detail.certificate.serial],
@@ -498,6 +562,7 @@ export default function CertificatesPage() {
                   </div>
                 ))}
               </dl>
+              </details>
               <p className="pki-muted">
                 Signing CA verification checks this certificate signature, not
                 the complete trust chain. Validity is calculated now; revocation
@@ -545,7 +610,7 @@ export default function CertificatesPage() {
                   <pre>{detail.issuer.pem}</pre>
                 </details>
               )}
-            </section>
+            </CertificateDialog>
           )}
           <div className="pki-row pki-spread pki-controls">
             <span aria-live="polite">
@@ -581,15 +646,21 @@ export default function CertificatesPage() {
             <table>
               <thead>
                 <tr>
+                  <th className="pki-selection-cell"><input type="checkbox" aria-label="Select certificates on this page" disabled={busy || !rows.length}
+                    checked={!!rows.length && checkedOnPage === rows.length}
+                    ref={node => { if (node) node.indeterminate = checkedOnPage > 0 && checkedOnPage < rows.length; }}
+                    onChange={e => selectCertificates(rows, e.target.checked)} /></th>
                   <th>Common name / serial</th>
                   <th>Source / type</th>
                   <th>Validity</th>
                   <th>Revocation</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id}>
+                  <tr key={c.id} className={checkedCertificates.has(c.id) ? "pki-selected-row" : undefined}>
+                    <td className="pki-selection-cell"><input type="checkbox" aria-label={`Select ${c.cn || c.serial}`} checked={checkedCertificates.has(c.id)} disabled={busy} onChange={e => selectCertificates([c], e.target.checked)} /></td>
                     <td>
                       <button className="pki-link" onClick={() => void open(c)}>
                         {c.cn || "(no common name)"}
@@ -624,11 +695,12 @@ export default function CertificatesPage() {
                         </small>
                       )}
                     </td>
+                    <td><button type="button" onClick={() => void open(c)} aria-label={`Details for ${c.cn || c.serial}`}>Details</button></td>
                   </tr>
                 ))}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={6}>
                       {ready
                         ? "No matching certificates. Select sources and collect them, or change the search."
                         : "Loading sources…"}
@@ -638,32 +710,13 @@ export default function CertificatesPage() {
               </tbody>
             </table>
           </div>
-          <div className="pki-row pki-spread">
-            <span className="pki-muted">
-              Page {cursors.length} · up to 50 records
-            </span>
-            <div className="pki-row">
-              <button
-                disabled={busy || cursors.length === 1}
-                onClick={() => {
-                  const stack = cursors.slice(0, -1);
-                  setCursors(stack);
-                  if (query) void run({ ...query, cursor: stack.at(-1) });
-                }}
-              >
-                Previous
-              </button>
-              <button
-                disabled={busy || !next}
-                onClick={() => {
-                  setCursors([...cursors, next!]);
-                  if (query) void run({ ...query, cursor: next! });
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <CertificatePagination page={page} size={pageSize} total={total} disabled={busy || !query}
+            onPage={(target) => query && void run({ ...query, cursor: undefined, offset: (target - 1) * pageSize })}
+            onSize={(size) => {
+              if (query) void run({ ...query, cursor: undefined, offset: 0, limit: size });
+            }} />
+          <CertificateBatchControls total={total} key={selectionScope} selected={checkedCertificates} onSelection={setCheckedCertificates} query={query} disabled={busy}
+            onChanged={() => { if (query) void run(query); }} />
         </>
       )}
       {tab === "sources" && (

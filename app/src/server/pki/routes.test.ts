@@ -95,12 +95,22 @@ test("HTTP authorization covers details, jobs and snapshot export with concurren
       headers: token ? { Authorization: "Bearer " + token } : {},
     });
   const exportPath = "/export?filter=" + encodeURIComponent(JSON.stringify(q));
+  const post = (path: string, body: unknown) => fetch(base + path, {
+    method: "POST", headers: { Authorization: "Bearer fixture", "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
   try {
     assert.equal((await get("/sources", "")).status, 401);
     assert.equal((await get("/sources", "expired")).status, 403);
     assert.equal((await get("/certificates/1")).status, 200);
     assert.equal((await get("/jobs/" + job)).status, 200);
+    const selection = await (await post("/selection", q)).json() as {certificates: {id:number;fingerprint:string;sourceId:string;serial:string}[]};
+    assert.equal(selection.certificates.length, 300);
+    const selectedCertificate = selection.certificates.find(c => c.id === 1)!;
+    assert.equal((await post("/batch/item", {action:"remove",certificate:selectedCertificate})).status, 400);
+    assert.equal((await post("/batch/item", {action:"remove",certificate:selectedCertificate,confirm:"remove"})).status, 403);
     allowed = false;
+    assert.equal((await post("/selection", q)).status, 403);
+    assert.equal((await post("/batch/item", {action:"export",certificate:selectedCertificate})).status, 409);
     assert.equal((await get("/certificates/1")).status, 404);
     assert.equal((await get("/jobs/" + job)).status, 404);
     assert.deepEqual(

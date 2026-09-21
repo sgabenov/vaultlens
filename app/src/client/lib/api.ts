@@ -1281,6 +1281,9 @@ export async function toggleAuditException(id: string, enabled: boolean) {
 }
 
 // PKI catalog shares the VaultLens session and CSRF transport.
+export async function pkiSelectCertificates(query: import('../../shared/pki').PkiQuery) { return (await api.post<{certificates: import('../../shared/pkiBatch').PkiBatchRef[]}>('/pki/selection', query)).data; }
+export async function pkiBatchPreview(action: import('../../shared/pkiBatch').PkiBatchAction, certificates: import('../../shared/pkiBatch').PkiBatchRef[]) { return (await api.post<{items: import('../../shared/pkiBatch').PkiBatchPreview[]}>('/pki/batch/preview', {action, certificates})).data; }
+export async function pkiBatchItem(action: import('../../shared/pkiBatch').PkiBatchAction, certificate: import('../../shared/pkiBatch').PkiBatchRef) { return (await api.post<{status:string;pem?:string}>('/pki/batch/item', {action,certificate,confirm:action})).data; }
 export async function pkiSources() { return (await api.get<{ sources: import('../../shared/pki').PkiSource[]; namespace: string }>('/pki/sources')).data; }
 export async function pkiQuery(query: import('../../shared/pki').PkiQuery) { return (await api.post<{ certificates: import('../../shared/pki').CertificateRecord[]; total: number; summary: import('../../shared/pki').PkiSummary; nextCursor: string | null }>('/pki/query', query)).data; }
 export async function pkiCertificate(id: number) { return (await api.get<{ certificate: import('../../shared/pki').CertificateRecord; pem: string; issuer: { pem: string; subject: string } | null; issuerState: string; conflicts: { observations: {observedFingerprint:string;firstSeen:string;lastSeen:string;observations:number}[]; truncated: boolean } }>(`/pki/certificates/${id}`)).data; }

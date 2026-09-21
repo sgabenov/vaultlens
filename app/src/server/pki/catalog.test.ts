@@ -96,6 +96,14 @@ test("catalog scopes OR searches, escapes wildcards, paginates and preserves ide
     assert.notEqual(first.certificates[0].id, second.certificates[0].id);
     assert.equal(second.nextCursor, null);
     assert.deepEqual(first.summary, second.summary);
+    const jumped = store.query(validateQuery({ ...all, offset: 1 }));
+    assert.deepEqual(jumped.certificates, second.certificates);
+    assert.deepEqual(jumped.summary, first.summary);
+    assert.equal(jumped.total, first.total);
+    assert.equal(store.query({ ...query(), offset: 1 }).certificates.length, 0);
+    for (const offset of [-1, 0.5, "1", Number.MAX_SAFE_INTEGER + 1])
+      assert.throws(() => validateQuery({ ...all, offset }), /offset/);
+    assert.throws(() => validateQuery({ ...all, offset: 1, cursor: first.nextCursor }), /either/);
     assert.equal(first.summary?.revoked, 1);
     assert.equal(store.query(query()).summary?.revoked, 0);
     assert.equal(store.query(query()).summary?.critical, 1);

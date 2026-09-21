@@ -12,6 +12,7 @@ import type { PkiSource } from "../../shared/pki";
 import { pkiOperations } from "../../shared/pkiOperations";
 import ObjectPicker from "../components/pki-engine/ObjectPicker";
 import OperationForm from "../components/pki-engine/OperationForm";
+import DropdownChevron from "../components/common/DropdownChevron";
 import {
   fieldLabel,
   fieldGroup,
@@ -296,7 +297,7 @@ export default function PkiEnginePage() {
               <>
                 <Link to={act("issuer-import", "")}>Import ›</Link>
                 <details className="engine-menu">
-                  <summary>Generate ⌄</summary>
+                  <summary className="ui-dropdown-control">Generate <DropdownChevron /></summary>
                   <div>
                     <Link to={act("root-generate", "")}>Root</Link>
                     <Link to={act("intermediate-generate", "")}>
@@ -313,7 +314,7 @@ export default function PkiEnginePage() {
                 <Link to={act("intermediate-sign")}>Sign Intermediate</Link>
                 <Link to={act("issuer-save")}>Configure</Link>
                 <details className="engine-menu">
-                  <summary>More ⌄</summary>
+                  <summary className="ui-dropdown-control">More <DropdownChevron /></summary>
                   <div>
                     <Link to={act("issuer-revoke")}>Revoke</Link>
                     <Link to={act("issuer-delete")}>Delete</Link>

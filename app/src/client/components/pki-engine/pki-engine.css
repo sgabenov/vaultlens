@@ -378,10 +378,12 @@ details.engine-config-section > .engine-form {
   margin: 14px 0;
 }
 .engine-form {
-  max-width: 780px;
+  width: 100%;
+  min-width: 0;
 }
 .engine-form fieldset {
   border: 0;
+  min-width: 0;
   padding: 0;
   margin: 24px 0;
 }
@@ -406,6 +408,35 @@ details.engine-config-section > .engine-form {
   font-family: monospace;
   font-size: 13px;
 }
+.engine-form .engine-field {
+  display: grid;
+  grid-template-columns: minmax(180px, 42%) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  max-width: none;
+  margin: 0;
+  padding: 13px 0;
+  border-bottom: 1px solid #e5e8ee;
+}
+.engine-form .engine-field:last-child {
+  border-bottom: 0;
+}
+.engine-form .engine-field > span {
+  padding-top: 8px;
+  color: #697383;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.engine-form .engine-field > input,
+.engine-form .engine-field > select,
+.engine-form .engine-field > textarea {
+  width: 100%;
+  min-width: 0;
+}
+.engine-form .engine-field > input[readonly] {
+  background: #f8f9fb;
+  color: #697383;
+}
 .engine-result-field {
   margin: 20px 0;
   overflow-wrap: anywhere;
@@ -414,6 +445,13 @@ details.engine-config-section > .engine-form {
   color: #6b7280;
 }
 @media (max-width: 760px) {
+  .engine-form .engine-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .engine-form .engine-field > span {
+    padding-top: 0;
+  }
   .engine-workspace {
     padding: 0 0 24px;
   }

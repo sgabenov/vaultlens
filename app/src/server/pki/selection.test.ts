@@ -17,7 +17,9 @@ test("shared searches whitelist controls, intersect authorization and preserve e
     ["allowed"],
   );
   assert.deepEqual(restore({}, []).sources, []);
-  assert.equal(restore({ limit: 200 }).limit, 50);
+  assert.equal(restore({ limit: 200 }).limit, 200);
+  assert.equal(restore({ limit: 201 }).limit, 50);
+  assert.equal(restore({ offset: 100 }).offset, undefined);
   assert.equal(restore({ cursor: "old" }).cursor, undefined);
   for (const raw of [
     { match: "invalid" },

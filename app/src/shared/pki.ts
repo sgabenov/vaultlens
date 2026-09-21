@@ -50,6 +50,7 @@ export interface PkiQuery {
   sort: "cn" | "notAfter";
   direction: "asc" | "desc";
   limit: number;
+  offset?: number;
   cursor?: string;
 }
 export interface PkiJob {

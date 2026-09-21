@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiCheck, FiChevronDown } from 'react-icons/fi';
+import { FiCheck } from 'react-icons/fi';
+import DropdownChevron from './common/DropdownChevron';
 import type { AuditRun } from '../../shared/securityAudit';
 
 export const hasAuditResults = (run: AuditRun) =>
@@ -99,13 +100,13 @@ export default function AuditResultPicker({
           <button
             ref={trigger}
             type="button"
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-blue-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50"
+            className="ui-dropdown-control inline-flex shrink-0 items-center justify-center gap-2"
             aria-expanded={open}
             aria-controls="audit-result-choices"
             disabled={!choices.length}
             onClick={() => setOpen(!open)}
           >
-            Change run <FiChevronDown aria-hidden="true" />
+            Change run <DropdownChevron />
           </button>
         </div>
         {open && (

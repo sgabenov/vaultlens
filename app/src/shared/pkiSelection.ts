@@ -31,6 +31,7 @@ export function restorePkiQuery(
     direction: "asc",
     limit: 50,
   };
+  if (Number.isInteger(raw.limit) && raw.limit >= 1 && raw.limit <= 200) q.limit = raw.limit;
   for (const [field, values] of Object.entries({
     match: ["all", "any"],
     sort: ["cn", "notAfter"],

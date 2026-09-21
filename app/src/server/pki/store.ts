@@ -411,9 +411,9 @@ export class PkiStore {
     }
     const rows = this.db
       .prepare(
-        `SELECT c.*,s.path AS sourcePath FROM certificates c JOIN sources s ON s.id=c.sourceId WHERE ${sql} ORDER BY c.${query.sort} ${query.direction},c.id ${query.direction} LIMIT ?`,
+        `SELECT c.*,s.path AS sourcePath FROM certificates c JOIN sources s ON s.id=c.sourceId WHERE ${sql} ORDER BY c.${query.sort} ${query.direction},c.id ${query.direction} LIMIT ? OFFSET ?`,
       )
-      .all(...params, query.limit + 1);
+      .all(...params, query.limit + 1, query.offset ?? 0);
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);

@@ -139,7 +139,7 @@ export default function OperationForm({
       )}
       {operation.reference && (
         <label className="engine-field">
-          {action === "role-save" ? "Role name" : "Name or ID"}
+          <span>{action === "role-save" || action === "issue" || action === "sign" ? "Role name" : "Name or ID"}</span>
           <input
             required
             value={name}
@@ -150,7 +150,7 @@ export default function OperationForm({
       )}
       {operation.endpoint.includes("{mode}") && (
         <label className="engine-field">
-          Key storage
+          <span>Key storage</span>
           <select value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="internal">
               Internal — keep private key in Vault
@@ -190,7 +190,7 @@ export default function OperationForm({
                 );
               return (
                 <label className="engine-field" key={key}>
-                  {fieldLabel(key)}
+                  <span>{fieldLabel(key)}</span>
                   {field.type === "boolean" ? (
                     <select
                       value={value === undefined ? "" : String(value)}
@@ -276,7 +276,7 @@ export default function OperationForm({
                 : "This operation permanently removes the selected Vault objects."}
           </p>
           <label className="engine-field">
-            Type {mount} to confirm
+            <span>Type {mount} to confirm</span>
             <input
               autoComplete="off"
               value={confirm}
