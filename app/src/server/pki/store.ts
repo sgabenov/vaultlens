@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   CertificateRecord,
+  PkiSummary,
   PkiJob,
   PkiJobSource,
   PkiJobDetails,
@@ -371,15 +372,25 @@ export class PkiStore {
     let sql = base.sql;
     const params = [...base.params],
       key = queryKey(query);
-    const total = count
-      ? Number(
-          this.db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM certificates c WHERE " + base.sql,
-            )
-            .get(...base.params)!.n,
-        )
-      : 0;
+    // Match VCV's whole-day thresholds; aggregate before cursor pagination.
+    const day = 86400000;
+    const aggregate = count ? this.db.prepare(`
+      SELECT COUNT(*) AS total,
+        COALESCE(SUM(c.revoked='revoked'),0) AS revoked,
+        COALESCE(SUM(c.revoked='unknown'),0) AS revocationUnknown,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter < ?),0) AS expired,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter >= ? AND c.notAfter < ?),0) AS critical,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter >= ? AND c.notAfter < ?),0) AS warning,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter >= ?),0) AS valid,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter >= ? AND c.notAfter < ?),0) AS near,
+        COALESCE(SUM(c.revoked!='revoked' AND c.notAfter >= ?),0) AS later
+      FROM certificates c WHERE ${base.sql}
+    `).get(now, now, now + 8*day, now + 8*day, now + 31*day,
+      now + 31*day, now + 31*day, now + 91*day, now + 91*day, ...base.params) : undefined;
+    const total = Number(aggregate?.total ?? 0);
+    const summary = aggregate ? Object.fromEntries(
+      Object.entries(aggregate).filter(([key]) => key !== "total").map(([key, value]) => [key, Number(value)])
+    ) as unknown as PkiSummary : undefined;
     if (query.cursor) {
       try {
         const cursor = JSON.parse(
@@ -409,6 +420,7 @@ export class PkiStore {
     return {
       certificates: page.map((r) => this.decorate(r)),
       total,
+      summary,
       nextCursor:
         hasMore && last
           ? Buffer.from(

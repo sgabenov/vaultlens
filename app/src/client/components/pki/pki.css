@@ -187,3 +187,31 @@
 .pki-tabs > a { padding: 12px 0; margin-right: 24px; color: inherit; text-decoration: none; border-bottom: 2px solid transparent; }
 .pki-tabs > a[aria-current="page"] { color: var(--brand-primary); border-color: var(--brand-primary); }
 .pki-workspace a { overflow-wrap: anywhere; }
+
+.pki-overview { margin: 20px 0; }
+.pki-status-overview, .pki-expiry-overview {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgb(16 24 40 / 3%);
+}
+.pki-status-overview { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 20px 24px; gap: 24px; }
+.pki-status-label { display: flex; align-items: center; gap: 5px; color: #758195; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.pki-status-label svg { color: var(--status-tone); width: 13px; height: 13px; }
+.pki-status-item strong { display: block; color: #273244; font-size: 24px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.pki-status-hint { display: block; font-size: 11px; color: #758195; }
+.pki-tone-valid { --status-tone: #10a878; }
+.pki-tone-warning { --status-tone: #d88921; }
+.pki-tone-critical, .pki-tone-expired { --status-tone: #e14c63; }
+.pki-tone-revoked, .pki-tone-near, .pki-tone-later { --status-tone: #667085; }
+.pki-expiry-overview { margin-top: 12px; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+.pki-expiry-overview h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #758195; white-space: nowrap; }
+.pki-expiry-buckets { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pki-expiry-bucket { background: #f6f7f9; border-radius: 4px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; }
+.pki-expiry-bucket strong { color: var(--status-tone); font-size: 14px; font-variant-numeric: tabular-nums; }
+.pki-expiry-bucket span { font-size: 11px; color: #758195; }
+@media (max-width: 760px) {
+  .pki-status-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px; gap: 16px; }
+  .pki-expiry-overview { align-items: stretch; flex-direction: column; gap: 8px; }
+  .pki-expiry-buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
