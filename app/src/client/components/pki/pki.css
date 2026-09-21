@@ -189,29 +189,30 @@
 .pki-workspace a { overflow-wrap: anywhere; }
 
 .pki-overview { margin: 20px 0; }
-.pki-status-overview, .pki-expiry-overview {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgb(16 24 40 / 3%);
-}
-.pki-status-overview { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 20px 24px; gap: 24px; }
-.pki-status-label { display: flex; align-items: center; gap: 5px; color: #758195; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
-.pki-status-label svg { color: var(--status-tone); width: 13px; height: 13px; }
-.pki-status-item strong { display: block; color: #273244; font-size: 24px; line-height: 1.3; font-variant-numeric: tabular-nums; }
-.pki-status-hint { display: block; font-size: 11px; color: #758195; }
-.pki-tone-valid { --status-tone: #10a878; }
-.pki-tone-warning { --status-tone: #d88921; }
-.pki-tone-critical, .pki-tone-expired { --status-tone: #e14c63; }
-.pki-tone-revoked, .pki-tone-near, .pki-tone-later { --status-tone: #667085; }
-.pki-expiry-overview { margin-top: 12px; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
-.pki-expiry-overview h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #758195; white-space: nowrap; }
-.pki-expiry-buckets { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.pki-expiry-bucket { background: #f6f7f9; border-radius: 4px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; }
-.pki-expiry-bucket strong { color: var(--status-tone); font-size: 14px; font-variant-numeric: tabular-nums; }
-.pki-expiry-bucket span { font-size: 11px; color: #758195; }
+.pki-overview-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px 24px; }
+.pki-overview-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.pki-overview-heading h2 { font-size: 14px; }
+.pki-overview-scope { background: #f5f5f7; border-radius: 5px; padding: 4px 8px; color: #6b7181; font-size: 12px; }
+.pki-overview-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+.pki-overview-columns h3 { color: #6b7181; font-size: 13px; font-weight: 400; }
+.pki-status-stack { display: flex; height: 10px; border-radius: 4px; overflow: hidden; margin: 15px 0 16px; gap: 2px; background: #eeeff3; }
+.pki-status-stack > span, .pki-status-dot { background: var(--status-tone); }
+.pki-tone-valid { --status-tone: #379b87; }
+.pki-tone-warning { --status-tone: #d9a045; }
+.pki-tone-critical { --status-tone: var(--brand-primary); }
+.pki-tone-expired { --status-tone: #bd7285; }
+.pki-tone-revoked { --status-tone: #6b7181; }
+.pki-status-legend { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px 24px; }
+.pki-status-legend > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.pki-status-legend dt { color: #6b7181; display: flex; align-items: center; gap: 6px; }
+.pki-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.pki-status-legend dd, .pki-expiry-bars dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pki-expiry-bars > div { display: grid; grid-template-columns: 80px minmax(0, 1fr) minmax(36px, max-content); gap: 12px; align-items: center; margin-top: 13px; font-size: 13px; }
+.pki-expiry-bars dt { color: #6b7181; }
+.pki-expiry-bars dd { text-align: right; }
+.pki-expiry-track { height: 6px; border-radius: 3px; background: #eeeff3; overflow: hidden; }
+.pki-expiry-track span { display: block; height: 100%; background: var(--brand-primary); border-radius: 3px; }
 @media (max-width: 760px) {
-  .pki-status-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px; gap: 16px; }
-  .pki-expiry-overview { align-items: stretch; flex-direction: column; gap: 8px; }
-  .pki-expiry-buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pki-overview-panel { padding: 16px; }
+  .pki-overview-columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 }

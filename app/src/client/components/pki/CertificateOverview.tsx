@@ -1,28 +1,49 @@
-import { FiCheckCircle, FiAlertTriangle, FiAlertCircle, FiClock, FiSlash } from 'react-icons/fi';
 import type { PkiSummary } from '../../../shared/pki';
+
+const statuses = [
+  ['valid', 'Valid'], ['expired', 'Expired'], ['warning', 'Warning'],
+  ['revoked', 'Revoked'], ['critical', 'Critical'],
+] as const;
+const buckets = [
+  ['critical', '≤ 7 days'], ['warning', '8–30 days'],
+  ['near', '31–90 days'], ['later', '> 90 days'],
+] as const;
+const distribution = ['valid', 'warning', 'critical', 'expired', 'revoked'] as const;
 
 export default function CertificateOverview({ summary, busy }: { summary: PkiSummary | null; busy: boolean }) {
   const value = (key: keyof PkiSummary) => summary ? summary[key].toLocaleString() : '—';
-  const statuses = [
-    { key: 'valid', label: 'Valid', hint: '', Icon: FiCheckCircle },
-    { key: 'warning', label: 'Warning', hint: '≤ 30 days', Icon: FiAlertTriangle },
-    { key: 'critical', label: 'Critical', hint: '≤ 7 days', Icon: FiAlertCircle },
-    { key: 'expired', label: 'Expired', hint: '', Icon: FiClock },
-    { key: 'revoked', label: 'Revoked', hint: '', Icon: FiSlash },
-  ] as const;
+  const total = summary ? distribution.reduce((sum, key) => sum + summary[key], 0) : 0;
+  const maximum = summary ? Math.max(1, ...buckets.map(([key]) => summary[key])) : 1;
   return <div className="pki-overview" aria-busy={busy}>
-    <section className="pki-status-overview" aria-label="Certificate status overview">
-      {statuses.map(({ key, label, hint, Icon }) => <div className={`pki-status-item pki-tone-${key}`} key={key}>
-        <div className="pki-status-label"><Icon aria-hidden="true" />{label}</div>
-        <strong>{value(key)}</strong>
-        <span className="pki-status-hint">{hint || '\u00a0'}</span>
-      </div>)}
-    </section>
-    <section className="pki-expiry-overview" aria-label="Upcoming expirations">
-      <h2>Upcoming expirations</h2>
-      <div className="pki-expiry-buckets">
-        {([['critical', '≤ 7 days'], ['warning', '8–30 days'], ['near', '31–90 days'], ['later', '> 90 days']] as const).map(([key, label]) =>
-          <div className={`pki-expiry-bucket pki-tone-${key}`} key={key}><strong>{value(key)}</strong><span>{label}</span></div>)}
+    <section className="pki-overview-panel" aria-label="Certificate overview">
+      <div className="pki-overview-heading">
+        <h2>Certificate overview</h2>
+        <span className="pki-overview-scope">Applied search · {summary ? total.toLocaleString() : '—'} results</span>
+      </div>
+      <div className="pki-overview-columns">
+        <section aria-label="Certificate status overview">
+          <h3>Status distribution</h3>
+          <div className="pki-status-stack" role="img" aria-label={summary ? statuses.map(([key, label]) => `${label}: ${value(key)}`).join(', ') : 'Status distribution unavailable'}>
+            {summary && distribution.filter(key => summary[key] > 0).map(key =>
+              <span key={key} className={`pki-tone-${key}`} style={{ flex: summary[key] }} />)}
+          </div>
+          <dl className="pki-status-legend">
+            {statuses.map(([key, label]) => <div key={key}>
+              <dt><span className={`pki-status-dot pki-tone-${key}`} aria-hidden="true" />{label}</dt>
+              <dd>{value(key)}</dd>
+            </div>)}
+          </dl>
+        </section>
+        <section aria-label="Upcoming expirations">
+          <h3>Upcoming expirations</h3>
+          <dl className="pki-expiry-bars">
+            {buckets.map(([key, label]) => <div key={key}>
+              <dt>{label}</dt>
+              <div className="pki-expiry-track" aria-hidden="true"><span style={{ width: `${summary ? summary[key] / maximum * 100 : 0}%` }} /></div>
+              <dd>{value(key)}</dd>
+            </div>)}
+          </dl>
+        </section>
       </div>
     </section>
     {!!summary?.revocationUnknown && <p className="pki-muted">Revocation is unknown for {summary.revocationUnknown.toLocaleString()} certificates; their status is based on expiry only.</p>}
