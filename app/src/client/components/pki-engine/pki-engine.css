@@ -2,9 +2,7 @@
   color: var(--brand-primary, #1563ff);
 }
 .engine-workspace {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 24px 24px 64px;
+  padding: 0 0 40px;
   color: #1f2937;
 }
 .engine-workspace h1 {
@@ -417,7 +415,7 @@ details.engine-config-section > .engine-form {
 }
 @media (max-width: 760px) {
   .engine-workspace {
-    padding: 16px 8px;
+    padding: 0 0 24px;
   }
   .engine-overview {
     grid-template-columns: 1fr;
@@ -678,4 +676,28 @@ details.engine-config-section > .engine-form {
   .engine-pem-actions {
     flex-wrap: wrap;
   }
+}
+
+/* Full-width engine overview, aligned with the shared application layout. */
+.engine-toolbar:empty { display: none; }
+.engine-overview { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
+.engine-resource-summary, .engine-operations { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+.engine-resource-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 20px 40px; padding: 20px 24px; }
+.engine-resource-summary h2, .engine-operations h2 { font-size: 14px; margin: 0; }
+.engine-resource-stat { display: flex; align-items: center; gap: 12px; }
+.engine-resource-stat .engine-count { color: #25272b; font-variant-numeric: tabular-nums; }
+.engine-resource-name { font-size: 14px; }
+.engine-resource-stat small { display: block; color: #6b7181; font-size: 12px; margin-top: 3px; }
+.engine-operations > header { padding: 20px 24px 0; }
+.engine-operation-row { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr); align-items: center; gap: 24px; padding: 20px 24px; }
+.engine-operation-row + .engine-operation-row { border-top: 1px solid #eeeff3; }
+.engine-operation-description p { color: #6b7181; font-size: 13px; margin: 5px 0 0; }
+.engine-operation-row form { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.engine-operation-row form > input { flex: 1; }
+.engine-operation-row form > button { min-width: 70px; }
+@media (max-width: 760px) {
+  .engine-resource-summary { padding: 16px; gap: 16px 24px; }
+  .engine-resource-summary > h2 { width: 100%; }
+  .engine-operations > header { padding: 16px 16px 0; }
+  .engine-operation-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
 }
