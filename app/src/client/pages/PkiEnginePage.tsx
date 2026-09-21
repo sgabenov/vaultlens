@@ -442,27 +442,26 @@ export default function PkiEnginePage() {
       )}
       {!action && section === "overview" && source && (
         <div className="engine-overview">
-          {["issuers", "roles"].map((kind) => (
-            <section className="engine-card" key={kind}>
-              <Link className="engine-card-link" to={url({ tab: kind })}>
-                View {kind} ›
+          <section className="engine-resource-summary" aria-label="Mount resources">
+            <h2>Mount resources</h2>
+            {["issuers", "roles"].map((kind) => (
+              <Link className="engine-resource-stat" key={kind} to={url({ tab: kind })}>
+                <strong className="engine-count">
+                  {result?.data?.[kind] === null ? "Unavailable" : String(result?.data?.[kind] ?? "…")}
+                </strong>
+                <span><span className="engine-resource-name">{fieldLabel(kind)} ›</span>
+                  <small>{kind === "issuers" ? "Root & intermediate CAs" : "Issuance policies"}</small>
+                </span>
               </Link>
-              <h2>{fieldLabel(kind)}</h2>
-              <p>
-                {kind === "issuers"
-                  ? "Root and intermediate certificate authorities in this PKI mount."
-                  : "Roles configured to generate certificates in this PKI mount."}
-              </p>
-              <strong className="engine-count">
-                {result?.data?.[kind] === null
-                  ? "Unavailable"
-                  : String(result?.data?.[kind] ?? "…")}
-              </strong>
-            </section>
-          ))}
-          <section className="engine-card">
+            ))}
+          </section>
+          <section className="engine-operations" aria-label="Certificate operations">
+            <header><h2>Certificate operations</h2></header>
+          <section className="engine-operation-row">
+            <div className="engine-operation-description">
             <h2>Issue certificate</h2>
             <p>Choose a role to generate a certificate.</p>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -482,9 +481,11 @@ export default function PkiEnginePage() {
               <button className="engine-primary" disabled={!role.trim()}>Issue</button>
             </form>
           </section>
-          <section className="engine-card">
+          <section className="engine-operation-row">
+            <div className="engine-operation-description">
             <h2>View certificate</h2>
             <p>Enter a serial number to view its certificate.</p>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -500,9 +501,11 @@ export default function PkiEnginePage() {
               <button disabled={!serial.trim()}>View</button>
             </form>
           </section>
-          <section className="engine-card">
+          <section className="engine-operation-row">
+            <div className="engine-operation-description">
             <h2>View issuer</h2>
             <p>Enter an issuer name or ID to view its details.</p>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -521,6 +524,7 @@ export default function PkiEnginePage() {
               />
               <button disabled={!issuer.trim()}>View</button>
             </form>
+          </section>
           </section>
         </div>
       )}
