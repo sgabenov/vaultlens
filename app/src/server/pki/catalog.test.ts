@@ -95,6 +95,19 @@ test("catalog scopes OR searches, escapes wildcards, paginates and preserves ide
     const second = store.query({ ...all, cursor: first.nextCursor });
     assert.notEqual(first.certificates[0].id, second.certificates[0].id);
     assert.equal(second.nextCursor, null);
+    assert.deepEqual(first.summary, second.summary);
+    assert.equal(first.summary?.revoked, 1);
+    assert.equal(store.query(query()).summary?.revoked, 0);
+    assert.equal(store.query(query()).summary?.critical, 1);
+    assert.equal(store.query(query([{ field: "cn", operator: "equals", value: "missing" }])).summary?.critical, 0);
+    assert.equal(store.query(query([], "all", [])).summary?.revoked, 0);
+    const expiry = Number(store.db.prepare("SELECT notAfter FROM certificates LIMIT 1").get()!.notAfter);
+    const day = 86400000;
+    assert.equal(store.query(query(), true, expiry - 8 * day).summary?.warning, 1);
+    assert.equal(store.query(query(), true, expiry - 31 * day).summary?.near, 1);
+    assert.equal(store.query(query(), true, expiry - 91 * day).summary?.later, 1);
+    assert.equal(store.query(query(), true, expiry + 1).summary?.expired, 1);
+
     assert.throws(
       () => store.query({ ...query(), cursor: first.nextCursor! }),
       /Cursor/,

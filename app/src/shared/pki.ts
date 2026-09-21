@@ -119,3 +119,14 @@ export const pkiSearchFields: Record<
   notBefore: { label: "Valid from", operators: ["lt", "gt"] },
   notAfter: { label: "Expires at", operators: ["lt", "gt"] },
 };
+
+export interface PkiSummary {
+  valid: number;
+  warning: number;
+  critical: number;
+  expired: number;
+  revoked: number;
+  near: number;
+  later: number;
+  revocationUnknown: number;
+}

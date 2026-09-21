@@ -9,8 +9,10 @@ import type {
   PkiJob,
   PkiQuery,
   PkiSource,
+  PkiSummary,
 } from "../../shared/pki";
 import { restorePkiQuery, pkiSelectionKey } from "../../shared/pkiSelection";
+import CertificateOverview from "../components/pki/CertificateOverview";
 import CollectionProgress from "../components/pki/CollectionProgress";
 import CertificateSearch from "../components/pki/CertificateSearch";
 import "../components/pki/pki.css";
@@ -69,6 +71,7 @@ export default function CertificatesPage() {
     [valid, setValid] = useState(""),
     [revoked, setRevoked] = useState(""),
     [sort, setSort] = useState<"cn" | "notAfter">("notAfter");
+  const [summary, setSummary] = useState<PkiSummary | null>(null);
   const [rows, setRows] = useState<CertificateRecord[]>([]),
     [total, setTotal] = useState(0),
     [next, setNext] = useState<string | null>(null),
@@ -90,6 +93,7 @@ export default function CertificatesPage() {
   async function run(q: PkiQuery) {
     const gen = ++generation.current;
     setBusy(true);
+    setSummary(null);
     setError("");
     setDetail(null);
     detailGeneration.current++;
@@ -102,6 +106,7 @@ export default function CertificatesPage() {
       );
       if (q.sources.some((id) => !scope.sources.some((s) => s.id === id)))
         throw new Error("Source access changed. Apply the current selection.");
+      setSummary(r.summary);
       setRows(r.certificates);
       setTotal(r.total);
       setNext(r.nextCursor);
@@ -110,7 +115,8 @@ export default function CertificatesPage() {
       if (gen === generation.current) {
         setError(message(e));
         setQuery(null);
-        setRows([]);
+        setSummary(null);
+      setRows([]);
         setTotal(0);
         setNext(null);
       }
@@ -186,6 +192,7 @@ export default function CertificatesPage() {
     if (query?.sources.some((id) => !nextSources.some((s) => s.id === id))) {
       generation.current++;
       detailGeneration.current++;
+      setSummary(null);
       setRows([]);
       setQuery(null);
       setDetail(null);
@@ -355,6 +362,7 @@ export default function CertificatesPage() {
       )}
       {tab === "inventory" && (
         <>
+          <CertificateOverview summary={query ? summary : null} busy={busy} />
           <div className="pki-row pki-spread">
             <span className="pki-muted">
               {query?.sources.length ?? selected.length} sources in result scope
