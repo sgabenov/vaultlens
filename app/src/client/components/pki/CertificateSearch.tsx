@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { pkiSearchFields } from "../../../shared/pki";
 import type { PkiCondition } from "../../../shared/pki";
 export default function CertificateSearch({
@@ -7,6 +8,9 @@ export default function CertificateSearch({
   onMatch,
   onSearch,
   disabled,
+  scope,
+  resultLabel,
+  onReset,
 }: {
   conditions: PkiCondition[];
   onChange: (v: PkiCondition[]) => void;
@@ -14,19 +18,24 @@ export default function CertificateSearch({
   onMatch: (v: "all" | "any") => void;
   onSearch: () => void;
   disabled: boolean;
+  scope: ReactNode;
+  resultLabel: string;
+  onReset: () => void;
 }) {
   const change = (index: number, patch: Partial<PkiCondition>) =>
     onChange(conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   return (
     <form
-      className="pki-box"
+      className="pki-search-panel"
       onSubmit={(e) => {
         e.preventDefault();
         onSearch();
       }}
     >
+      {scope}
+      <div className="pki-search-body">
       <div className="pki-row pki-spread">
-        <h2>Search by field</h2>
+        <h2>Search conditions</h2>
         <label>
           Match{" "}
           <select
@@ -38,6 +47,7 @@ export default function CertificateSearch({
           </select>
         </label>
       </div>
+      <div className="pki-search-conditions">
       {conditions.map((c, i) => (
         <div className="pki-condition" key={i}>
           <select
@@ -98,8 +108,8 @@ export default function CertificateSearch({
           </button>
         </div>
       ))}
-      <div className="pki-row pki-spread">
         <button
+          className="pki-add-condition"
           type="button"
           disabled={conditions.length >= 12}
           onClick={() =>
@@ -111,19 +121,16 @@ export default function CertificateSearch({
         >
           + Add condition
         </button>
+      </div>
+      <div className="pki-row pki-spread pki-search-footer">
+        <span className="pki-muted">{resultLabel}</span>
         <div className="pki-row">
-          <button
-            type="button"
-            onClick={() =>
-              onChange([{ field: "cn", operator: "contains", value: "" }])
-            }
-          >
-            Clear conditions
-          </button>
+          <button type="button" onClick={onReset}>Reset</button>
           <button className="pki-primary" disabled={disabled}>
-            Search
+            Apply search
           </button>
         </div>
+      </div>
       </div>
     </form>
   );

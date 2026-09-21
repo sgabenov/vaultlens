@@ -383,10 +383,19 @@ export default function CertificatesPage() {
               Refresh results
             </button>
           </div>
-          <div className="pki-row pki-controls">
-            <button onClick={() => setTab("sources")}>
-              Sources · {selected.length}
-            </button>
+          <CertificateSearch
+            scope={<div className="pki-search-scope">
+              <div className="pki-source-field">
+                <span>Sources</span>
+                <details className="pki-source-picker">
+                  <summary>{selected.length === sources.length ? `All ${sources.length} sources` : `${selected.length} sources selected`} <span aria-hidden="true">⌄</span></summary>
+                  <div className="pki-source-options">
+                    <label><input type="checkbox" checked={!!sources.length && selected.length === sources.length} onChange={(e) => setSelected(e.target.checked ? sources.map(s => s.id) : [])} />All authorized sources</label>
+                    {sources.map(source => <label key={source.id}><input type="checkbox" checked={selected.includes(source.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, source.id] : selected.filter(id => id !== source.id))} />{source.path}{source.namespace ? ` · ${source.namespace}` : ""}</label>)}
+                    {!sources.length && <span>No authorized sources</span>}
+                  </div>
+                </details>
+              </div>
             <label>
               Usage type{" "}
               <select value={type} onChange={(e) => setType(e.target.value)}>
@@ -422,12 +431,14 @@ export default function CertificatesPage() {
                 ))}
               </select>
             </label>
-          </div>
-          <p className="pki-muted">
-            Usage describes X.509 extensions, not a Vault role. Change filters
-            or sort, then press Search. Dates use UTC midnight.
-          </p>
-          <CertificateSearch
+
+            </div>}
+            resultLabel={busy ? "Loading…" : `${query?.sources.length ?? selected.length} sources · ${total.toLocaleString()} results`}
+            onReset={() => {
+              setSelected(sources.map(s => s.id));
+              setType(""); setValid(""); setRevoked("");
+              setMatch("all"); setConditions([{ ...emptyCondition }]);
+            }}
             conditions={conditions}
             onChange={setConditions}
             match={match}
