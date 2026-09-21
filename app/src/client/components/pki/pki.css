@@ -235,3 +235,5 @@
 .pki-search-footer { margin-top: 16px; }
 @media (max-width: 900px) { .pki-search-scope { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .pki-search-scope { grid-template-columns: minmax(0, 1fr); padding: 16px; } .pki-search-body { padding: 16px; } }
+.pki-search-scope > label { align-items: stretch; text-align: left; }
+.pki-search-scope .pki-source-picker { margin: 0; }
